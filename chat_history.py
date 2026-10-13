@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import (
 
 from memory_store import get_memory_store
 from pet_sprites import get_character_info
+from i18n import tr
+
 
 STYLE = """
 QDialog { background: #26282C; }
@@ -65,7 +67,7 @@ class ChatHistoryDialog(QDialog):
         self.char_id = str(cfg.get("pet", {}).get("character") or "cat_mochi")
         self.char_info = get_character_info(self.char_id)
 
-        self.setWindowTitle(f"📚 Meine Chats mit {self.char_name}")
+        self.setWindowTitle(tr("chats.title_with_name", name=self.char_name))
         self.resize(840, 560)
         self.setStyleSheet(STYLE)
 
@@ -75,13 +77,14 @@ class ChatHistoryDialog(QDialog):
 
         # Header: Titel & Suchfeld
         header = QHBoxLayout()
-        title_lbl = QLabel(f"📚  Meine Chats mit {self.char_name}")
+        title_lbl = QLabel(tr("chats.title_with_name", name=self.char_name))
         title_lbl.setObjectName("title")
         header.addWidget(title_lbl)
         header.addStretch(1)
 
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Suchen … 🔍")
+        self.search_edit.setPlaceholderText(tr("chats.search_placeholder"))
+
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.setFixedWidth(220)
         self.search_edit.textChanged.connect(self._on_search_changed)
@@ -120,7 +123,7 @@ class ChatHistoryDialog(QDialog):
         self.scroll_area.setWidget(self.messages_container)
         right_lay.addWidget(self.scroll_area)
 
-        self.empty_label = QLabel(f"{self.char_info.get('emoji', '🐾')}\n\nNoch keine Chats – sag {self.char_name} einfach Hallo! 👋")
+        self.empty_label = QLabel(tr("chats.empty", emoji=self.char_info.get('emoji', '🐾'), name=self.char_name))
         self.empty_label.setObjectName("empty")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         right_lay.addWidget(self.empty_label)
@@ -132,25 +135,26 @@ class ChatHistoryDialog(QDialog):
 
         # Buttons unten
         btns = QHBoxLayout()
-        self.del_btn = QPushButton("🗑️  Gespräch löschen")
+        self.del_btn = QPushButton(tr("chats.delete_conv"))
         self.del_btn.setObjectName("danger")
         self.del_btn.clicked.connect(self._on_delete_conv)
         btns.addWidget(self.del_btn)
 
         btns.addStretch(1)
 
-        self.export_btn = QPushButton("📤  Exportieren")
+        self.export_btn = QPushButton(tr("chats.export"))
         self.export_btn.clicked.connect(self._on_export)
         btns.addWidget(self.export_btn)
 
-        self.resume_btn = QPushButton("💬  Weiterreden")
+        self.resume_btn = QPushButton(tr("chats.resume"))
         self.resume_btn.setObjectName("primary")
         self.resume_btn.clicked.connect(self._on_resume)
         btns.addWidget(self.resume_btn)
 
-        close_btn = QPushButton("Schließen")
+        close_btn = QPushButton(tr("common.close"))
         close_btn.clicked.connect(self.accept)
         btns.addWidget(close_btn)
+
 
         root.addLayout(btns)
 
@@ -263,11 +267,12 @@ class ChatHistoryDialog(QDialog):
             return
         ans = QMessageBox.question(
             self,
-            "Gespräch löschen",
-            "Möchtest du dieses Gespräch wirklich löschen?",
+            tr("chats.delete_conv"),
+            tr("chats.confirm_delete_conv"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
+
         if ans == QMessageBox.StandardButton.Yes:
             self.store.delete_conversation(cid)
             self._refresh_conversations(self.search_edit.text())

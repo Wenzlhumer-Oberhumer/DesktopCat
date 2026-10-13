@@ -12,6 +12,8 @@ from PyQt6.QtWidgets import (
 )
 
 from memory_store import get_memory_store
+from i18n import tr
+
 
 STYLE = """
 QDialog { background: #26282C; }
@@ -51,12 +53,12 @@ class MyDataDialog(QDialog):
         root.setContentsMargins(20, 18, 20, 18)
         root.setSpacing(14)
 
-        title = QLabel("🔒  Meine Daten")
+        title = QLabel(tr("data.title"))
         title.setObjectName("title")
         root.addWidget(title)
 
         # 1. Abschnitt: Was Kylie über dich weiß
-        sec_facts = QLabel(f"Was {self.char_name} über dich weiß")
+        sec_facts = QLabel(tr("data.section_facts", name=self.char_name))
         sec_facts.setObjectName("section")
         root.addWidget(sec_facts)
 
@@ -71,22 +73,22 @@ class MyDataDialog(QDialog):
         root.addWidget(self.facts_scroll)
 
         # 2. Abschnitt: Datenschutzeinstellungen (Schalter)
-        sec_privacy = QLabel("Datenschutz-Einstellungen")
+        sec_privacy = QLabel(tr("data.section_privacy"))
         sec_privacy.setObjectName("section")
         root.addWidget(sec_privacy)
 
         priv = cfg.get("privacy", {}) or {}
-        self.chk_save_chats = QCheckBox("Chats speichern")
+        self.chk_save_chats = QCheckBox(tr("data.chk_save_chats"))
         self.chk_save_chats.setChecked(bool(priv.get("save_chats", True)))
         self.chk_save_chats.toggled.connect(self._on_setting_changed)
         root.addWidget(self.chk_save_chats)
 
-        self.chk_remember = QCheckBox(f"{self.char_name} darf sich Dinge merken")
+        self.chk_remember = QCheckBox(tr("data.chk_remember", name=self.char_name))
         self.chk_remember.setChecked(bool(priv.get("remember", True)))
         self.chk_remember.toggled.connect(self._on_setting_changed)
         root.addWidget(self.chk_remember)
 
-        self.chk_use_history = QCheckBox("Frühere Chats nutzen, wenn sie zur Frage passen")
+        self.chk_use_history = QCheckBox(tr("data.chk_use_history"))
         self.chk_use_history.setChecked(bool(priv.get("use_history", True)))
         self.chk_use_history.toggled.connect(self._on_setting_changed)
         root.addWidget(self.chk_use_history)
@@ -98,15 +100,7 @@ class MyDataDialog(QDialog):
         info_lay.setContentsMargins(12, 10, 12, 10)
         info_lay.setSpacing(8)
 
-        info_text = (
-            "🔒 <b>Deine Daten bleiben auf diesem PC</b> (<code>%APPDATA%\\Mochi\\mochi.db</code>). "
-            "Die Entwickler von Desktop Cat bekommen nichts.<br><br>"
-            f"🤖 Wenn du {self.char_name} etwas fragst, schickt sie deine Frage, deine gemerkten Fakten und höchstens "
-            "3 passende Ausschnitte aus früheren Chats an Google Gemini – nur damit die Antwort besser passt.<br><br>"
-            "⚠️ Beim <b>kostenlosen</b> Gemini-Zugang darf Google gesendete Inhalte laut seinen Nutzungsbedingungen "
-            "zur Verbesserung seiner Dienste verwenden und von Menschen prüfen lassen. Schreib deshalb keine Passwörter "
-            "oder sehr privaten Dinge. Ohne Gemini-Key bleibt alles komplett offline."
-        )
+        info_text = tr("data.privacy_long", name=self.char_name)
         info_lbl = QLabel(info_text)
         info_lbl.setWordWrap(True)
         info_lbl.setTextFormat(Qt.TextFormat.RichText)
@@ -115,23 +109,23 @@ class MyDataDialog(QDialog):
 
         # 4. Abschnitt: Buttons
         actions_lay = QHBoxLayout()
-        self.btn_del_chats = QPushButton("🗑️  Alle Chats löschen")
+        self.btn_del_chats = QPushButton(tr("data.btn_del_chats"))
         self.btn_del_chats.setObjectName("danger")
         self.btn_del_chats.clicked.connect(self._on_delete_all_chats)
         actions_lay.addWidget(self.btn_del_chats)
 
-        self.btn_wipe_all = QPushButton("🧹  Alles vergessen")
+        self.btn_wipe_all = QPushButton(tr("data.btn_wipe_all"))
         self.btn_wipe_all.setObjectName("danger")
         self.btn_wipe_all.clicked.connect(self._on_wipe_everything)
         actions_lay.addWidget(self.btn_wipe_all)
 
         actions_lay.addStretch(1)
 
-        self.btn_export = QPushButton("📤  Alles exportieren")
+        self.btn_export = QPushButton(tr("data.btn_export"))
         self.btn_export.clicked.connect(self._on_export_all)
         actions_lay.addWidget(self.btn_export)
 
-        btn_close = QPushButton("Fertig")
+        btn_close = QPushButton(tr("common.done"))
         btn_close.setObjectName("primary")
         btn_close.clicked.connect(self.accept)
         actions_lay.addWidget(btn_close)
@@ -153,11 +147,12 @@ class MyDataDialog(QDialog):
 
         all_facts = self.store.facts()
         if not all_facts:
-            empty = QLabel("Noch nichts gemerkt.")
+            empty = QLabel(tr("data.no_facts", name=self.char_name))
             empty.setObjectName("hint")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.facts_lay.addWidget(empty)
             return
+
 
         for f in all_facts:
             row = QHBoxLayout()

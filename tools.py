@@ -23,7 +23,9 @@ from typing import Callable, Optional
 
 import requests
 
+import i18n
 from paths import DATA_DIR
+
 
 LOG_FILE = DATA_DIR / "desktop_organize_log.json"
 
@@ -510,9 +512,14 @@ def take_screenshot(filename: Optional[str] = None) -> ToolResult:
             pass
 
     if not saved:
-        raise ToolError("Ich konnte leider kein Bildschirmfoto aufnehmen 🙀")
+        err = "I couldn't take a screenshot 🙀" if i18n.lang() == "en" else "Ich konnte leider kein Bildschirmfoto aufnehmen 🙀"
+        raise ToolError(err)
+    if i18n.lang() == "en":
+        return ToolResult(True, f"Click! 📸 Screenshot saved:\n\"{target.name}\" on your desktop ✨",
+                          notify_title="Screenshot saved")
     return ToolResult(True, f"Klick! 📸 Screenshot gespeichert:\n„{target.name}“ auf deinem Desktop ✨",
                       notify_title="Screenshot gespeichert")
+
 
 
 # ======================================================================================
@@ -631,30 +638,38 @@ def manage_notes(action: str = "read", text: Optional[str] = None) -> ToolResult
     """Verwaltet Desktop-Notizen: 'add' (Notiz anhaengen), 'read' (vorlesen), 'clear' (leeren)."""
     act = (action or "read").lower().strip()
     target = desktop_dir() / "Notizen.txt"
+    is_en = i18n.lang() == "en"
     if act in ("add", "append", "neu", "notiere", "schreib"):
         if not text:
-            raise ToolError("Was soll ich denn für dich notieren? 🐾")
+            err = "What should I note down for you? 🐾" if is_en else "Was soll ich denn für dich notieren? 🐾"
+            raise ToolError(err)
         stamp = time.strftime("%Y-%m-%d %H:%M")
         line = f"• [{stamp}] {text.strip()}\n"
         with open(target, "a", encoding="utf-8") as fh:
             fh.write(line)
-        return ToolResult(True, f"Notiert! 📝 „{text.strip()}“ liegt in Notizen.txt auf deinem Desktop ✨")
+        rep = f"Noted! 📝 \"{text.strip()}\" added to Notizen.txt on your desktop ✨" if is_en else f"Notiert! 📝 „{text.strip()}“ liegt in Notizen.txt auf deinem Desktop ✨"
+        return ToolResult(True, rep)
 
     if act in ("read", "show", "zeig", "lies"):
         if not target.exists():
-            return ToolResult(True, "Du hast noch keine Notizen auf dem Desktop 📝")
+            rep = "You don't have any notes on your desktop yet 📝" if is_en else "Du hast noch keine Notizen auf dem Desktop 📝"
+            return ToolResult(True, rep)
         lines = [l.strip() for l in target.read_text(encoding="utf-8").splitlines() if l.strip()]
         if not lines:
-            return ToolResult(True, "Deine Notizdatei ist aktuell leer 📝")
+            rep = "Your notes file is currently empty 📝" if is_en else "Deine Notizdatei ist aktuell leer 📝"
+            return ToolResult(True, rep)
         recent = lines[-4:]
-        return ToolResult(True, "Deine letzten Notizen 📝:\n" + "\n".join(recent))
+        hdr = "Your latest notes 📝:\n" if is_en else "Deine letzten Notizen 📝:\n"
+        return ToolResult(True, hdr + "\n".join(recent))
 
     if act in ("clear", "loeschen", "delete"):
         if target.exists():
             target.write_text("", encoding="utf-8")
-        return ToolResult(True, "Notizen wurden geleert! 🗑️")
+        rep = "Notes have been cleared! 🗑️" if is_en else "Notizen wurden geleert! 🗑️"
+        return ToolResult(True, rep)
 
-    return ToolResult(False, "Aktionen: 'add', 'read' oder 'clear' 🐾")
+    return ToolResult(False, "Actions: 'add', 'read' or 'clear' 🐾" if is_en else "Aktionen: 'add', 'read' oder 'clear' 🐾")
+
 
 
 # ======================================================================================
@@ -783,13 +798,21 @@ def calculate(expression: str) -> ToolResult:
 def show_time_and_date() -> ToolResult:
     """Gibt aktuelle Uhrzeit, Datum und Wochentag aus."""
     import datetime
-    tage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
-    monate = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     now = datetime.datetime.now()
-    tag = tage[now.weekday()]
-    monat = monate[now.month - 1]
-    msg = f"🕒 Es ist {now.strftime('%H:%M')} Uhr.\n📅 Heute ist {tag}, der {now.day}. {monat} {now.year}."
+    if i18n.lang() == "en":
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        day = days[now.weekday()]
+        month = months[now.month - 1]
+        msg = f"🕒 It is {now.strftime('%H:%M')}.\n📅 Today is {day}, {month} {now.day}, {now.year}."
+    else:
+        tage = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+        monate = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
+        tag = tage[now.weekday()]
+        monat = monate[now.month - 1]
+        msg = f"🕒 Es ist {now.strftime('%H:%M')} Uhr.\n📅 Heute ist {tag}, der {now.day}. {monat} {now.year}."
     return ToolResult(True, msg)
+
 
 
 # ======================================================================================
@@ -1221,13 +1244,23 @@ def set_timer(seconds: Optional[int] = None, minutes: Optional[float] = None, la
     user = _user_name()
     lbl = (label or "").strip() or "Timer"
 
-    if total >= 3600:
-        dur = f"{total // 3600} Std. {(total % 3600) // 60} Min."
-    elif total >= 60:
-        mins, secs = divmod(total, 60)
-        dur = f"{mins} Minute{'n' if mins != 1 else ''}" + (f" und {secs} Sek." if secs else "")
+    is_en = i18n.lang() == "en"
+    if is_en:
+        if total >= 3600:
+            dur = f"{total // 3600} hr. {(total % 3600) // 60} min."
+        elif total >= 60:
+            mins, secs = divmod(total, 60)
+            dur = f"{mins} minute{'s' if mins != 1 else ''}" + (f" and {secs} sec." if secs else "")
+        else:
+            dur = f"{total} seconds"
     else:
-        dur = f"{total} Sekunden"
+        if total >= 3600:
+            dur = f"{total // 3600} Std. {(total % 3600) // 60} Min."
+        elif total >= 60:
+            mins, secs = divmod(total, 60)
+            dur = f"{mins} Minute{'n' if mins != 1 else ''}" + (f" und {secs} Sek." if secs else "")
+        else:
+            dur = f"{total} Sekunden"
 
     with _timer_lock:
         _timer_seq += 1
@@ -1235,6 +1268,9 @@ def set_timer(seconds: Optional[int] = None, minutes: Optional[float] = None, la
         t.daemon = True
         _active_timers.append({"id": _timer_seq, "timer": t, "label": lbl, "total_sec": total, "start_time": time.time()})
     t.start()
+    if is_en:
+        return ToolResult(True, f"Timer for \"{lbl}\" set to {dur}! ⏰ I'll let you know, {user}! {_emoji()}",
+                          notify_title="Timer set ⏰")
     return ToolResult(True, f"Timer fuer „{lbl}“ auf {dur} gestellt! ⏰ Ich sag dir Bescheid, {user}! {_emoji()}",
                       notify_title="Timer gestellt ⏰")
 
@@ -1242,23 +1278,29 @@ def set_timer(seconds: Optional[int] = None, minutes: Optional[float] = None, la
 def list_timers(action: str = "list") -> ToolResult:
     """Zeigt laufende Timer ('list') oder bricht alle ab ('clear')."""
     user = _user_name()
+    is_en = i18n.lang() == "en"
     with _timer_lock:
         if action == "clear":
             for t in _active_timers:
                 t["timer"].cancel()
             count = len(_active_timers)
             _active_timers.clear()
-            return ToolResult(True, f"Ich habe alle {count} laufenden Timer abgebrochen, {user}! ⏰❌")
+            msg = f"I cancelled all {count} active timers, {user}! ⏰❌" if is_en else f"Ich habe alle {count} laufenden Timer abgebrochen, {user}! ⏰❌"
+            return ToolResult(True, msg)
         snapshot = list(_active_timers)
     if not snapshot:
-        return ToolResult(True, f"Aktuell laufen keine Timer, {user}! ⏰ Brauchst du einen?")
+        msg = f"No active timers right now, {user}! ⏰ Need one?" if is_en else f"Aktuell laufen keine Timer, {user}! ⏰ Brauchst du einen?"
+        return ToolResult(True, msg)
     now = time.time()
     lines = []
     for t in snapshot:
         rem = max(0, int(t["total_sec"] - (now - t["start_time"])))
         left = f"{rem // 60}m {rem % 60}s" if rem >= 60 else f"{rem}s"
-        lines.append(f"• „{t['label']}“: noch ca. {left}")
-    return ToolResult(True, f"Aktive Timer fuer {user}:\n" + "\n".join(lines) + f" ⏰{_emoji()}")
+        prefix = f"• \"{t['label']}\": ~{left} left" if is_en else f"• „{t['label']}“: noch ca. {left}"
+        lines.append(prefix)
+    hdr = f"Active timers for {user}:\n" if is_en else f"Aktive Timer fuer {user}:\n"
+    return ToolResult(True, hdr + "\n".join(lines) + f" ⏰{_emoji()}")
+
 
 
 # ======================================================================================
@@ -1268,35 +1310,56 @@ def get_weather(location: Optional[str] = None) -> ToolResult:
     """Aktuelles Wetter fuer eine Stadt (leer = Standort per IP) von wttr.in."""
     user, emo = _user_name(), _emoji()
     loc = (location or "").strip()
+    is_en = i18n.lang() == "en"
+    w_lang = "en" if is_en else "de"
     try:
-        resp = requests.get(f"https://wttr.in/{requests.utils.quote(loc)}", params={"format": "j1", "lang": "de"},
+        resp = requests.get(f"https://wttr.in/{requests.utils.quote(loc)}", params={"format": "j1", "lang": w_lang},
                             headers={"User-Agent": "curl/8.0", "Accept": "application/json"}, timeout=6)
         resp.raise_for_status()
         data = resp.json()
         cur = data["current_condition"][0]
     except (requests.RequestException, ValueError, KeyError, IndexError):
-        return ToolResult(False, f"Das Wetter kann ich gerade nicht abrufen \U0001F327️ Hast du Internet, {user}?")
+        err = f"Can't fetch weather right now \U0001F327️ Are you online, {user}?" if is_en else f"Das Wetter kann ich gerade nicht abrufen \U0001F327️ Hast du Internet, {user}?"
+        return ToolResult(False, err)
 
     temp, feels = cur.get("temp_C", "?"), cur.get("FeelsLikeC", cur.get("temp_C", "?"))
-    desc = (cur.get("lang_de") or cur.get("weatherDesc") or [{}])[0].get("value", "Heiter")
-    city = loc or (data.get("nearest_area") or [{}])[0].get("areaName", [{}])[0].get("value", "deinem Ort")
+    if is_en:
+        desc = (cur.get("weatherDesc") or [{}])[0].get("value", "Clear")
+        city = loc or (data.get("nearest_area") or [{}])[0].get("areaName", [{}])[0].get("value", "your location")
+    else:
+        desc = (cur.get("lang_de") or cur.get("weatherDesc") or [{}])[0].get("value", "Heiter")
+        city = loc or (data.get("nearest_area") or [{}])[0].get("areaName", [{}])[0].get("value", "deinem Ort")
     try:
         rain = max(int(h.get("chanceofrain", 0)) for h in data["weather"][0]["hourly"])
     except (KeyError, IndexError, ValueError, TypeError):
         rain = 0
 
     d = desc.lower()
-    if any(k in d for k in ("gewitter", "thunder")):
-        icon, advice = "⛈️", "Achtung vor Gewittern!"
-    elif any(k in d for k in ("regen", "rain", "schauer", "nieseln")):
-        icon, advice = "\U0001F327️", "Pack lieber einen Regenschirm ein!" if rain > 40 else "Es koennte nass werden!"
-    elif any(k in d for k in ("schnee", "snow")):
-        icon, advice = "❄️", "Zieh dich warm an, es schneit!"
-    elif any(k in d for k in ("sonn", "sun", "klar", "clear")):
-        icon, advice = "☀️", "Herrliches Wetter draussen!"
-    elif any(k in d for k in ("wolk", "cloud", "bedeckt", "overcast")):
-        icon, advice = "⛅", "Gemuetliches Wetter zum Coden!"
-    rain_s = f" (Regenrisiko: {rain}%)" if rain > 15 else ""
+    if is_en:
+        if any(k in d for k in ("thunder", "gewitter")):
+            icon, advice = "⛈️", "Watch out for thunderstorms!"
+        elif any(k in d for k in ("rain", "shower", "drizzle", "regen")):
+            icon, advice = "\U0001F327️", "Better pack an umbrella!" if rain > 40 else "It might get wet!"
+        elif any(k in d for k in ("snow", "schnee")):
+            icon, advice = "❄️", "Bundle up, it's snowing!"
+        elif any(k in d for k in ("sun", "clear", "sonn", "klar")):
+            icon, advice = "☀️", "Wonderful weather outside!"
+        else:
+            icon, advice = "⛅", "Cozy weather for coding!"
+        rain_s = f" (chance of rain: {rain}%)" if rain > 15 else ""
+    else:
+        if any(k in d for k in ("gewitter", "thunder")):
+            icon, advice = "⛈️", "Achtung vor Gewittern!"
+        elif any(k in d for k in ("regen", "rain", "schauer", "nieseln")):
+            icon, advice = "\U0001F327️", "Pack lieber einen Regenschirm ein!" if rain > 40 else "Es koennte nass werden!"
+        elif any(k in d for k in ("schnee", "snow")):
+            icon, advice = "❄️", "Zieh dich warm an, es schneit!"
+        elif any(k in d for k in ("sonn", "sun", "klar", "clear")):
+            icon, advice = "☀️", "Herrliches Wetter draussen!"
+        else:
+            icon, advice = "⛅", "Gemuetliches Wetter zum Coden!"
+        rain_s = f" (Regenrisiko: {rain}%)" if rain > 15 else ""
+
     raw_temp = None
     try:
         raw_temp = float(temp)
@@ -1309,9 +1372,14 @@ def get_weather(location: Optional[str] = None) -> ToolResult:
         "city": city,
         "chance_of_rain": rain,
     }
+    if is_en:
+        return ToolResult(True, f"In {city} it's currently {temp}°C (feels like {feels}°C), {desc}{rain_s}! {icon} {advice} {emo}",
+                          notify_title=f"Weather in {city}: {temp}°C {icon}",
+                          data=weather_data)
     return ToolResult(True, f"In {city} hat es gerade {temp}°C (gefuehlt {feels}°C), {desc}{rain_s}! {icon} {advice} {emo}",
                       notify_title=f"Wetter in {city}: {temp}°C {icon}",
                       data=weather_data)
+
 
 
 # ======================================================================================
@@ -1324,13 +1392,14 @@ def clean_pc(empty_recycle: bool = True, clean_temp: bool = True) -> ToolResult:
     """Leert den Papierkorb und loescht Dateien in %TEMP%, die aelter als 24 h sind. Sonst wird nichts angefasst."""
     user, emo = _user_name(), _emoji()
     actions = []
+    is_en = i18n.lang() == "en"
 
     if empty_recycle:
         try:
             subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
                             "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
                            capture_output=True, timeout=30)
-            actions.append("Papierkorb geleert")
+            actions.append("Recycle bin emptied" if is_en else "Papierkorb geleert")
         except (OSError, subprocess.SubprocessError):
             pass
 
@@ -1351,11 +1420,17 @@ def clean_pc(empty_recycle: bool = True, clean_temp: bool = True) -> ToolResult:
                 except OSError:
                     continue            # gesperrt / in Benutzung -> ueberspringen
             if deleted:
-                actions.append(f"{deleted} Temp-Dateien ({freed / 1048576:.1f} MB) bereinigt")
+                if is_en:
+                    actions.append(f"{deleted} temp files ({freed / 1048576:.1f} MB) cleaned")
+                else:
+                    actions.append(f"{deleted} Temp-Dateien ({freed / 1048576:.1f} MB) bereinigt")
 
     if not actions:
-        return ToolResult(True, f"Da gab es nichts zu tun, alles blitzsauber, {user}! ✨{emo}")
-    return ToolResult(True, f"Aufgeraeumt, {user}! \U0001F9F9 {', '.join(actions)}. {emo}", notify_title="PC aufgeraeumt \U0001F9F9")
+        msg = f"Nothing to do, everything spotless, {user}! ✨{emo}" if is_en else f"Da gab es nichts zu tun, alles blitzsauber, {user}! ✨{emo}"
+        return ToolResult(True, msg)
+    if is_en:
+        return ToolResult(True, f"Cleaned up, {user}! 🧹 {', '.join(actions)}. {emo}", notify_title="PC cleaned 🧹")
+    return ToolResult(True, f"Aufgeraeumt, {user}! 🧹 {', '.join(actions)}. {emo}", notify_title="PC aufgeraeumt 🧹")
 
 
 # ======================================================================================
@@ -1365,6 +1440,7 @@ def network_info() -> ToolResult:
     """Zeigt PC-Name, lokale IP und ob eine Internetverbindung besteht."""
     hostname = socket.gethostname()
     local_ip, online = "127.0.0.1", False
+    is_en = i18n.lang() == "en"
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.settimeout(1.5)
@@ -1373,10 +1449,15 @@ def network_info() -> ToolResult:
             online = True
     except OSError:
         pass
-    status = "Online \U0001F310" if online else "Offline ❌"
+    status = "Online 🌐" if online else "Offline ❌"
+    if is_en:
+        return ToolResult(True, f"Network status ({status}) for {_user_name()}:\n• PC Name: {hostname}\n"
+                                f"• Local IP: {local_ip}\n• Internet: {'Connected ✅' if online else 'Disconnected ⚠️'}",
+                          notify_title="Network Status 🌐")
     return ToolResult(True, f"Netzwerk-Status ({status}) fuer {_user_name()}:\n• PC-Name: {hostname}\n"
                             f"• Lokale IP: {local_ip}\n• Internet: {'Verbunden ✅' if online else 'Getrennt ⚠️'}",
-                      notify_title="Netzwerk-Status \U0001F310")
+                      notify_title="Netzwerk-Status 🌐")
+
 
 
 # ======================================================================================

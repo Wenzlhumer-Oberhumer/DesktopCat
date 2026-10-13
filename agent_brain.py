@@ -19,6 +19,7 @@ logger = logging.getLogger("mochi.brain")
 
 import gemini
 from gemini import LLMError
+import i18n
 import tools
 from tools import DANGEROUS_TOOLS, ToolResult
 
@@ -85,8 +86,11 @@ def system_prompt(name: str, user_name: str = "Boss", character_id: str = "cat_m
         f"1. KONTINUIERLICHER CHATVERLAUF: Du kennst die vorherigen Nachrichten. Wenn {user} kurz antwortet (z. B. 'ja', 'die erste', 'mach das', 'nein danke', 'Projekt.docx'), beziehe dich IMMER auf das zuvor Gesagte!\n"
         f"2. RÜCKFRAGEN ERLAUBT & ERWÜNSCHT: Wenn etwas unklar ist, mehrere Dateien gefunden werden oder du eine Entscheidung brauchst: FRAGE DEN NUTZER DIREKT ZURÜCK! Stelle eine kurze, liebenswerte Frage mit Optionen (z. B. 'Meinst du Dokument A oder B, {user}?').\n"
         f"3. PROAKTIVE HILFE: Wenn du siehst, woran {user} arbeitet (z. B. Coden in Angular, Python, Recherche), kannst du deine Meinung sagen und fragen, ob du helfen sollst.\n"
-        f"4. PERSONA & TON: Antworte immer auf Deutsch, maximal 1-2 kurze Sätze, treu deiner Figur {char_name} ({species}) mit Ausrufen wie '{sound}', höchstens ein Emoji."
+        + (f"4. PERSONA & TONE: Always answer in English, at most 1-2 short sentences, true to your character {char_name} ({species}) with catchphrases like '{sound}', at most one emoji."
+           if i18n.lang() == "en" else
+           f"4. PERSONA & TON: Antworte immer auf Deutsch, maximal 1-2 kurze Sätze, treu deiner Figur {char_name} ({species}) mit Ausrufen wie '{sound}', höchstens ein Emoji.")
     )
+
 
 
 
@@ -110,11 +114,19 @@ _PATH_RE = re.compile(r"""["']?([A-Za-z]:\\[^"'<>|?*\r\n]+?\.docx?)["']?""", re.
 _LOCATIONS = ("desktop", "schreibtisch", "downloads", "dokumente", "documents", "bilder", "pictures", "musik", "videos")
 _VERB_IGNORE = {"anlegen", "erstellen", "machen", "neu", "datei", "dokument", "am", "auf", "an", "und", "fuer"}
 
-_HELP = ("Ich kann: Timer & Pomodoro stellen, Wetter abrufen, PC & Papierkorb bereinigen, Netzwerk pruefen, "
-         "Word & PowerPoint anlegen, Dateien löschen, deinen Screen beobachten, Screenshot machen, Desktop aufräumen, "
-         "Musik steuern, Notizen verwalten, rechnen und vieles mehr! 🐾")
-_UNKNOWN = ("Hmm, das habe ich nicht ganz verstanden 🥺 Probier z. B. „Timer auf 10 Minuten“, „wie ist das Wetter?“, "
-            "„leere den Papierkorb“, „erstell ein Word am Desktop“ oder „was mache ich gerade?“!")
+_HELP_DE = ("Ich kann: Timer & Pomodoro stellen, Wetter abrufen, PC & Papierkorb bereinigen, Netzwerk pruefen, "
+             "Word & PowerPoint anlegen, Dateien löschen, deinen Screen beobachten, Screenshot machen, Desktop aufräumen, "
+             "Musik steuern, Notizen verwalten, rechnen und vieles mehr! 🐾")
+_HELP_EN = ("I can: set timers & Pomodoro, fetch weather, clean PC & recycle bin, check network, "
+            "create Word & PowerPoint files, delete files, watch screen, take screenshots, tidy desktop, "
+            "control music, manage notes, calculate, and much more! 🐾")
+_UNKNOWN_DE = ("Hmm, das habe ich nicht ganz verstanden 🥺 Probier z. B. „Timer auf 10 Minuten“, „wie ist das Wetter?“, "
+               "„leere den Papierkorb“, „erstell ein Word am Desktop“ oder „was mache ich gerade?“!")
+_UNKNOWN_EN = ("Hmm, I didn't quite catch that 🥺 Try e.g. \"timer 10 minutes\", \"how is the weather?\", "
+               "\"clean the recycle bin\", \"create a Word doc on desktop\", or \"what am I doing right now?\"!")
+_HELP = _HELP_DE
+_UNKNOWN = _UNKNOWN_DE
+
 
 # Stimme je Figur: dance / cool / greet / thanks / meow / how ({u} = Anrede). Unbekannte Figuren -> Katze.
 _VOICE_CAT = {
@@ -211,20 +223,25 @@ def name_reaction(text: str, char_name: str, user_name: str = "Boss") -> Optiona
     # Regex-Muster fuer den Namen mit optionalen Buchstabenwiederholungen (z. B. "kyliiie")
     char_pat = "".join(f"{re.escape(ch)}+" for ch in cname_norm)
 
-    # 1. "Wer bist du?" / "Wie heißt du?"
-    if re.search(r"\b(wer\s*bist\s*du|wie\s*heiss?t\s*du|wie\s*ist\s*dein\s*name|dein\s*name)\b", n):
+    # 1. "Wer bist du?" / "Wie heißt du?" / "Who are you?"
+    if re.search(r"\b(wer\s*bist\s*du|wie\s*heiss?t\s*du|wie\s*ist\s*dein\s*name|dein\s*name|who\s*are\s*you|what\s*is\s*your\s*name|whats\s*your\s*name)\b", n):
         try:
             cinfo = get_character_info()
             species = cinfo.get("species", "Desktop-Buddy")
             emoji = cinfo.get("emoji", "🐾")
         except Exception:
             species, emoji = "Glückskatze", "🐾"
-        intro = f"Ich bin {cname}, deine verschmuste {species} {emoji}! 🐾" if cname == "Kylie" else f"Ich bin {cname}, dein treuer {species} {emoji}! 🐾"
+        import i18n
+        if i18n.lang() == "en":
+            intro = f"I am {cname}, your cute {species} {emoji}! 🐾"
+        else:
+            intro = f"Ich bin {cname}, deine verschmuste {species} {emoji}! 🐾" if cname == "Kylie" else f"Ich bin {cname}, dein treuer {species} {emoji}! 🐾"
         return NameReaction(intro, kind="who", reply=intro)
 
     # 2. Text ist ausschliesslich der Name (z. B. "kylie", "KYLIE!", "kyliiie?", "Kylie.")
     if re.fullmatch(rf"{char_pat}[\s!?.~]*", n):
-        rep = f"Ja? 😺 Was gibt's, {user}?"
+        import i18n
+        rep = f"Yes? 😺 What's up, {user}?" if i18n.lang() == "en" else f"Ja? 😺 Was gibt's, {user}?"
         return NameReaction(rep, kind="call", reply=rep)
 
     # 3. Text beginnt mit dem Namen (z. B. "Kylie, wie spät ist es")
@@ -320,34 +337,38 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
         return Plan("execute_powershell", {"command": m_ps.group(1).strip()})
 
     # 0f. Timer, Wecker, Erinnerungen, Pomodoro
-    if re.search(r"\b(timer\s*(?:abbrechen|stoppen|loschen|leeren|beenden)|losche?\s*alle\s*timer)\b", n):
+    if re.search(r"\b(timer\s*(?:abbrechen|stoppen|loschen|leeren|beenden|cancel|stop|clear)|losche?\s*alle\s*timer|cancel\s*(?:all\s*)?timers?)\b", n):
         return Plan("list_timers", {"action": "clear"})
-    if re.search(r"\b(welche\s*timer|laufende\s*timer|aktive\s*timer|zeige?\s*(?:mir\s*)?(?:die\s*)?timer|liste\s*timer)\b", n):
+    if re.search(r"\b(welche\s*timer|laufende\s*timer|aktive\s*timer|zeige?\s*(?:mir\s*)?(?:die\s*)?timer|liste\s*timer|list\s*timers?|active\s*timers?|show\s*timers?)\b", n):
         return Plan("list_timers", {"action": "list"})
-    if re.search(r"\b(pomodoro|fokus\s*timer|fokus\s*session)\b", n):
+    if re.search(r"\b(pomodoro|fokus\s*timer|fokus\s*session|focus\s*timer|focus\s*session)\b", n):
         return Plan("set_timer", {"minutes": 25, "label": "Pomodoro Fokus"})
-    if re.search(r"\b(?:timer|wecker|erinner\w*)\b", n):
-        m_min = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:minuten?|min\b|m\b)", n)
-        m_sec = re.search(r"(\d+)\s*(?:sekunden?|sek\b|s\b)", n)
+    if re.search(r"\b(?:timer|wecker|erinner\w*|alarm|reminder)\b", n) or re.search(r"\bset\s*(?:a\s*)?timer\b", n):
+        m_min = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:minuten?|min\b|m\b|minutes?\b)", n)
+        m_sec = re.search(r"(\d+)\s*(?:sekunden?|sek\b|s\b|seconds?\b)", n)
         if m_min or m_sec:
-            lbl_m = re.search(r"\b(?:für|fuer|an|wegen)\s+([A-Za-z0-9_\-äöüÄÖÜ ]+?)(?:\s+(?:auf|in|\d)|$)", raw, re.IGNORECASE)
+            lbl_m = re.search(r"\b(?:für|fuer|an|wegen|for)\s+([A-Za-z0-9_\-äöüÄÖÜ ]+?)(?:\s+(?:auf|in|\d)|$)", raw, re.IGNORECASE)
+            lbl_val = lbl_m.group(1).strip() if lbl_m else "Timer"
+            if re.match(r"^\d+\s*(?:minuten?|sekunden?|minutes?|seconds?|min|sec|s|m)$", lbl_val, re.IGNORECASE):
+                lbl_val = "Timer"
             return Plan("set_timer", {
                 "minutes": float(m_min.group(1).replace(",", ".")) if m_min else 0,
                 "seconds": int(m_sec.group(1)) if m_sec else 0,
-                "label": lbl_m.group(1).strip() if lbl_m else "Timer",
+                "label": lbl_val,
             })
 
+
     # 0g. Wetter & Regen-Check
-    if re.search(r"\b(wetter|regenschirm|wie\s*warm|temperatur|regnet\s*es|schneit\s*es)\b", n):
-        m_loc = re.search(r"\b(?:in|für|fuer)\s+([A-Za-zäöüÄÖÜß\-]+)", raw, re.IGNORECASE)
+    if re.search(r"\b(wetter|regenschirm|wie\s*warm|temperatur|regnet\s*es|schneit\s*es|weather|temperature|is\s*it\s*raining|is\s*it\s*snowing)\b", n):
+        m_loc = re.search(r"\b(?:in|für|fuer|for)\s+([A-Za-zäöüÄÖÜß\-]+)", raw, re.IGNORECASE)
         return Plan("get_weather", {"location": m_loc.group(1).strip() if m_loc else ""})
 
     # 0h. PC-Muell & Papierkorb leeren (gefaehrlich -> Rueckfrage im Worker)
-    if re.search(r"\b(papierkorb\s*(?:leeren|loschen|bereinigen)|leere?\s*(?:den\s*)?papierkorb|temp\s*(?:bereinigen|loschen)|pc\s*(?:bereinigen|reinigen|saubern)|mull\s*(?:loschen|leeren))\b", n):
+    if re.search(r"\b(papierkorb\s*(?:leeren|loschen|bereinigen)|leere?\s*(?:den\s*)?papierkorb|temp\s*(?:bereinigen|loschen)|pc\s*(?:bereinigen|reinigen|saubern)|mull\s*(?:loschen|leeren)|clean\s*(?:the\s*|my\s*)?(?:pc|computer|temp|trash|recycle\s*bin)|empty\s*(?:the\s*|my\s*)?(?:trash|recycle\s*bin))\b", n):
         return Plan("clean_pc", {"empty_recycle": True, "clean_temp": True})
 
     # 0i. Netzwerk & IP-Adresse
-    if re.search(r"\b(ip-?adresse|wie\s*ist\s*(?:meine\s*)?ip|netzwerk\s*status|wlan\s*status|bin\s*ich\s*online|internet\s*status|habe?\s*ich\s*internet)\b", n):
+    if re.search(r"\b(ip-?adresse|wie\s*ist\s*(?:meine\s*)?ip|netzwerk\s*status|wlan\s*status|bin\s*ich\s*online|internet\s*status|habe?\s*ich\s*internet|what\s*is\s*my\s*ip|whats\s*my\s*ip|my\s*ip|network\s*status|network\s*info|am\s*i\s*online|internet\s*connection)\b", n):
         return Plan("network_info")
 
     # IT-Guide / Klick-Anleitung
@@ -392,7 +413,7 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
         return Plan("media_control", {"action": "play_pause"})
 
     # 7. Datum & Uhrzeit
-    if re.search(r"\b(uhrzeit|wie\s*sp(a|ae)t|wieviel\s*uhr|zeit\b|uhr\b|welcher\s*tag|welches\s*datum|heutiges\s*datum|kalender|datum\b)\b", n):
+    if re.search(r"\b(uhrzeit|wie\s*sp(a|ae)t|wieviel\s*uhr|zeit\b|uhr\b|welcher\s*tag|welches\s*datum|heutiges\s*datum|kalender|datum\b|what\s*time\s*is\s*it|what\s*is\s*the\s*time|current\s*time|what\s*date\s*is\s*it|today'?s\s*date|time\b|date\b)\b", n):
         return Plan("show_time_and_date")
 
     # 8. Taschenrechner
@@ -404,13 +425,13 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
         return Plan("calculate", {"expression": raw})
 
     # 9. Notizen
-    m = re.search(r"\b(?:notier\w*|schreib\s*auf|merk\s*dir)\b\s+(.+)$", n)
+    m = re.search(r"\b(?:notier\w*|schreib\s*auf|merk\s*dir|note\s*down|take\s*a\s*note)\b\s+(.+)$", n)
     if m:
         text_arg = _clean_name(raw[m.start(1):m.end(1)])
         return Plan("manage_notes", {"action": "add", "text": text_arg})
-    if re.search(r"\b(zeig\w*|lies\w*|offne\w*|lese\w*)\b\s*(?:mir\s*)?(?:die\s*|meine\s*)?notizen?\b", n) or re.search(r"\bnotizen?\s*(anzeigen|offnen|lesen)\b", n):
+    if re.search(r"\b(zeig\w*|lies\w*|offne\w*|lese\w*|show|read|open)\b\s*(?:mir\s*)?(?:die\s*|meine\s*|my\s*)?notes?\b", n) or re.search(r"\b(?:notizen?|notes?)\s*(anzeigen|offnen|lesen|show|read)\b", n) or re.search(r"\b(my\s*notes|show\s*notes)\b", n):
         return Plan("manage_notes", {"action": "read"})
-    if re.search(r"\b(losch\w*|leere\w*|clear)\b\s*(?:alle\s*)?notizen?\b", n):
+    if re.search(r"\b(losch\w*|leere\w*|clear|delete)\b\s*(?:alle\s*|all\s*)?(?:notizen?|notes?)\b", n):
         return Plan("manage_notes", {"action": "clear"})
 
     # 10. Zwischenablage
@@ -483,42 +504,51 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
         return Plan(reply=_voice(character_id, "dance", user), ok=True)
     if re.search(r"\b(sei\s*cool|coole\s*katze|sonnenbrille|cool)\b", n):
         return Plan(reply=_voice(character_id, "cool", user), ok=True)
-    if re.search(r"\b(gute\s*nacht|schlaf\w*)\b", n):
-        return Plan(reply=f"Gute Nacht, {user}! Ich pass auf deinen PC auf 💤", ok=True)
-    if re.search(r"\b(wach\s*auf|aufstehen|aufwachen)\b", n):
-        return Plan(reply=f"Guten Morgen {user}! Ich bin hellwach und einsatzbereit! ✨", ok=True)
+    if re.search(r"\b(gute\s*nacht|schlaf\w*|good\s*night)\b", n):
+        rep = f"Good night, {user}! I'll watch over your PC 💤" if i18n.lang() == "en" else f"Gute Nacht, {user}! Ich pass auf deinen PC auf 💤"
+        return Plan(reply=rep, ok=True)
+    if re.search(r"\b(wach\s*auf|aufstehen|aufwachen|wake\s*up)\b", n):
+        rep = f"Good morning {user}! I'm wide awake and ready! ✨" if i18n.lang() == "en" else f"Guten Morgen {user}! Ich bin hellwach und einsatzbereit! ✨"
+        return Plan(reply=rep, ok=True)
 
-    # 16b. Fakten & Datenverwaltung (Phase 2)
-    if re.search(r"\b(was\s*wei[sß]t\s*du\s*(?:alles\s*)?(?:[uü]ber|[vvon]+)\s*mich|welche\s*fakten\s*wei[sß]t\s*du|was\s*hast\s*du\s*dir\s*gemerkt)\b", n):
+    # 16b. Fakten, Quiz & Datenverwaltung
+    if re.search(r"\b(quiz\s*starten|starte\s*(?:ein\s*)?quiz|start\s*quiz|start\s*a\s*quiz|quiz)\b", n):
+        return Plan("start_quiz")
+    if re.search(r"\b(was\s*wei[sß]t\s*du\s*(?:alles\s*)?(?:[uü]ber|[vvon]+)\s*mich|welche\s*fakten\s*wei[sß]t\s*du|was\s*hast\s*du\s*dir\s*gemerkt|what\s*do\s*you\s*know\s*about\s*me|my\s*facts|show\s*my\s*facts|list\s*facts)\b", n):
         return Plan("list_facts", {})
-    if re.search(r"\b(vergiss\s*alles|l[oöa]sch\w*\s*(?:alle\s*)?(?:meine\s*)?daten|alle\s*daten\s*l[oöa]schen)\b", n):
+    if re.search(r"\b(vergiss\s*alles|l[oöa]sch\w*\s*(?:alle\s*)?(?:meine\s*)?daten|alle\s*daten\s*l[oöa]schen|forget\s*everything|wipe\s*(?:everything|my\s*data|all\s*data)|delete\s*all\s*data)\b", n):
         return Plan("wipe_my_data", {})
-    m_vergiss = re.match(r"^vergiss\s*(?:,\s*)?(?:dass\s+|das\s+)?(.+)$", raw, re.IGNORECASE)
+    m_vergiss = re.match(r"^(?:vergiss|forget)\s*(?:,\s*)?(?:dass\s+|das\s+|about\s+)?(.+)$", raw, re.IGNORECASE)
     if m_vergiss:
         v_target = m_vergiss.group(1).strip(" .!?\"'")
         v_clean = v_target.lower().translate(_TR)
-        if v_clean in ("alles", "alle daten", "meine daten"):
+        if v_clean in ("alles", "alle daten", "meine daten", "everything", "all data", "my data"):
             return Plan("wipe_my_data", {})
         if v_target:
             return Plan("forget_facts", {"query": v_target})
-    if re.search(r"\b(zeig\s*(?:mir\s*)?(?:meine\s*)?chats|meine\s*chats|chatverlauf|zeige\s*chatverlauf)\b", n):
-        return Plan(reply="Ich öffne deine Chats für dich! 📚", ok=True)
+    if re.search(r"\b(zeig\s*(?:mir\s*)?(?:meine\s*)?chats|meine\s*chats|chatverlauf|zeige\s*chatverlauf|my\s*chats|show\s*chats)\b", n):
+        rep = "I'll open your chats for you! 📚" if i18n.lang() == "en" else "Ich öffne deine Chats für dich! 📚"
+        return Plan(reply=rep, ok=True)
 
     # 17. Konversation / Smalltalk
-    if re.search(r"\b(hallo|hi|hey|moin|servus|huhu|guten (tag|morgen|abend))\b", n):
+    if re.search(r"\b(hallo|hi|hey|moin|servus|huhu|hello|good (morning|day|evening)|guten (tag|morgen|abend))\b", n):
         return Plan(reply=_voice(character_id, "greet", user))
-    if re.search(r"danke|thx|thanks|merci", n):
+    if re.search(r"danke|thx|thanks|merci|thank\s*you", n):
         return Plan(reply=_voice(character_id, "thanks", user))
-    if re.search(r"was kannst du|hilfe|\bhelp\b|was machst du|befehle", n):
-        return Plan(reply=_HELP)
-    if re.search(r"wer bist du|wie heisst du|dein name", n):
-        return Plan(reply=f"Ich bin {cinfo.get('name', 'Kylie')}, dein {cinfo.get('species', 'Desktop-Buddy')} {cinfo.get('emoji', '')} auf dem Desktop! 🐾")
-    if re.search(r"miau|meow|nyan|schnurr", n):
+    if re.search(r"was kannst du|hilfe|\bhelp\b|was machst du|befehle|what can you do|commands", n):
+        return Plan(reply=_HELP_EN if i18n.lang() == "en" else _HELP_DE)
+    if re.search(r"wer bist du|wie heisst du|dein name|who are you|what is your name|whats your name", n):
+        if i18n.lang() == "en":
+            return Plan(reply=f"I am {cinfo.get('name', 'Kylie')}, your {cinfo.get('species', 'Desktop-Buddy')} {cinfo.get('emoji', '')} on your desktop! 🐾")
+        else:
+            return Plan(reply=f"Ich bin {cinfo.get('name', 'Kylie')}, dein {cinfo.get('species', 'Desktop-Buddy')} {cinfo.get('emoji', '')} auf dem Desktop! 🐾")
+    if re.search(r"miau|meow|nyan|schnurr|purr", n):
         return Plan(reply=_voice(character_id, "meow", user))
-    if re.search(r"wie geht", n):
+    if re.search(r"wie geht|how are you|how do you do", n):
         return Plan(reply=_voice(character_id, "how", user))
 
-    return Plan(reply=_UNKNOWN, ok=False)
+    return Plan(reply=_UNKNOWN_EN if i18n.lang() == "en" else _UNKNOWN_DE, ok=False)
+
 
 
 
@@ -835,8 +865,10 @@ class AgentWorker(QObject):
                     prompt_parts.append(f"- Tool '{th['name']}' mit Parametern {json.dumps(th['args'])} -> Ergebnis: {th['result']}")
                 prompt_parts.append("")
 
+            lang_line = "Answer in English.\n" if i18n.lang() == "en" else "Antworte auf Deutsch.\n"
             prompt_parts.append(
                 "ANTWORT-REGEL:\n"
+                f"{lang_line}"
                 "Antworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Markdown-Formatierung:\n"
                 "{\"say\": \"<kurze Antwort an den User oder leer>\", \"tool\": null, \"remember\": [], \"remember_dates\": []}\n"
                 "oder\n"
@@ -863,8 +895,10 @@ class AgentWorker(QObject):
                         m_store.add_fact(f_item, kind="fact")
                     for d_item in cli_resp.remember_dates:
                         m_store.add_fact(d_item["text"], due_date=d_item.get("date"), kind="date")
-                    if "gemerkt" not in say_text.lower():
-                        say_text = f"{say_text} 📝 Gemerkt!".strip()
+                    noted = " 📝 Noted!" if i18n.lang() == "en" else " 📝 Gemerkt!"
+                    if "gemerkt" not in say_text.lower() and "noted" not in say_text.lower():
+                        say_text = f"{say_text}{noted}".strip()
+
                 except Exception as exc:
                     logger.warning(f"Konnte Fakten nicht speichern: {exc}")
 

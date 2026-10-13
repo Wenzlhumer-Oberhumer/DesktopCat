@@ -13,6 +13,7 @@ from paths import APP_DIR, DATA_DIR
 CONFIG_PATH = DATA_DIR / "config.json"
 
 DEFAULTS: dict[str, Any] = {
+    "language": "de",
     "pet": {
         "name": "Kylie",
         "character": "cat_mochi",

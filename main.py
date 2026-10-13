@@ -16,6 +16,9 @@ from typing import Callable, Optional
 from paths import APP_DIR, DATA_DIR, FROZEN, set_autostart
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_installer
 from version import __version__
+import i18n
+from i18n import tr
+
 
 # Sicherstellen, dass Module aus APP_DIR importiert werden koennen, auch nach os.chdir(DATA_DIR)
 if str(APP_DIR) not in sys.path:
@@ -385,7 +388,9 @@ class Buddy(QObject):
     def __init__(self, app: QApplication, cfg: Config):
         super().__init__()
         self.app, self.cfg = app, cfg
+        i18n.set_language(str(cfg.get("language", "de")))
         self.pet = PetWindow(cfg, APP_DIR)
+
         self.bubble = SpeechBubble(cfg)
         self.briefing_card = BriefingCard()
         self.input = InputBar()
@@ -507,29 +512,30 @@ class Buddy(QObject):
     def _update_tray_menu(self) -> None:
         self.tray_menu.clear()
         if not gemini.has_key():
-            self._act(self.tray_menu, "\U0001F511  Gemini-Key eintragen", self.open_settings)
+            self._act(self.tray_menu, tr("menu.enter_key"), self.open_settings)
             self.tray_menu.addSeparator()
-        self._act(self.tray_menu, "💬  Befehl eingeben", self.open_input)
-        self._act(self.tray_menu, "💖  Freundschaft", self.open_friendship_dialog)
-        self._act(self.tray_menu, "📊  Fokus-Statistik", self.open_focus_stats_dialog)
-        self._act(self.tray_menu, "📚  Lernkarten", self.open_flashcards_dialog)
+        self._act(self.tray_menu, tr("menu.input"), self.open_input)
+        self._act(self.tray_menu, tr("menu.friendship"), self.open_friendship_dialog)
+        self._act(self.tray_menu, tr("menu.focus_stats"), self.open_focus_stats_dialog)
+        self._act(self.tray_menu, tr("menu.flashcards"), self.open_flashcards_dialog)
         cname = self.char_info().get("name", "Kylie")
-        self._act(self.tray_menu, f"📸  Foto mit {cname}", self.start_photobox)
-        self._act(self.tray_menu, "📝  Neue Haftnotiz", lambda: self.create_sticky_note())
-        self._act(self.tray_menu, "🩺  Was heißt dieser Fehler?", self.start_error_doctor)
-        self._act(self.tray_menu, "📚  Meine Chats", self.open_chat_history)
-        self._act(self.tray_menu, "🔒  Meine Daten", self.open_my_data)
-        self._act(self.tray_menu, "\U0001F441\uFE0F  Bildschirm beobachten (Vision)", lambda: self._on_submit("was mache ich gerade"))
-        self._act(self.tray_menu, "\U0001F4C4  Word-Dokument am Desktop erstellen", lambda: self._on_submit("erstelle ein word dokument am desktop"))
-        self._act(self.tray_menu, "\U0001F3E0  Zur Taskleiste zur\u00fccksetzen", self.pet.reset_to_taskbar)
+        self._act(self.tray_menu, tr("menu.photo", name=cname), self.start_photobox)
+        self._act(self.tray_menu, tr("menu.new_note"), lambda: self.create_sticky_note())
+        self._act(self.tray_menu, tr("menu.error_doctor"), self.start_error_doctor)
+        self._act(self.tray_menu, tr("menu.chats"), self.open_chat_history)
+        self._act(self.tray_menu, tr("menu.data"), self.open_my_data)
+        self._act(self.tray_menu, tr("menu.watch_screen"), lambda: self._on_submit("was mache ich gerade"))
+        self._act(self.tray_menu, tr("menu.create_word"), lambda: self._on_submit("erstelle ein word dokument am desktop"))
+        self._act(self.tray_menu, tr("menu.reset_taskbar"), self.pet.reset_to_taskbar)
         self.tray_menu.addSeparator()
         if getattr(self, "_pending_update", None):
             ver = self._pending_update.get("version", "")
-            self._act(self.tray_menu, f"✨ Update auf v{ver} installieren", self._start_update_download)
-        self._act(self.tray_menu, "🔄 Nach Updates suchen", lambda: self._check_update(manual=True))
-        self._act(self.tray_menu, "\u2699\uFE0F  Einstellungen", self.open_settings)
-        self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Desktop Cat (v{__version__})", self._about)
-        self._act(self.tray_menu, "\U0001F44B  Beenden", self.quit)
+            self._act(self.tray_menu, tr("menu.install_update", version=ver), self._start_update_download)
+        self._act(self.tray_menu, tr("menu.check_updates"), lambda: self._check_update(manual=True))
+        self._act(self.tray_menu, tr("menu.settings"), self.open_settings)
+        self._act(self.tray_menu, tr("menu.about", version=__version__), self._about)
+        self._act(self.tray_menu, tr("menu.quit"), self.quit)
+
 
     @staticmethod
     def _act(menu: QMenu, text: str, slot) -> QAction:
@@ -1510,9 +1516,10 @@ class Buddy(QObject):
         self.pet.react_happy()
 
         actions = [
-            ("Zeig's mir 🕶️", lambda: self.start_it_guide("Fehler beheben: " + explanation[:100])),
-            ("Schließen ✖", self._on_error_doctor_closed),
+            (tr("doctor.btn_show"), lambda: self.start_it_guide("Fehler beheben: " + explanation[:100])),
+            (tr("doctor.btn_close"), self._on_error_doctor_closed),
         ]
+
         self.bubble.show_with_actions(explanation, actions)
 
     @pyqtSlot(str)
@@ -1601,9 +1608,9 @@ class Buddy(QObject):
             self.guide_overlay.hide_target()
 
         actions = [
-            ("Weiter ▶", self._guide_capture_and_step),
-            ("Nochmal zeigen 🔁", lambda: self._guide_repeat(say_text, step_dict, rect)),
-            ("Fertig ✖", lambda: self._guide_finish(celebrate=False)),
+            (tr("guide.btn_next"), self._guide_capture_and_step),
+            (tr("guide.btn_repeat"), lambda: self._guide_repeat(say_text, step_dict, rect)),
+            (tr("guide.btn_done"), lambda: self._guide_finish(celebrate=False)),
         ]
         self.bubble.show_with_actions(say_text, actions)
 
@@ -1619,11 +1626,12 @@ class Buddy(QObject):
             )
             self.guide_overlay.show()
         actions = [
-            ("Weiter ▶", self._guide_capture_and_step),
-            ("Nochmal zeigen 🔁", lambda: self._guide_repeat(say_text, step_dict, rect)),
-            ("Fertig ✖", lambda: self._guide_finish(celebrate=False)),
+            (tr("guide.btn_next"), self._guide_capture_and_step),
+            (tr("guide.btn_repeat"), lambda: self._guide_repeat(say_text, step_dict, rect)),
+            (tr("guide.btn_done"), lambda: self._guide_finish(celebrate=False)),
         ]
         self.bubble.show_with_actions(say_text, actions)
+
 
     @pyqtSlot(str)
     def _guide_on_step_failed(self, err: str) -> None:

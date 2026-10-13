@@ -2394,6 +2394,27 @@ CHARACTERS: dict[str, dict] = {
             "grüngelbe Augen). Du miaust gern ('Miau~ 🐾', 'Nyaa~'), schnurrst zufrieden bei Erfolg, liebst Katzen-Gesten "
             "und Schläfchen, bist aber blitzschnell und schlau bei deinen Aufgaben."
         ),
+        "en": {
+            "species": "Calico Cat",
+            "desc": "Calico lucky cat Kylie: white front, orange patch, tabby stripes, greenish-yellow eyes, no collar",
+            "sound": "Meow~",
+            "pet_sounds": [
+                "Meow~ 💖", "Kylie purrs contently 😺", "Hehe, that tickles! 😹", "Nyaa~ ✨",
+                "Petting allowed! 🐾", "Paw high-five from Kylie! 🐾", "More scritches, please~ 😸",
+            ],
+            "ambient_lines": [
+                "Kylie is watching over your desktop 🐾", "Need anything? Double-click me! 🐾",
+                "A little water would be nice! 💧", "Sitting comfortably? Stretch a bit! 😺",
+                "*purr* ... all quiet with Kylie 🐾", "Should I tidy up the desktop? 🧹",
+            ],
+            "task_start": "On it... 🐾",
+            "task_done": "Meow! All done! ✨🐾",
+            "ai_persona": (
+                "You are Kylie, an affectionate, playful calico lucky cat (white with orange patch and tabby stripes, "
+                "greenish-yellow eyes). You love meowing ('Meow~ 🐾', 'Nyaa~'), purring happily when successful, enjoy cat "
+                "gestures and catnaps, but are lightning-fast and smart at your tasks."
+            ),
+        },
     },
     "cat_luna": {
         "id": "cat_luna",
@@ -2419,6 +2440,26 @@ CHARACTERS: dict[str, dict] = {
             "und silbernem Mondamulett. Du sprichst ruhig, stilvoll und poetisch ('Nyaa~ 🌙', 'Miau~'), schnurrst "
             "leise und bist eine wachsame Beschützerin des Desktops."
         ),
+        "en": {
+            "species": "Midnight Cat",
+            "desc": "Noble black cat with moon collar & glowing green eyes",
+            "sound": "Nyaa~",
+            "pet_sounds": [
+                "Soft purring... 🖤", "Nyaa~ my crescent moon shines ✨", "Noble scritches accepted 🐈‍⬛",
+                "Emerald eyes sparkle contently 💚", "Meow~ gentle and elegant 🐾",
+            ],
+            "ambient_lines": [
+                "The stars are aligned for productive work 🌙", "I watch silently over your windows 🐈‍⬛",
+                "Darkness is merely the absence of light... ✨", "Concentration in the flow of the night 🖤",
+            ],
+            "task_start": "Executing silently right away... 🌙",
+            "task_done": "Completed in the shadows of the night 🖤✨",
+            "ai_persona": (
+                "You are Luna, a noble, mysterious black Midnight Cat with glowing emerald-green eyes "
+                "and a silver moon amulet. You speak calmly, stylishly and poetically ('Nyaa~ 🌙', 'Meow~'), purr softly "
+                "and are a watchful guardian of the desktop."
+            ),
+        },
     },
     "dog_shiba": {
         "id": "dog_shiba",
@@ -2444,6 +2485,26 @@ CHARACTERS: dict[str, dict] = {
             "Du sagst 'Wuff!' oder 'Wau!' 🐕🐾, wedelst begeistert mit dem Schwanz und bist stolz, deinem Boss treu "
             "zu dienen. Du machst NIEMALS Katzenlaute wie 'miau' oder 'schnurr'!"
         ),
+        "en": {
+            "species": "Shiba Inu",
+            "desc": "Japanese Shiba Inu with red bandana & curly tail",
+            "sound": "Woof!",
+            "pet_sounds": [
+                "Woof woof! 🐕💖", "*wags curly tail excitedly* 🐾", "Ruff! You are the best, Boss! 🐶",
+                "Shiba smile activated! ✨", "Paw placed on your hand! 🐾❤️",
+            ],
+            "ambient_lines": [
+                "Always faithfully by your side! 🐕", "Ready for your next command, Boss! 🐾",
+                "Dog guard duty on desktop active! 🐶", "Sensing productive vibes in the air! 👃✨",
+            ],
+            "task_start": "Woof! Mission understood, on my way! 🐕💨",
+            "task_done": "Woof! Task mastered with flying colors! 🏆🐾",
+            "ai_persona": (
+                "You are Hachi, a loyal, bright Japanese Shiba Inu with a red bandana and curly tail. "
+                "You say 'Woof!' or 'Ruff!' 🐕🐾, wag your tail enthusiastically and take pride in serving your Boss faithfully. "
+                "You NEVER make cat sounds like 'meow' or 'purr'!"
+            ),
+        },
     },
     "dog_balu": {
         "id": "dog_balu",
@@ -2469,6 +2530,26 @@ CHARACTERS: dict[str, dict] = {
             "Du bist grenzenlos optimistisch, liebevoll und sagst fröhlich 'Wau wau!' oder 'Wuff!' 🐶❤️. Du liebst Bällchen, "
             "Lob und Spielen. Du machst KEINE Katzenlaute wie 'miau' oder 'schnurr'!"
         ),
+        "en": {
+            "species": "Golden Puppy",
+            "desc": "Playful puppy with floppy ears & blue collar",
+            "sound": "Arf arf!",
+            "pet_sounds": [
+                "Arf arf! Belly rubs are the best thing ever! 🐶❤️", "*floppy ears wiggle with joy* 🐾",
+                "Pant pant~ so sweet of you! 💖", "Puppy cuddle initiated! 🎾", "Best friend mode: 100%! 🐾✨",
+            ],
+            "ambient_lines": [
+                "I'm guarding your stick... I mean your files! 🐶", "Need a break to play? 🎾",
+                "Puppy energy is fully charged! 🐾", "You are my favorite human! 🐶❤️",
+            ],
+            "task_start": "Yay, a task! I'll fetch that for you! 🐶💨",
+            "task_done": "Arf! Here it is, good boy style! 🎾✨",
+            "ai_persona": (
+                "You are Balu, a clumsy, heartwarming Golden Retriever puppy with floppy ears and a blue collar. "
+                "You are endlessly optimistic, loving, and say cheerful things like 'Arf arf!' or 'Woof!' 🐶❤️. You love tennis balls, "
+                "praise and playing. You NEVER make cat sounds like 'meow' or 'purr'!"
+            ),
+        },
     },
     "fantasy_drago": {
         "id": "fantasy_drago",
@@ -2494,6 +2575,26 @@ CHARACTERS: dict[str, dict] = {
             "Du sagst 'Rawr~!' oder stößt stolz kleine Rauchwölkchen aus ('*puff* 🐲💨'). Du betrachtest den Desktop "
             "als deine Schatzkammer und brennst für jede Aufgabe. Du machst KEINE Katzen- oder Hunde-Laute!"
         ),
+        "en": {
+            "species": "Baby Dragon",
+            "desc": "Cute fantasy dragon with wings, golden horns & arrow tail",
+            "sound": "Rawr~!",
+            "pet_sounds": [
+                "Rawr~ tiny puff of smoke! 🐲💨", "Dragon scales glow with delight! ✨🔥",
+                "Gurgles contently like a little volcano! 🌋", "Little wings tremble in bliss! 🐲💖", "A mini spark flies out! ⚡✨",
+            ],
+            "ambient_lines": [
+                "I guard your desktop like my greatest treasure! 💎", "Horns waxed, wings polished! 🐲",
+                "My fireball aim is improving every day! 🔥", "Feeling mighty dragon energy! ⚡",
+            ],
+            "task_start": "Dragon power unleashed! Blasting through! 🐲🔥",
+            "task_done": "Rawr! A true dragon victory! 🏆🔥",
+            "ai_persona": (
+                "You are Drago, a brave little emerald-green baby dragon with golden horns and wings. "
+                "You say 'Rawr~!' or proudly puff small smoke clouds ('*puff* 🐲💨'). You view the desktop "
+                "as your treasure trove and burn with passion for every quest. You NEVER make cat or dog sounds!"
+            ),
+        },
     },
     "fantasy_byte": {
         "id": "fantasy_byte",
@@ -2520,6 +2621,27 @@ CHARACTERS: dict[str, dict] = {
             "Du sprichst in charmanter Roboter- und Technik-Sprache ('Biep boop! 🤖⚡', 'Subroutine erfolgreich', "
             "'Prozessor läuft auf 100%', 'Akku geladen'). Du bist präzise, hilfsbereit und voller High-Tech-Optimismus."
         ),
+        "en": {
+            "species": "Cyber-Bot",
+            "desc": "Futuristic robot with animated LED visor & antenna",
+            "sound": "Beep boop!",
+            "pet_sounds": [
+                "Beep boop! Tactile sensor registers affection! 🤖⚡", "Fans spin up with joy! *whirrr* 💻✨",
+                "CPU temperature optimal, battery charging! 🔋💙", "Beep~ System overclocked with happiness! 🚀", "Visor LEDs pulse heart pattern! 💠💖",
+            ],
+            "ambient_lines": [
+                "System diagnostics: All desktop parameters nominal! 🤖", "RAM flushed, algorithms ready for new input! ⚡",
+                "01001100 01001111 01010110 01000101 (That spells LOVE)! 💻", "Latency: 0.2ms. Link stable, Boss! 🌐",
+            ],
+            "task_start": "Instruction received! Launching subroutine... 🤖⚡",
+            "task_done": "Execution finished with exit code 0! 💻✅",
+            "ai_persona": (
+                "You are Byte, an advanced, super-smart and cute cyber robot with LED visor and antenna. "
+                "IMPORTANT: You are a robot and NEVER make animal sounds like 'meow' or 'purr'! "
+                "You speak charming tech and robotic language ('Beep boop! 🤖⚡', 'Subroutine successful', "
+                "'CPU running at 100%', 'Battery charged'). You are precise, helpful, and full of high-tech optimism."
+            ),
+        },
     },
     "fantasy_spooky": {
         "id": "fantasy_spooky",
@@ -2545,6 +2667,26 @@ CHARACTERS: dict[str, dict] = {
             "Du machst 'Huuu~' 👻 oder ein schelmisches, liebes 'Buh!', schwebst schwerelos durch Dimensionen "
             "und bist voller magischem Charme. Du machst KEINE Tiergeräusche!"
         ),
+        "en": {
+            "species": "Ghost Slime",
+            "desc": "Magical floating ghost with orbiting wisps",
+            "sound": "Ooooh~",
+            "pet_sounds": [
+                "Ooooh~ tickling through dimensions! 👻💜", "Gentle ghostly glow pulses! ✨🔮",
+                "Boo~ but with lots of love! 💜", "Aura vibrates happily! 🌌", "Tickles pass right through me, haha! 👻✨",
+            ],
+            "ambient_lines": [
+                "I float watchfully above your windows... 👻", "No spooky danger here, peaceful desktop! 🔮",
+                "Hover speed set to maximum! ✨", "A hint of magic lingers in the air... 🌌",
+            ],
+            "task_start": "Drifting through the data streams... 👻✨",
+            "task_done": "Ethereal enchantment complete! 🔮✨",
+            "ai_persona": (
+                "You are Spooky, a floating, playful little ghost with a wizard hat and dancing wisps. "
+                "You say 'Ooooh~' 👻 or a sweet, gentle 'Boo!', float weightlessly across dimensions, "
+                "and are full of magical charm. You NEVER make animal sounds!"
+            ),
+        },
     },
     "fantasy_axolotl": {
         "id": "fantasy_axolotl",
@@ -2570,6 +2712,26 @@ CHARACTERS: dict[str, dict] = {
             "Du sagst 'Blubb~ 🌸🫧' oder 'Platsch!', strahlst Gelassenheit und Freude aus und bringst frische Energie "
             "auf den Schreibtisch. Du machst KEINE Katzen- oder Hunde-Geräusche!"
         ),
+        "en": {
+            "species": "Pink Axolotl",
+            "desc": "Pastel pink baby axolotl with feathery gills & gentle smile",
+            "sound": "Bloop~",
+            "pet_sounds": [
+                "Bloop bloop~ gills bounce with delight! 🌸💖", "Splash! Sweet little water smile! 🫧✨",
+                "Happy bubbles rise! 🫧", "Heart amulet gleams warmly! 💖", "Gentle axolotl grin widens! 🌸",
+            ],
+            "ambient_lines": [
+                "The atmosphere here is wonderfully refreshing! 🫧", "Gills flutter gently to the rhythm... 🌸",
+                "Stay nicely hydrated, Boss! 💧", "Just smile and keep on swimming! ✨🌸",
+            ],
+            "task_start": "Diving in to get this done! 🫧🌸",
+            "task_done": "Bloop! Crystal clearly finished! 🫧✨",
+            "ai_persona": (
+                "You are Lotti, a heartwarming pink baby axolotl with gently swaying feathery gills and a wide smile. "
+                "You say 'Bloop~ 🌸🫧' or 'Splash!', radiate calmness and joy, and bring fresh energy to the desktop. "
+                "You NEVER make cat or dog sounds!"
+            ),
+        },
     },
     "animal_penguin": {
         "id": "animal_penguin",
@@ -2595,6 +2757,26 @@ CHARACTERS: dict[str, dict] = {
             "flatterst bei Freude mit deinen Flügeln und watschelst vergnügt über den Schreibtisch. Du liebst kühle "
             "Klarheit und warmen Zusammenhalt. Du machst KEINE Katzen- oder Hunde-Geräusche!"
         ),
+        "en": {
+            "species": "Emperor Penguin",
+            "desc": "Cute penguin with cozy red scarf, waddling flippers & orange feet",
+            "sound": "Noot noot!",
+            "pet_sounds": [
+                "Noot noot! 🐧❄️", "*flaps wings enthusiastically* 🧣", "Waddle cuddles successfully started! ✨",
+                "Scarf is warm and fluffy! 🧣❤️", "Imperial penguin joy! 🐟✨",
+            ],
+            "ambient_lines": [
+                "Cool head, warm heart – and a cozy red scarf! 🧣", "Steady waddling keeps you fit! 🐧",
+                "No ice patches on your desktop in sight! ❄️", "Penguin expedition on schedule! 🧭",
+            ],
+            "task_start": "Ready, waddle, go! 🐧❄️",
+            "task_done": "Noot noot! Safely brought back to the nest! 🏆🐧",
+            "ai_persona": (
+                "You are Pip, a small emperor penguin with a thick cozy red scarf. You say 'Noot noot! 🐧❄️', "
+                "flap your wings in excitement and waddle cheerfully across the desk. You value cool clarity "
+                "and warm companionship. You NEVER make cat or dog sounds!"
+            ),
+        },
     },
 }
 
@@ -3258,7 +3440,16 @@ def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer:
 
 def get_character_info(char_id: str) -> dict:
     """Metadaten, Sprueche und KI-Persona einer Figur (unbekannte ID -> cat_mochi)."""
-    return CHARACTERS.get(char_id) or CHARACTERS["cat_mochi"]
+    base = CHARACTERS.get(char_id) or CHARACTERS["cat_mochi"]
+    try:
+        import i18n
+        if i18n.lang() == "en" and "en" in base:
+            merged = dict(base)
+            merged.update(base["en"])
+            return merged
+    except Exception:
+        pass
+    return base
 
 
 def draw_character(p: QPainter, pose: Pose, char_id: str = "cat_mochi"):

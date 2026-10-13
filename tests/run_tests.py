@@ -40,6 +40,7 @@ def main():
         "test_accessories",
         "test_it_guide",
         "test_fun",
+        "test_i18n",
     ]
 
     total = 0

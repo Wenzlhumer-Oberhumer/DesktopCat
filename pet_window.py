@@ -14,7 +14,9 @@ from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QGuiApplication, QPainter
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
+from i18n import tr
 import tools
+
 from accessories import fly_position
 from pet_sprites import (
     BASE, FLOOR, PoseContext, SpriteLibrary, _draw_effects, compute_pose, draw_cat,
@@ -824,46 +826,48 @@ class PetWindow(QWidget):
         cmd = self.command_requested.emit
         import gemini
         if not gemini.has_key():
-            menu.addAction("🔑  Gemini-Key eintragen").triggered.connect(self.settings_requested.emit)
+            menu.addAction(tr("menu.enter_key")).triggered.connect(self.settings_requested.emit)
             menu.addSeparator()
-        menu.addAction("💬  Befehl eingeben").triggered.connect(self.input_requested.emit)
-        menu.addAction("💖  Freundschaft").triggered.connect(self.friendship_requested.emit)
-        menu.addAction("📊  Fokus-Statistik").triggered.connect(self.focus_stats_requested.emit)
-        menu.addAction("📚  Lernkarten").triggered.connect(self.flashcards_requested.emit)
+        menu.addAction(tr("menu.input")).triggered.connect(self.input_requested.emit)
+        menu.addAction(tr("menu.friendship")).triggered.connect(self.friendship_requested.emit)
+        menu.addAction(tr("menu.focus_stats")).triggered.connect(self.focus_stats_requested.emit)
+        menu.addAction(tr("menu.flashcards")).triggered.connect(self.flashcards_requested.emit)
         cname = self.char_info().get("name", "Kylie")
-        menu.addAction(f"📸  Foto mit {cname}").triggered.connect(self.photobox_requested.emit)
-        menu.addAction("📝  Neue Haftnotiz").triggered.connect(self.new_note_requested.emit)
-        menu.addAction("🩺  Was heißt dieser Fehler?").triggered.connect(self.error_doctor_requested.emit)
-        menu.addAction("📚  Meine Chats").triggered.connect(self.chats_requested.emit)
-        menu.addAction("🔒  Meine Daten").triggered.connect(self.data_requested.emit)
+        menu.addAction(tr("menu.photo", name=cname)).triggered.connect(self.photobox_requested.emit)
+        menu.addAction(tr("menu.new_note")).triggered.connect(self.new_note_requested.emit)
+        menu.addAction(tr("menu.error_doctor")).triggered.connect(self.error_doctor_requested.emit)
+        menu.addAction(tr("menu.chats")).triggered.connect(self.chats_requested.emit)
+        menu.addAction(tr("menu.data")).triggered.connect(self.data_requested.emit)
         menu.addSeparator()
 
         # Charakter-Auswahl (Live-Wechsel)
         if CHARACTERS:
-            char_menu = menu.addMenu("🎭  Charakter wählen")
+            char_menu = menu.addMenu(tr("menu.choose_char"))
             style_menu(char_menu)
-            for cid, ci in CHARACTERS.items():
+            for cid in CHARACTERS:
                 check = "✔  " if cid == self.character else "    "
+                from pet_sprites import get_character_info
+                ci = get_character_info(cid)
                 char_menu.addAction(f"{check}{ci['emoji']}  {ci['name']} ({ci['species']})").triggered.connect(
                     lambda _=False, c=cid: self.set_character(c))
             menu.addSeparator()
 
         # Coole Tricks & Animationen
-        tricks = menu.addMenu("✨  Tricks & Spaß")
+        tricks = menu.addMenu(tr("menu.tricks"))
         style_menu(tricks)
         name = self.char_info().get("name", "Buddy")
-        tricks.addAction(f"💃  {name}, tanz für mich!").triggered.connect(lambda: self.dance(6.0))
-        tricks.addAction("🕶️  Coole Pose (Sonnenbrille)").triggered.connect(lambda: self.be_cool(6.0))
-        tricks.addAction("💨  Hau-Ruck! Schiebe-Animation").triggered.connect(lambda: self.push_animation(1.5))
-        tricks.addAction("🐭  Fang die Maus! (15 s)").triggered.connect(lambda: self.chase_mouse(15.0))
-        tricks.addAction("🍖  Leckerli geben").triggered.connect(self.give_treat)
-        tricks.addAction("💤  Schlafen legen").triggered.connect(lambda: self.set_state(PetState.SLEEP))
-        tricks.addAction("🐾  Aufwecken").triggered.connect(self.wake)
+        tricks.addAction(tr("menu.dance", name=name)).triggered.connect(lambda: self.dance(6.0))
+        tricks.addAction(tr("menu.cool")).triggered.connect(lambda: self.be_cool(6.0))
+        tricks.addAction(tr("menu.push")).triggered.connect(lambda: self.push_animation(1.5))
+        tricks.addAction(tr("menu.chase")).triggered.connect(lambda: self.chase_mouse(15.0))
+        tricks.addAction(tr("menu.treat")).triggered.connect(self.give_treat)
+        tricks.addAction(tr("menu.sleep")).triggered.connect(lambda: self.set_state(PetState.SLEEP))
+        tricks.addAction(tr("menu.wake")).triggered.connect(self.wake)
 
         # Schnelle Tools
-        tools_menu = menu.addMenu("⚡  Schnell-Tools")
+        tools_menu = menu.addMenu(tr("menu.quick_tools"))
         style_menu(tools_menu)
-        slide_menu = tools_menu.addMenu("💨  Fenster wegschieben...")
+        slide_menu = tools_menu.addMenu(tr("menu.push_windows"))
         style_menu(slide_menu)
         try:
             wins = tools.get_open_windows()
@@ -875,43 +879,44 @@ class PetWindow(QWidget):
             slide_menu.addAction(f"❌  {short}").triggered.connect(
                 lambda _=False, t=title: cmd(f"schließe {t}"))
         if not wins:
-            slide_menu.addAction("Keine Fenster gefunden").setEnabled(False)
+            slide_menu.addAction(tr("menu.no_windows")).setEnabled(False)
         tools_menu.addSeparator()
-        for text, c in (
-            ("⏱️  25 Min. Pomodoro-Fokus", "pomodoro starten"),
-            ("⏱️  5 Min. Kurzpause", "timer 5 minuten"),
-            ("☀️  Live-Wetterbericht", "wie ist das wetter"),
-            ("🧹  Papierkorb & Temp leeren", "leere den papierkorb"),
-            ("🌐  Netzwerk & IP-Info", "wie ist meine ip"),
+        for key, c in (
+            ("menu.pomodoro_25", "pomodoro starten"),
+            ("menu.pause_5", "timer 5 minuten"),
+            ("menu.live_weather", "wie ist das wetter"),
+            ("menu.clean_pc", "leere den papierkorb"),
+            ("menu.network_ip", "wie ist meine ip"),
         ):
-            tools_menu.addAction(text).triggered.connect(lambda _=False, c=c: cmd(c))
+            tools_menu.addAction(tr(key)).triggered.connect(lambda _=False, c=c: cmd(c))
         tools_menu.addSeparator()
-        for text, c in (
-            ("👁️  Bildschirm beobachten (Vision)", "was mache ich gerade"),
-            ("📄  Word am Desktop erstellen", "erstelle ein word dokument am desktop"),
-            ("📊  PowerPoint am Desktop erstellen", "erstelle eine powerpoint am desktop"),
-            ("📸  Desktop Screenshot", "screenshot"),
-            ("🧹  Desktop aufräumen", "desktop aufraeumen"),
-            ("🕒  Datum & Uhrzeit", "wie spaet ist es"),
-            ("💻  System-Status", "systeminfo"),
-            ("🔊  Lauter (+10%)", "lauter"),
-            ("🔉  Leiser (-10%)", "leiser"),
-            ("🔇  Stumm / Mute", "stumm"),
-            ("▶️  Musik Play/Pause", "pause"),
+        for key, c in (
+            ("menu.watch_screen", "was mache ich gerade"),
+            ("menu.create_word", "erstelle ein word dokument am desktop"),
+            ("menu.create_ppt", "erstelle eine powerpoint am desktop"),
+            ("menu.screenshot", "screenshot"),
+            ("menu.tidy_desktop", "desktop aufraeumen"),
+            ("menu.datetime", "wie spaet ist es"),
+            ("menu.systeminfo", "systeminfo"),
+            ("menu.vol_up", "lauter"),
+            ("menu.vol_down", "leiser"),
+            ("menu.mute", "stumm"),
+            ("menu.play_pause", "pause"),
         ):
-            tools_menu.addAction(text).triggered.connect(lambda _=False, c=c: cmd(c))
+            tools_menu.addAction(tr(key)).triggered.connect(lambda _=False, c=c: cmd(c))
 
         # Ordner
-        folders_menu = menu.addMenu("📂  Ordner öffnen")
+        folders_menu = menu.addMenu(tr("menu.folders"))
         style_menu(folders_menu)
-        folders_menu.addAction("📥  Downloads").triggered.connect(lambda: self.command_requested.emit("oeffne downloads"))
-        folders_menu.addAction("📄  Dokumente").triggered.connect(lambda: self.command_requested.emit("oeffne dokumente"))
-        folders_menu.addAction("🖥️  Desktop").triggered.connect(lambda: self.command_requested.emit("oeffne desktop"))
-        folders_menu.addAction("🗑️  Papierkorb").triggered.connect(lambda: self.command_requested.emit("oeffne papierkorb"))
+        folders_menu.addAction(tr("menu.folder_downloads")).triggered.connect(lambda: self.command_requested.emit("oeffne downloads"))
+        folders_menu.addAction(tr("menu.folder_docs")).triggered.connect(lambda: self.command_requested.emit("oeffne dokumente"))
+        folders_menu.addAction(tr("menu.folder_desktop")).triggered.connect(lambda: self.command_requested.emit("oeffne desktop"))
+        folders_menu.addAction(tr("menu.folder_trash")).triggered.connect(lambda: self.command_requested.emit("oeffne papierkorb"))
 
         menu.addSeparator()
-        menu.addAction("🏠  Zur Taskleiste zurücksetzen").triggered.connect(self.reset_to_taskbar)
-        menu.addAction("⚙️  Einstellungen").triggered.connect(self.settings_requested.emit)
+        menu.addAction(tr("menu.reset_taskbar")).triggered.connect(self.reset_to_taskbar)
+        menu.addAction(tr("menu.settings")).triggered.connect(self.settings_requested.emit)
         menu.addSeparator()
-        menu.addAction("👋  Beenden").triggered.connect(self.quit_requested.emit)
+        menu.addAction(tr("menu.quit")).triggered.connect(self.quit_requested.emit)
         return menu
+

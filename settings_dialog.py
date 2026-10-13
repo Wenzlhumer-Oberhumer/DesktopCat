@@ -143,6 +143,13 @@ class SettingsDialog(QDialog):
         self.char_combo.setEnabled(bool(CHARACTERS))
         form2.addRow("Charakter", self.char_combo)
 
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("Deutsch", "de")
+        self.lang_combo.addItem("English", "en")
+        cur_lang = str(cfg.get("language", "de")).lower()
+        self.lang_combo.setCurrentIndex(1 if cur_lang.startswith("en") else 0)
+        form2.addRow("Sprache / Language", self.lang_combo)
+
         self.user_name_edit = QLineEdit(str(cfg.get("pet.user_name", "Boss")))
         self.user_name_edit.setPlaceholderText("Boss (Standard)")
         form2.addRow("Dein Name / Anrede", self.user_name_edit)
@@ -330,6 +337,10 @@ class SettingsDialog(QDialog):
         char = self.char_combo.currentData()
         if char:
             c.set("pet.character", str(char))
+        cur_lang = self.lang_combo.currentData() or "de"
+        c.set("language", cur_lang)
+        import i18n
+        i18n.set_language(cur_lang)
         c.set("pet.user_name", self.user_name_edit.text().strip() or "Boss")
         c.set("wellbeing.breaks", self.breaks.isChecked())
         c.set("wellbeing.water", self.water.isChecked())

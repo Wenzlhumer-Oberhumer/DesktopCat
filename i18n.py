@@ -1,0 +1,866 @@
+"""Internationalisierung (i18n) fuer Desktop Cat (Phase 7).
+
+Unterstuetzt Deutsch ('de') und Englisch ('en').
+"""
+from __future__ import annotations
+
+from typing import Any
+
+_LANG = "de"
+
+STRINGS: dict[str, dict[str, str]] = {
+    # -- Kontext- & Tray-Menue ---------------------------------------------------------
+    "menu.enter_key": {
+        "de": "🔑  Gemini-Key eintragen",
+        "en": "🔑  Enter Gemini Key",
+    },
+    "menu.input": {
+        "de": "💬  Befehl eingeben",
+        "en": "💬  Enter Command",
+    },
+    "menu.friendship": {
+        "de": "💖  Freundschaft",
+        "en": "💖  Friendship",
+    },
+    "menu.focus_stats": {
+        "de": "📊  Fokus-Statistik",
+        "en": "📊  Focus Stats",
+    },
+    "menu.flashcards": {
+        "de": "📚  Lernkarten",
+        "en": "📚  Flashcards",
+    },
+    "menu.photo": {
+        "de": "📸  Foto mit {name}",
+        "en": "📸  Photo with {name}",
+    },
+    "menu.new_note": {
+        "de": "📝  Neue Haftnotiz",
+        "en": "📝  New Sticky Note",
+    },
+    "menu.error_doctor": {
+        "de": "🩺  Was heißt dieser Fehler?",
+        "en": "🩺  What does this error mean?",
+    },
+    "menu.chats": {
+        "de": "📚  Meine Chats",
+        "en": "📚  My Chats",
+    },
+    "menu.data": {
+        "de": "🔒  Meine Daten",
+        "en": "🔒  My Data",
+    },
+    "menu.choose_char": {
+        "de": "🎭  Charakter wählen",
+        "en": "🎭  Choose Character",
+    },
+    "menu.tricks": {
+        "de": "✨  Tricks & Spaß",
+        "en": "✨  Tricks & Fun",
+    },
+    "menu.dance": {
+        "de": "💃  {name}, tanz für mich!",
+        "en": "💃  {name}, dance for me!",
+    },
+    "menu.cool": {
+        "de": "🕶️  Coole Pose (Sonnenbrille)",
+        "en": "🕶️  Cool Pose (Sunglasses)",
+    },
+    "menu.push": {
+        "de": "💨  Hau-Ruck! Schiebe-Animation",
+        "en": "💨  Heave-ho! Push animation",
+    },
+    "menu.chase": {
+        "de": "🐭  Fang die Maus! (15 s)",
+        "en": "🐭  Catch the mouse! (15 s)",
+    },
+    "menu.treat": {
+        "de": "🍖  Leckerli geben",
+        "en": "🍖  Give a treat",
+    },
+    "menu.sleep": {
+        "de": "💤  Schlafen legen",
+        "en": "💤  Go to sleep",
+    },
+    "menu.wake": {
+        "de": "🐾  Aufwecken",
+        "en": "🐾  Wake up",
+    },
+    "menu.quick_tools": {
+        "de": "⚡  Schnell-Tools",
+        "en": "⚡  Quick Tools",
+    },
+    "menu.push_windows": {
+        "de": "💨  Fenster wegschieben...",
+        "en": "💨  Push windows aside...",
+    },
+    "menu.no_windows": {
+        "de": "Keine Fenster gefunden",
+        "en": "No windows found",
+    },
+    "menu.pomodoro_25": {
+        "de": "⏱️  25 Min. Pomodoro-Fokus",
+        "en": "⏱️  25 min. Pomodoro Focus",
+    },
+    "menu.pause_5": {
+        "de": "⏱️  5 Min. Kurzpause",
+        "en": "⏱️  5 min. Short Break",
+    },
+    "menu.live_weather": {
+        "de": "☀️  Live-Wetterbericht",
+        "en": "☀️  Live Weather Report",
+    },
+    "menu.clean_pc": {
+        "de": "🧹  Papierkorb & Temp leeren",
+        "en": "🧹  Clean Recycle Bin & Temp",
+    },
+    "menu.network_ip": {
+        "de": "🌐  Netzwerk & IP-Info",
+        "en": "🌐  Network & IP Info",
+    },
+    "menu.watch_screen": {
+        "de": "👁️  Bildschirm beobachten (Vision)",
+        "en": "👁️  Watch Screen (Vision)",
+    },
+    "menu.create_word": {
+        "de": "📄  Word am Desktop erstellen",
+        "en": "📄  Create Word Doc on Desktop",
+    },
+    "menu.create_ppt": {
+        "de": "📊  PowerPoint am Desktop erstellen",
+        "en": "📊  Create PowerPoint on Desktop",
+    },
+    "menu.screenshot": {
+        "de": "📸  Desktop Screenshot",
+        "en": "📸  Desktop Screenshot",
+    },
+    "menu.tidy_desktop": {
+        "de": "🧹  Desktop aufräumen",
+        "en": "🧹  Clean up Desktop",
+    },
+    "menu.datetime": {
+        "de": "🕒  Datum & Uhrzeit",
+        "en": "🕒  Date & Time",
+    },
+    "menu.systeminfo": {
+        "de": "💻  System-Status",
+        "en": "💻  System Status",
+    },
+    "menu.vol_up": {
+        "de": "🔊  Lauter (+10%)",
+        "en": "🔊  Volume Up (+10%)",
+    },
+    "menu.vol_down": {
+        "de": "🔉  Leiser (-10%)",
+        "en": "🔉  Volume Down (-10%)",
+    },
+    "menu.mute": {
+        "de": "🔇  Stumm / Mute",
+        "en": "🔇  Mute",
+    },
+    "menu.play_pause": {
+        "de": "▶️  Musik Play/Pause",
+        "en": "▶️  Music Play/Pause",
+    },
+    "menu.folders": {
+        "de": "📂  Ordner öffnen",
+        "en": "📂  Open Folders",
+    },
+    "menu.folder_downloads": {
+        "de": "📥  Downloads",
+        "en": "📥  Downloads",
+    },
+    "menu.folder_docs": {
+        "de": "📄  Dokumente",
+        "en": "📄  Documents",
+    },
+    "menu.folder_desktop": {
+        "de": "🖥️  Desktop",
+        "en": "🖥️  Desktop",
+    },
+    "menu.folder_trash": {
+        "de": "🗑️  Papierkorb",
+        "en": "🗑️  Recycle Bin",
+    },
+    "menu.reset_taskbar": {
+        "de": "🏠  Zur Taskleiste zurücksetzen",
+        "en": "🏠  Reset to Taskbar",
+    },
+    "menu.settings": {
+        "de": "⚙️  Einstellungen",
+        "en": "⚙️  Settings",
+    },
+    "menu.about": {
+        "de": "ℹ️  Über Desktop Cat (v{version})",
+        "en": "ℹ️  About Desktop Cat (v{version})",
+    },
+    "menu.quit": {
+        "de": "👋  Beenden",
+        "en": "👋  Quit",
+    },
+    "menu.check_updates": {
+        "de": "🔄 Nach Updates suchen",
+        "en": "🔄 Check for Updates",
+    },
+    "menu.install_update": {
+        "de": "✨ Update auf v{version} installieren",
+        "en": "✨ Install update to v{version}",
+    },
+
+    # -- Einstellungen -----------------------------------------------------------------
+    "settings.title": {
+        "de": "Einstellungen – Desktop Cat",
+        "en": "Settings – Desktop Cat",
+    },
+    "settings.language": {
+        "de": "Sprache:",
+        "en": "Language:",
+    },
+    "settings.general": {
+        "de": "Allgemein",
+        "en": "General",
+    },
+    "settings.ai": {
+        "de": "KI & Gehirn",
+        "en": "AI & Brain",
+    },
+    "settings.wellbeing": {
+        "de": "Wohlbefinden",
+        "en": "Wellbeing",
+    },
+    "settings.privacy": {
+        "de": "Datenschutz",
+        "en": "Privacy",
+    },
+    "settings.autostart": {
+        "de": "Mit Windows starten (Autostart)",
+        "en": "Start with Windows (Autostart)",
+    },
+    "settings.wander": {
+        "de": "Autonomes Wandern am Bildschirm",
+        "en": "Autonomous wandering on screen",
+    },
+    "settings.pet_name": {
+        "de": "Name der Figur:",
+        "en": "Pet Name:",
+    },
+    "settings.user_name": {
+        "de": "Wie soll die Figur dich nennen?",
+        "en": "What should your pet call you?",
+    },
+    "settings.save": {
+        "de": "Speichern",
+        "en": "Save",
+    },
+    "settings.cancel": {
+        "de": "Abbrechen",
+        "en": "Cancel",
+    },
+
+    # -- Standard-Sprechblasen-Meldungen ------------------------------------------------
+    "bubble.working": {
+        "de": "Ich bin dran... 🐾",
+        "en": "Working on it... 🐾",
+    },
+    "bubble.busy_wait": {
+        "de": "Moment, ich bin noch dran... 🛠️",
+        "en": "One moment, still working... 🛠️",
+    },
+    "bubble.done": {
+        "de": "Fertig! ✨  ",
+        "en": "Done! ✨  ",
+    },
+    "bubble.timer_expired": {
+        "de": "⏰ {sound}, {user}! Dein Timer für „{label}“ ({time_hint}) ist abgelaufen! {emoji}",
+        "en": "⏰ {sound}, {user}! Your timer for \"{label}\" ({time_hint}) is up! {emoji}",
+    },
+    "bubble.wake_stretch": {
+        "de": "Mrrrp… ich bin wach! 😽",
+        "en": "Mrrrp… I'm awake! 😽",
+    },
+    "bubble.treat_thanks": {
+        "de": "{sound} Danke, {user}! 🍖 Schon {count} Leckerli bekommen! 💖",
+        "en": "{sound} Thanks, {user}! 🍖 Received {count} treats so far! 💖",
+    },
+    "bubble.battery_warn": {
+        "de": "Achtung, Akku fast leer ({percent}%)! 🔌 Steck mich bitte an!",
+        "en": "Warning, battery low ({percent}%)! 🔌 Please plug me in!",
+    },
+    "bubble.water_reminder": {
+        "de": "Kleiner Schluck Wasser gefällig, {user}? 💧",
+        "en": "Time for a sip of water, {user}? 💧",
+    },
+    "bubble.break_reminder": {
+        "de": "Zeit für eine kurze Bildschirmpause, {user}! 🐾 Kurz strecken?",
+        "en": "Time for a quick screen break, {user}! 🐾 Stretch a bit?",
+    },
+    "bubble.photo_warning": {
+        "de": "Achtung, der ganze Bildschirm ist auf dem Foto mit {name} 📸",
+        "en": "Notice: the entire screen is on the photo with {name} 📸",
+    },
+    "bubble.photo_saved": {
+        "de": "Klick! 📸 Wunderschön geworden! ✨",
+        "en": "Click! 📸 Turned out wonderful! ✨",
+    },
+    "bubble.note_stuck": {
+        "de": "Haftnotiz angeklebt! 📌",
+        "en": "Sticky note attached! 📌",
+    },
+    "bubble.note_done": {
+        "de": "Erledigt! Super gemacht! ✨",
+        "en": "Done! Great job! ✨",
+    },
+
+    # -- Freundschaft & Belohnungen ----------------------------------------------------
+    "friendship.title": {
+        "de": "💖 Freundschaft mit {name}",
+        "en": "💖 Friendship with {name}",
+    },
+    "friendship.level": {
+        "de": "💖 Level {level}: {title}",
+        "en": "💖 Level {level}: {title}",
+    },
+    "friendship.progress_title": {
+        "de": "Fortschritt zum nächsten Level",
+        "en": "Progress to next level",
+    },
+    "friendship.points_info": {
+        "de": "{pts} / {next_pts} Punkte ({pct}%) • Noch {remain} Punkte bis Level {next_lvl}",
+        "en": "{pts} / {next_pts} points ({pct}%) • {remain} points until Level {next_lvl}",
+    },
+    "friendship.max_level": {
+        "de": "{pts} Punkte • Maximales Freundschafts-Level erreicht! 🌟",
+        "en": "{pts} points • Maximum friendship level reached! 🌟",
+    },
+    "friendship.rewards_box": {
+        "de": "Freigeschaltete Belohnungen & Accessoires",
+        "en": "Unlocked Rewards & Accessories",
+    },
+    "friendship.equip": {
+        "de": "Anziehen",
+        "en": "Equip",
+    },
+    "friendship.unequip": {
+        "de": "✔ Ablegen",
+        "en": "✔ Unequip",
+    },
+    "friendship.unlock_at": {
+        "de": "ab {pts} Pkt.",
+        "en": "from {pts} pts",
+    },
+    "friendship.close": {
+        "de": "Schließen",
+        "en": "Close",
+    },
+    "friendship.levelup_msg": {
+        "de": "Level {level}! Wir sind jetzt {title}, {user} 💖{reward}",
+        "en": "Level {level}! We are now {title}, {user} 💖{reward}",
+    },
+    "friendship.reward_unlocked": {
+        "de": " Belohnung freigeschaltet: {reward}! 🎁",
+        "en": " Reward unlocked: {reward}! 🎁",
+    },
+    "friendship.header": {
+        "de": "<b>{name}</b> & Du",
+        "en": "<b>{name}</b> & You",
+    },
+    "friendship.level_header": {
+        "de": "💖 Level {lvl}: <span style='color: #EC4899;'>{title}</span>",
+        "en": "💖 Level {lvl}: <span style='color: #EC4899;'>{title}</span>",
+    },
+
+    # -- Fokus & Pomodoro --------------------------------------------------------------
+    "focus.title": {
+        "de": "📊 Fokus-Statistik & Pomodoro",
+        "en": "📊 Focus Stats & Pomodoro",
+    },
+    "focus.today_title": {
+        "de": "⏱️ <b>Heute fokussiert</b>",
+        "en": "⏱️ <b>Focused Today</b>",
+    },
+    "focus.minutes_label": {
+        "de": "{mins} Min.",
+        "en": "{mins} min.",
+    },
+    "focus.sessions_label": {
+        "de": "{count} Pomodoro{suffix}",
+        "en": "{count} Pomodoro{suffix}",
+    },
+    "focus.streak_title": {
+        "de": "🔥 <b>Fokus-Serie</b>",
+        "en": "🔥 <b>Focus Streak</b>",
+    },
+    "focus.streak_days": {
+        "de": "{days} {unit}",
+        "en": "{days} {unit}",
+    },
+    "focus.day_singular": {
+        "de": "Tag",
+        "en": "day",
+    },
+    "focus.days_plural": {
+        "de": "Tage",
+        "en": "days",
+    },
+    "focus.streak_sub_active": {
+        "de": "In Folge am Ball! 💪",
+        "en": "Days in a row! 💪",
+    },
+    "focus.streak_sub_zero": {
+        "de": "Starte heute deine Serie!",
+        "en": "Start your streak today!",
+    },
+    "focus.weekly_box": {
+        "de": "Vergangene 7 Tage",
+        "en": "Past 7 Days",
+    },
+    "focus.quote_high": {
+        "de": "„Wahnsinn, du bist heute eine echte Fokus-Maschine, Boss! Weiter so!“ {emoji}",
+        "en": "\"Awesome, you're a real focus machine today, boss! Keep it up!\" {emoji}",
+    },
+    "focus.quote_mid": {
+        "de": "„Gute Arbeit! Jeder Pomodoro bringt dich deinem Ziel näher.“ {emoji}",
+        "en": "\"Great work! Every Pomodoro brings you closer to your goal.\" {emoji}",
+    },
+    "focus.quote_zero": {
+        "de": "„Bereit für etwas Produktivität? Sag mir einfach: 'Pomodoro starten'! ⏱️“ {emoji}",
+        "en": "\"Ready for some productivity? Just say: 'Start Pomodoro'! ⏱️\" {emoji}",
+    },
+    "focus.close": {
+        "de": "Fertig",
+        "en": "Done",
+    },
+
+    # -- Lernkarten --------------------------------------------------------------------
+    "cards.title": {
+        "de": "📚 Lernkarten & Vokabel-Trainer",
+        "en": "📚 Flashcards & Vocabulary Trainer",
+    },
+    "cards.deck_label": {
+        "de": "<b>Aktuelles Deck:</b>",
+        "en": "<b>Current Deck:</b>",
+    },
+    "cards.new_deck": {
+        "de": "➕ Neues Deck",
+        "en": "➕ New Deck",
+    },
+    "cards.header_front": {
+        "de": "Vorderseite (Frage)",
+        "en": "Front (Question)",
+    },
+    "cards.header_back": {
+        "de": "Rückseite (Antwort)",
+        "en": "Back (Answer)",
+    },
+    "cards.header_box": {
+        "de": "Box",
+        "en": "Box",
+    },
+    "cards.box_label": {
+        "de": "Box {box}",
+        "en": "Box {box}",
+    },
+    "cards.ph_front": {
+        "de": "Vorderseite / Wort",
+        "en": "Front / Word",
+    },
+    "cards.ph_back": {
+        "de": "Rückseite / Übersetzung",
+        "en": "Back / Translation",
+    },
+    "cards.add": {
+        "de": "Hinzufügen",
+        "en": "Add",
+    },
+    "cards.import": {
+        "de": "📥 Text-Import",
+        "en": "📥 Text Import",
+    },
+    "cards.import_tooltip": {
+        "de": "Format: Zeilenweise 'Wort = Übersetzung'",
+        "en": "Format: Line-by-line 'Word = Translation'",
+    },
+    "cards.ai_cards": {
+        "de": "✨ KI-Karten (Gemini)",
+        "en": "✨ AI Flashcards (Gemini)",
+    },
+    "cards.delete": {
+        "de": "🗑️ Karte löschen",
+        "en": "🗑️ Delete Card",
+    },
+    "cards.start_quiz": {
+        "de": "▶ Quiz starten",
+        "en": "▶ Start Quiz",
+    },
+    "cards.new_deck_title": {
+        "de": "Neues Deck",
+        "en": "New Deck",
+    },
+    "cards.new_deck_prompt": {
+        "de": "Name des neuen Decks:",
+        "en": "Name of the new deck:",
+    },
+    "cards.import_dlg_title": {
+        "de": "Lernkarten aus Text importieren",
+        "en": "Import Flashcards from Text",
+    },
+    "cards.import_dlg_desc": {
+        "de": "Füge hier deine Karten ein (eine pro Zeile, z. B. <i>Hund = dog</i>):",
+        "en": "Paste your cards here (one per line, e.g. <i>dog = Hund</i>):",
+    },
+    "cards.import_ph": {
+        "de": "Guten Tag = Hello\nKatze = Cat\nApfel = Apple",
+        "en": "Hello = Guten Tag\nCat = Katze\nApple = Apfel",
+    },
+    "cards.btn_import": {
+        "de": "Importieren",
+        "en": "Import",
+    },
+    "cards.import_err_title": {
+        "de": "Import",
+        "en": "Import",
+    },
+    "cards.import_err_msg": {
+        "de": "Keine gültigen Zeilen im Format 'Vorderseite = Rückseite' gefunden.",
+        "en": "No valid lines in format 'Front = Back' found.",
+    },
+    "cards.import_succ_title": {
+        "de": "Import erfolgreich",
+        "en": "Import Successful",
+    },
+    "cards.import_succ_msg": {
+        "de": "{count} Karten zum Deck '{deck}' hinzugefügt! 🎉",
+        "en": "Added {count} cards to deck '{deck}'! 🎉",
+    },
+    "cards.ai_nokey_title": {
+        "de": "Gemini-Key fehlt",
+        "en": "Gemini Key Missing",
+    },
+    "cards.ai_nokey_msg": {
+        "de": "Für KI-generierte Lernkarten wird ein kostenloser Gemini-Key benötigt.\nKlicke mit der rechten Maustaste auf {name} -> 'Gemini-Key eintragen'.",
+        "en": "A free Gemini key is required for AI flashcards.\nRight-click on {name} -> 'Enter Gemini Key'.",
+    },
+    "cards.ai_topic_title": {
+        "de": "KI-Lernkarten generieren",
+        "en": "Generate AI Flashcards",
+    },
+    "cards.ai_topic_prompt": {
+        "de": "Zu welchem Thema möchtest du 10 Lernkarten?\n(z. B. 'Englisch Vokabeln Restaurant' oder 'Photosynthese'):",
+        "en": "What topic would you like 10 flashcards for?\n(e.g. 'Restaurant Spanish' or 'Photosynthesis'):",
+    },
+    "cards.ai_err_title": {
+        "de": "KI-Fehler",
+        "en": "AI Error",
+    },
+    "cards.ai_err_msg": {
+        "de": "Konnte keine Karten erstellen:\n{err}",
+        "en": "Could not generate cards:\n{err}",
+    },
+    "cards.ai_succ_title": {
+        "de": "Lernkarten erstellt",
+        "en": "Flashcards Created",
+    },
+    "cards.ai_succ_msg": {
+        "de": "{count} Lernkarten zum Thema '{topic}' hinzugefügt! ✨",
+        "en": "Added {count} flashcards on topic '{topic}'! ✨",
+    },
+    "cards.ai_parse_err": {
+        "de": "Konnte keine gültigen Karten aus der KI-Antwort parsen.",
+        "en": "Could not parse valid cards from AI response.",
+    },
+    "cards.no_cards": {
+        "de": "Du hast noch keine Lernkarten! 📚 Öffne per Rechtsklick '📚 Lernkarten'!",
+        "en": "You don't have any flashcards yet! 📚 Right-click and choose '📚 Flashcards'!",
+    },
+    "cards.quiz_start_msg": {
+        "de": "Quiz-Runde startet! 📚 ({count} Karten)",
+        "en": "Quiz starting! 📚 ({count} cards)",
+    },
+    "cards.quiz_question": {
+        "de": "📚 Frage {cur}/{total}:\n„{front}“\n(Tippe deine Antwort)",
+        "en": "📚 Question {cur}/{total}:\n\"{front}\"\n(Type your answer)",
+    },
+    "cards.quiz_correct": {
+        "de": "Richtig! 🌟\n„{expected}“",
+        "en": "Correct! 🌟\n\"{expected}\"",
+    },
+    "cards.quiz_close": {
+        "de": "Fast perfekt! 🎉\nRichtige Antwort: „{expected}“",
+        "en": "Almost perfect! 🎉\nCorrect answer: \"{expected}\"",
+    },
+    "cards.quiz_wrong": {
+        "de": "Leider nicht ganz! 💡\nDie Lösung war: „{expected}“",
+        "en": "Not quite! 💡\nThe answer was: \"{expected}\"",
+    },
+    "cards.quiz_finished": {
+        "de": "Quiz abgeschlossen! 🌟 {correct} von {total} richtig! (+3 Freundschaftspunkte 💖)",
+        "en": "Quiz finished! 🌟 {correct} of {total} correct! (+3 friendship points 💖)",
+    },
+
+    # -- Haftnotizen -------------------------------------------------------------------
+    "note.window_title": {
+        "de": "Haftnotiz 📌",
+        "en": "Sticky Note 📌",
+    },
+    "note.placeholder": {
+        "de": "Notiz schreiben...",
+        "en": "Write note...",
+    },
+    "note.color_tooltip": {
+        "de": "Farbe wechseln (Gelb / Rosa / Mint)",
+        "en": "Cycle color (Yellow / Pink / Mint)",
+    },
+    "note.done_tooltip": {
+        "de": "Erledigt!",
+        "en": "Done!",
+    },
+    "note.delete_tooltip": {
+        "de": "Löschen",
+        "en": "Delete",
+    },
+
+    # -- IT-Support & Guide ------------------------------------------------------------
+    "guide.step_title": {
+        "de": "Schritt {step}/{total}",
+        "en": "Step {step}/{total}",
+    },
+    "guide.click_here": {
+        "de": "Hier klicken",
+        "en": "Click here",
+    },
+    "guide.done": {
+        "de": "Fertig! Du hast alle Schritte geschafft 🎉",
+        "en": "Done! You completed all steps 🎉",
+    },
+    "guide.abort": {
+        "de": "Guide abgebrochen. Sag Bescheid, wenn du wieder Hilfe brauchst 🐾",
+        "en": "Guide aborted. Let me know if you need help again 🐾",
+    },
+    "guide.btn_next": {
+        "de": "Weiter ▶",
+        "en": "Next ▶",
+    },
+    "guide.btn_abort": {
+        "de": "Abbrechen ✖",
+        "en": "Cancel ✖",
+    },
+    "guide.btn_repeat": {
+        "de": "Nochmal zeigen 🔁",
+        "en": "Show again 🔁",
+    },
+    "guide.btn_done": {
+        "de": "Fertig ✖",
+        "en": "Done ✖",
+    },
+
+    # -- Error Doctor ------------------------------------------------------------------
+    "doctor.btn_show": {
+        "de": "Zeig's mir 🕶️",
+        "en": "Show me 🕶️",
+    },
+    "doctor.btn_close": {
+        "de": "Schließen ✖",
+        "en": "Close ✖",
+    },
+
+    # -- Allgemeine UI-Elemente --------------------------------------------------------
+    "common.done": {
+        "de": "Fertig",
+        "en": "Done",
+    },
+    "common.close": {
+        "de": "Schließen",
+        "en": "Close",
+    },
+    "common.cancel": {
+        "de": "Abbrechen",
+        "en": "Cancel",
+    },
+
+    # -- Meine Daten & Datenschutz -----------------------------------------------------
+    "data.title": {
+        "de": "🔒 Meine Daten – Desktop Cat",
+        "en": "🔒 My Data – Desktop Cat",
+    },
+    "data.section_facts": {
+        "de": "Was {name} über dich weiß",
+        "en": "What {name} knows about you",
+    },
+    "data.no_facts": {
+        "de": "{name} hat sich noch nichts gemerkt. Erzähl ihr einfach von dir!",
+        "en": "{name} hasn't remembered anything yet. Just tell them about yourself!",
+    },
+    "data.section_privacy": {
+        "de": "Datenschutz-Einstellungen",
+        "en": "Privacy Settings",
+    },
+    "data.chk_save_chats": {
+        "de": "Chats speichern",
+        "en": "Save chats",
+    },
+    "data.chk_remember": {
+        "de": "{name} darf sich Dinge merken",
+        "en": "{name} may remember facts",
+    },
+    "data.chk_use_history": {
+        "de": "Frühere Chats nutzen, wenn sie zur Frage passen",
+        "en": "Use past chats when relevant",
+    },
+    "data.privacy_long": {
+        "de": "🔒 <b>Deine Daten bleiben auf diesem PC</b> (<code>%APPDATA%\\Mochi\\mochi.db</code>). Die Entwickler von Desktop Cat bekommen nichts.<br><br>🤖 Wenn du {name} etwas fragst, schickt sie deine Frage, deine gemerkten Fakten und höchstens 3 passende Ausschnitte aus früheren Chats an Google Gemini – nur damit die Antwort besser passt.<br><br>⚠️ Beim <b>kostenlosen</b> Gemini-Zugang darf Google gesendete Inhalte laut seinen Nutzungsbedingungen zur Verbesserung seiner Dienste verwenden und von Menschen prüfen lassen. Schreib deshalb keine Passwörter oder sehr privaten Dinge. Ohne Gemini-Key bleibt alles komplett offline.",
+        "en": "🔒 <b>Your data stays on this PC</b> (<code>%APPDATA%\\Mochi\\mochi.db</code>). The developers of Desktop Cat receive nothing.<br><br>🤖 When you ask {name} something, it sends your question, remembered facts, and up to 3 relevant snippets from past chats to Google Gemini – solely to improve the answer.<br><br>⚠️ With <b>free</b> Gemini access, Google's Terms of Service allow reviewing and training on submitted content. Therefore, never enter passwords or sensitive personal data. Without a Gemini key, everything remains completely offline.",
+    },
+    "data.btn_del_chats": {
+        "de": "🗑️  Alle Chats löschen",
+        "en": "🗑️  Delete All Chats",
+    },
+    "data.btn_wipe_all": {
+        "de": "🧹  Alles vergessen",
+        "en": "🧹  Forget Everything",
+    },
+    "data.btn_export": {
+        "de": "📤  Alles exportieren",
+        "en": "📤  Export Everything",
+    },
+    "data.privacy_notice": {
+        "de": "Kleiner Hinweis: Ich speichere unsere Chats und Dinge, die du mir erzählst, nur hier auf deinem PC 🔒 Rechtsklick → ‚Meine Daten‘ zeigt alles und löscht es mit einem Klick.",
+        "en": "Privacy notice: I only save our chats and facts locally on your PC 🔒 Right-click → 'My Data' shows everything and lets you wipe it with one click.",
+    },
+    "data.wipe_all": {
+        "de": "Alles vergessen & löschen",
+        "en": "Forget & Wipe Everything",
+    },
+    "data.wipe_confirm": {
+        "de": "Möchtest du wirklich alle Chats, Notizen, Fakten und Statistiken restlos löschen?",
+        "en": "Do you really want to permanently delete all chats, notes, facts, and statistics?",
+    },
+    "data.wiped_success": {
+        "de": "Ich habe alles vergessen! Eine saubere Weste für uns beide ✨",
+        "en": "I've forgotten everything! A fresh start for both of us ✨",
+    },
+
+    # -- Meine Chats -------------------------------------------------------------------
+    "chats.title": {
+        "de": "📚 Chat-Verlauf – Desktop Cat",
+        "en": "📚 Chat History – Desktop Cat",
+    },
+    "chats.title_with_name": {
+        "de": "📚 Meine Chats mit {name}",
+        "en": "📚 My Chats with {name}",
+    },
+    "chats.search_placeholder": {
+        "de": "In Chats suchen...",
+        "en": "Search in chats...",
+    },
+    "chats.empty": {
+        "de": "{emoji}\n\nNoch keine Chats – sag {name} einfach Hallo! 👋",
+        "en": "{emoji}\n\nNo chats yet – just say hello to {name}! 👋",
+    },
+    "chats.delete_conv": {
+        "de": "🗑️  Gespräch löschen",
+        "en": "🗑️  Delete conversation",
+    },
+    "chats.confirm_delete_conv": {
+        "de": "Möchtest du dieses Gespräch wirklich löschen?",
+        "en": "Do you really want to delete this conversation?",
+    },
+    "chats.confirm_delete_all": {
+        "de": "Möchtest du wirklich alle Chats löschen? Das kann nicht rückgängig gemacht werden.",
+        "en": "Do you really want to delete all chats? This cannot be undone.",
+    },
+    "chats.export": {
+        "de": "Exportieren (.txt)",
+        "en": "Export (.txt)",
+    },
+    "chats.resume": {
+        "de": "Unterhaltung fortsetzen",
+        "en": "Resume conversation",
+    },
+
+    # -- Gemini API --------------------------------------------------------------------
+    "gemini.no_internet": {
+        "de": "Keine Internetverbindung zu Gemini 📡",
+        "en": "No internet connection to Gemini 📡",
+    },
+    "gemini.invalid_key": {
+        "de": "Mein API-Key ist ungültig – bitte in den Einstellungen neu eintragen 🔑",
+        "en": "My API key is invalid – please re-enter it in settings 🔑",
+    },
+    "gemini.quota_exceeded": {
+        "de": "Mein Gratis-Kontingent ist gerade aufgebraucht – versuch es gleich nochmal 😿",
+        "en": "My free quota is currently exhausted – please try again shortly 😿",
+    },
+    "gemini.overloaded": {
+        "de": "Gemini ist gerade überlastet – versuch es gleich nochmal 😿",
+        "en": "Gemini is currently overloaded – please try again shortly 😿",
+    },
+    "gemini.enter_key_first": {
+        "de": "Bitte zuerst in den Einstellungen deinen Gemini-Key eintragen 🔑",
+        "en": "Please enter your Gemini key in settings first 🔑",
+    },
+    "gemini.unreachable": {
+        "de": "Gemini ist gerade nicht erreichbar 😿",
+        "en": "Gemini is currently unreachable 😿",
+    },
+    "gemini.timeout": {
+        "de": "Die KI antwortet nicht (Zeitüberschreitung) ⌛",
+        "en": "The AI is not responding (timeout) ⌛",
+    },
+    "gemini.blocked": {
+        "de": "Die KI wollte darauf nicht antworten",
+        "en": "The AI chose not to answer this",
+    },
+    "gemini.error": {
+        "de": "Gemini-Fehler {code}: {msg}",
+        "en": "Gemini error {code}: {msg}",
+    },
+
+    # -- Tools -------------------------------------------------------------------------
+    "tools.current_time": {
+        "de": "Es ist {time} Uhr am {date}.",
+        "en": "It is {time} on {date}.",
+    },
+    "tools.timer_started": {
+        "de": "Timer für {duration} Sekunden gestellt.",
+        "en": "Timer set for {duration} seconds.",
+    },
+    "tools.recycle_bin_cleaned": {
+        "de": "Papierkorb und temporäre Dateien wurden bereinigt.",
+        "en": "Recycle bin and temporary files have been cleaned.",
+    },
+}
+
+
+
+def set_language(language: str) -> None:
+    """Setzt die aktive Sprache ('de' oder 'en')."""
+    global _LANG
+    norm = (language or "").strip().lower()
+    _LANG = "en" if norm.startswith("en") else "de"
+
+
+def lang() -> str:
+    """Gibt den aktuellen Sprachcode ('de' oder 'en') zurueck."""
+    return _LANG
+
+
+def tr(key: str, **kwargs: Any) -> str:
+    """Uebersetzt einen Schluessel.
+    
+    Fallback-Reihenfolge:
+    1. Gewaehlte Sprache
+    2. Deutsch ('de')
+    3. Der Schluessel selbst
+    """
+    entry = STRINGS.get(key)
+    if entry is not None:
+        text = entry.get(_LANG) or entry.get("de") or key
+    else:
+        text = key
+
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+    return text

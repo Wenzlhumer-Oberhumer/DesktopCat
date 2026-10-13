@@ -12,6 +12,8 @@ from PyQt6.QtGui import (
     QColor, QFont, QFontMetrics, QImage, QPainter, QPen,
 )
 
+import i18n
+
 LEVEL_THRESHOLDS = [0, 25, 75, 150, 300, 500, 800, 1200]
 LEVEL_NAMES = {
     1: "Bekannte",
@@ -22,6 +24,16 @@ LEVEL_NAMES = {
     6: "Seelenverwandte",
     7: "Unzertrennlich",
     8: "Ewige Legenden",
+}
+LEVEL_NAMES_EN = {
+    1: "Acquaintances",
+    2: "Buddies",
+    3: "Friends",
+    4: "Good Friends",
+    5: "Best Friends",
+    6: "Soulmates",
+    7: "Inseparable",
+    8: "Eternal Legends",
 }
 
 LEVEL_REWARDS = {
@@ -34,6 +46,28 @@ LEVEL_REWARDS = {
     7: ("Krone", "crown"),
     8: ("Goldener Glanz", "gold_sparkle"),
 }
+LEVEL_REWARDS_EN = {
+    1: ("Default", None),
+    2: ("Bow", "bow"),
+    3: ("Bandana", "bandana"),
+    4: ("Scarf", "scarf"),
+    5: ("Party Hat", "party_hat"),
+    6: ("Sunglasses Pose", "sunglasses"),
+    7: ("Crown", "crown"),
+    8: ("Golden Sparkle", "gold_sparkle"),
+}
+
+
+def get_level_name(lvl: int) -> str:
+    if i18n.lang() == "en":
+        return LEVEL_NAMES_EN.get(lvl, "Friends")
+    return LEVEL_NAMES.get(lvl, "Freunde")
+
+
+def get_level_reward(lvl: int) -> tuple[str, Optional[str]]:
+    if i18n.lang() == "en":
+        return LEVEL_REWARDS_EN.get(lvl, ("", None))
+    return LEVEL_REWARDS.get(lvl, ("", None))
 
 DAILY_LIMITS = {
     "chat": 20,
@@ -144,7 +178,7 @@ def get_focus_stats(store, today: Optional[datetime.date] = None) -> dict:
     today_row = data_by_date.get(today_str, {"minutes": 0, "count": 0})
 
     # Letzte 7 Tage (inklusive heute)
-    days_names = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    days_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] if i18n.lang() == "en" else ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
     weekly = []
     for i in range(6, -1, -1):
         d = today - datetime.timedelta(days=i)

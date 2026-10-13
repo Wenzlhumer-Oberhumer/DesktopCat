@@ -13,6 +13,8 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
+from i18n import tr
+
 
 NOTE_COLORS = {
     "yellow": {
@@ -89,20 +91,20 @@ class StickyNoteWindow(QWidget):
         # Farbwechsler
         self.btn_color = QPushButton("🎨")
         self.btn_color.setFixedSize(22, 22)
-        self.btn_color.setToolTip("Farbe wechseln (Gelb / Rosa / Mint)")
+        self.btn_color.setToolTip(tr("note.color_tooltip"))
         self.btn_color.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_color.clicked.connect(self._cycle_color)
         self.header_layout.addWidget(self.btn_color)
 
         # Titel / Drag Handle
-        self.lbl_title = QLabel("Haftnotiz 📌")
+        self.lbl_title = QLabel(tr("note.window_title"))
         self.lbl_title.setFont(_get_note_font(9))
         self.header_layout.addWidget(self.lbl_title, 1)
 
         # Erledigt (Checkmark)
         self.btn_done = QPushButton("✔")
         self.btn_done.setFixedSize(22, 22)
-        self.btn_done.setToolTip("Erledigt!")
+        self.btn_done.setToolTip(tr("note.done_tooltip"))
         self.btn_done.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_done.clicked.connect(self._on_done)
         self.header_layout.addWidget(self.btn_done)
@@ -110,7 +112,7 @@ class StickyNoteWindow(QWidget):
         # Löschen (Kreuz)
         self.btn_del = QPushButton("✖")
         self.btn_del.setFixedSize(22, 22)
-        self.btn_del.setToolTip("Löschen")
+        self.btn_del.setToolTip(tr("note.delete_tooltip"))
         self.btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_del.clicked.connect(self._on_delete)
         self.header_layout.addWidget(self.btn_del)
@@ -119,8 +121,9 @@ class StickyNoteWindow(QWidget):
 
         # Textfeld
         self.editor = QPlainTextEdit()
-        self.editor.setPlaceholderText("Notiz schreiben...")
+        self.editor.setPlaceholderText(tr("note.placeholder"))
         self.editor.setPlainText(initial_text)
+
         self.editor.setFont(_get_note_font(11))
         self.editor.textChanged.connect(self._on_text_changed)
         self.main_layout.addWidget(self.editor)

@@ -14,10 +14,13 @@ from PyQt6.QtWidgets import (
 )
 
 from fun import (
-    LEVEL_NAMES, LEVEL_REWARDS, LEVEL_THRESHOLDS, get_focus_stats,
+    LEVEL_THRESHOLDS, get_focus_stats,
+    get_level_name, get_level_reward,
     level_for, parse_flashcards_text, parse_gemini_flashcards_json,
 )
 import gemini
+import i18n
+from i18n import tr
 
 
 # ======================================================================================
@@ -34,7 +37,8 @@ class FriendshipDialog(QDialog):
         self.cfg = cfg
         self.char_info = char_info
 
-        self.setWindowTitle(f"💖 Freundschaft mit {char_info.get('name', 'Kylie')}")
+        name = char_info.get("name", "Kylie")
+        self.setWindowTitle(tr("friendship.title", name=name))
         self.setFixedSize(480, 560)
         self.setStyleSheet("""
             QDialog {
@@ -78,12 +82,12 @@ class FriendshipDialog(QDialog):
 
         pts = self.store.get_friendship_points() if self.store else 0
         lvl, prog = level_for(pts)
-        lvl_name = LEVEL_NAMES.get(lvl, "Freunde")
+        lvl_name = get_level_name(lvl)
 
         info_layout = QVBoxLayout()
-        lbl_title = QLabel(f"<b>{name}</b> & Du")
+        lbl_title = QLabel(tr("friendship.header", name=name))
         lbl_title.setStyleSheet("font-size: 18px; color: #1F2937;")
-        lbl_level = QLabel(f"💖 Level {lvl}: <span style='color: #EC4899;'>{lvl_name}</span>")
+        lbl_level = QLabel(tr("friendship.level_header", lvl=lvl, title=lvl_name))
         lbl_level.setStyleSheet("font-size: 14px; font-weight: bold;")
         info_layout.addWidget(lbl_title)
         info_layout.addWidget(lbl_level)
@@ -92,7 +96,7 @@ class FriendshipDialog(QDialog):
         layout.addLayout(head_layout)
 
         # Fortschrittsbalken
-        prog_box = QGroupBox("Fortschritt zum nächsten Level")
+        prog_box = QGroupBox(tr("friendship.progress_title"))
         prog_layout = QVBoxLayout(prog_box)
         prog_layout.setSpacing(6)
 
@@ -117,22 +121,22 @@ class FriendshipDialog(QDialog):
         prog_layout.addWidget(self.bar)
 
         if lvl < 8:
-            lbl_pts = QLabel(f"{pts} / {next_thresh} Punkte ({int(prog * 100)}%) • Noch {next_thresh - pts} Punkte bis Level {lvl + 1}")
+            lbl_pts = QLabel(tr("friendship.points_info", pts=pts, next_pts=next_thresh, pct=int(prog * 100), remain=next_thresh - pts, next_lvl=lvl + 1))
         else:
-            lbl_pts = QLabel(f"{pts} Punkte • Maximales Freundschafts-Level erreicht! 🌟")
+            lbl_pts = QLabel(tr("friendship.max_level", pts=pts))
         lbl_pts.setStyleSheet("font-size: 11px; color: #6B7280;")
         prog_layout.addWidget(lbl_pts)
         layout.addWidget(prog_box)
 
         # Accessoires & Belohnungen
-        rew_box = QGroupBox("Freigeschaltete Belohnungen & Accessoires")
+        rew_box = QGroupBox(tr("friendship.rewards_box"))
         rew_layout = QVBoxLayout(rew_box)
         rew_layout.setSpacing(8)
 
         current_worn = str(self.cfg.get("fun.worn", "")).strip()
 
         for req_lvl in range(2, 9):
-            title, key = LEVEL_REWARDS[req_lvl]
+            title, key = get_level_reward(req_lvl)
             row = QHBoxLayout()
 
             is_unlocked = lvl >= req_lvl
@@ -150,16 +154,16 @@ class FriendshipDialog(QDialog):
                 btn.setFixedWidth(90)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 if current_worn == key:
-                    btn.setText("✔ Ablegen")
+                    btn.setText(tr("friendship.unequip"))
                     btn.setStyleSheet("background-color: #FCE7F3; color: #DB2777; font-weight: bold; border-radius: 6px; padding: 4px;")
                     btn.clicked.connect(lambda _=False, k="": self._set_worn(k))
                 else:
-                    btn.setText("Anziehen")
+                    btn.setText(tr("friendship.equip"))
                     btn.setStyleSheet("background-color: #F3F4F6; color: #374151; border-radius: 6px; padding: 4px;")
                     btn.clicked.connect(lambda _=False, k=key: self._set_worn(k))
                 row.addWidget(btn)
             elif not is_unlocked:
-                lbl_lock = QLabel(f"ab {LEVEL_THRESHOLDS[req_lvl-1]} Pkt.")
+                lbl_lock = QLabel(tr("friendship.unlock_at", pts=LEVEL_THRESHOLDS[req_lvl-1]))
                 lbl_lock.setStyleSheet("font-size: 11px; color: #9CA3AF;")
                 row.addWidget(lbl_lock)
 
@@ -168,7 +172,7 @@ class FriendshipDialog(QDialog):
         layout.addWidget(rew_box, 1)
 
         # Fusszeile
-        btn_close = QPushButton("Schließen")
+        btn_close = QPushButton(tr("common.close"))
         btn_close.setFixedHeight(34)
         btn_close.setStyleSheet("""
             QPushButton {
@@ -266,7 +270,7 @@ class FocusStatsDialog(QDialog):
         self.store = store
         self.char_info = char_info
 
-        self.setWindowTitle("📊 Fokus-Statistik & Pomodoro")
+        self.setWindowTitle(tr("focus.title"))
         self.setFixedSize(460, 480)
         self.setStyleSheet("""
             QDialog {
@@ -309,11 +313,12 @@ class FocusStatsDialog(QDialog):
         card_today = QFrame()
         card_today.setStyleSheet("background: #EEF2FF; border-radius: 10px; padding: 10px;")
         l_today = QVBoxLayout(card_today)
-        l_today.addWidget(QLabel("⏱️ <b>Heute fokussiert</b>"))
+        l_today.addWidget(QLabel(tr("focus.today_title")))
         mins = stats["today_minutes"]
         cnt = stats["today_count"]
-        lbl_m = QLabel(f"<span style='font-size: 22px; font-weight: bold; color: #4F46E5;'>{mins} Min.</span>")
-        lbl_c = QLabel(f"{cnt} Pomodoro{'s' if cnt != 1 else ''}")
+        lbl_m = QLabel(f"<span style='font-size: 22px; font-weight: bold; color: #4F46E5;'>{tr('focus.minutes_label', mins=mins)}</span>")
+        suffix = 's' if (cnt != 1 and i18n.lang() == "en") or (cnt != 1 and i18n.lang() == "de") else ''
+        lbl_c = QLabel(tr("focus.sessions_label", count=cnt, suffix=suffix))
         lbl_c.setStyleSheet("color: #64748B; font-size: 11px;")
         l_today.addWidget(lbl_m)
         l_today.addWidget(lbl_c)
@@ -323,10 +328,11 @@ class FocusStatsDialog(QDialog):
         card_streak = QFrame()
         card_streak.setStyleSheet("background: #FEF3C7; border-radius: 10px; padding: 10px;")
         l_streak = QVBoxLayout(card_streak)
-        l_streak.addWidget(QLabel("🔥 <b>Fokus-Serie</b>"))
+        l_streak.addWidget(QLabel(tr("focus.streak_title")))
         stk = stats["streak"]
-        lbl_s = QLabel(f"<span style='font-size: 22px; font-weight: bold; color: #D97706;'>{stk} {('Tag' if stk == 1 else 'Tage')}</span>")
-        lbl_sub = QLabel("In Folge am Ball! 💪" if stk > 0 else "Starte heute deine Serie!")
+        unit_str = tr("focus.day_singular") if stk == 1 else tr("focus.days_plural")
+        lbl_s = QLabel(f"<span style='font-size: 22px; font-weight: bold; color: #D97706;'>{tr('focus.streak_days', days=stk, unit=unit_str)}</span>")
+        lbl_sub = QLabel(tr("focus.streak_sub_active") if stk > 0 else tr("focus.streak_sub_zero"))
         lbl_sub.setStyleSheet("color: #78350F; font-size: 11px;")
         l_streak.addWidget(lbl_s)
         l_streak.addWidget(lbl_sub)
@@ -335,7 +341,7 @@ class FocusStatsDialog(QDialog):
         layout.addLayout(cards_layout)
 
         # 7-Tage-Balkendiagramm
-        chart_box = QGroupBox("Vergangene 7 Tage")
+        chart_box = QGroupBox(tr("focus.weekly_box"))
         chart_layout = QVBoxLayout(chart_box)
         chart_widget = FocusBarChart(stats["weekly"], self)
         chart_layout.addWidget(chart_widget)
@@ -349,11 +355,11 @@ class FocusStatsDialog(QDialog):
         emoji = self.char_info.get("emoji", "🐾")
 
         if mins >= 50:
-            quote = f"„Wahnsinn, du bist heute eine echte Fokus-Maschine, Boss! Weiter so!“ {emoji}"
+            quote = tr("focus.quote_high", emoji=emoji)
         elif mins > 0:
-            quote = f"„Gute Arbeit! Jeder Pomodoro bringt dich deinem Ziel näher.“ {emoji}"
+            quote = tr("focus.quote_mid", emoji=emoji)
         else:
-            quote = f"„Bereit für etwas Produktivität? Sag mir einfach: 'Pomodoro starten'! ⏱️“ {emoji}"
+            quote = tr("focus.quote_zero", emoji=emoji)
 
         lbl_quote = QLabel(f"<b>{name}:</b> {quote}")
         lbl_quote.setWordWrap(True)
@@ -362,7 +368,7 @@ class FocusStatsDialog(QDialog):
         layout.addWidget(praise_box)
 
         # Schliessen Button
-        btn_close = QPushButton("Fertig")
+        btn_close = QPushButton(tr("common.done"))
         btn_close.setFixedHeight(34)
         btn_close.setStyleSheet("""
             QPushButton {
@@ -395,16 +401,24 @@ class GeminiCardWorker(QThread):
     @pyqtSlot()
     def run(self) -> None:
         try:
-            prompt = (
-                f"Erstelle 10 Lernkarten zum Thema '{self.topic}'. "
-                "Gib ausschließlich ein valides JSON-Array zurück im Format: "
-                '[{"front": "Frage oder Begriff", "back": "Antwort oder Erklärung"}]. '
-                "Kein Begleittext, keine Markdown-Formatierung um das JSON."
-            )
+            if i18n.lang() == "en":
+                prompt = (
+                    f"Create 10 flashcards on the topic '{self.topic}'. "
+                    "Return exclusively a valid JSON array in the format: "
+                    '[{"front": "Question or term", "back": "Answer or explanation"}]. '
+                    "No accompanying text, no markdown formatting around the JSON."
+                )
+            else:
+                prompt = (
+                    f"Erstelle 10 Lernkarten zum Thema '{self.topic}'. "
+                    "Gib ausschließlich ein valides JSON-Array zurück im Format: "
+                    '[{"front": "Frage oder Begriff", "back": "Antwort oder Erklärung"}]. '
+                    "Kein Begleittext, keine Markdown-Formatierung um das JSON."
+                )
             raw = gemini.ask(prompt, timeout_s=40)
             cards = parse_gemini_flashcards_json(raw)
             if not cards:
-                self.failed.emit("Konnte keine gültigen Karten aus der KI-Antwort parsen.")
+                self.failed.emit(tr("cards.ai_parse_err"))
             else:
                 self.success.emit(cards)
         except Exception as exc:
@@ -421,7 +435,7 @@ class FlashcardsDialog(QDialog):
         self.store = store
         self._gemini_worker: Optional[GeminiCardWorker] = None
 
-        self.setWindowTitle("📚 Lernkarten & Vokabel-Trainer")
+        self.setWindowTitle(tr("cards.title"))
         self.resize(600, 560)
         self.setStyleSheet("""
             QDialog {
@@ -456,14 +470,14 @@ class FlashcardsDialog(QDialog):
 
         # Deck-Auswahlzeile
         deck_layout = QHBoxLayout()
-        deck_layout.addWidget(QLabel("<b>Aktuelles Deck:</b>"))
+        deck_layout.addWidget(QLabel(tr("cards.deck_label")))
 
         self.cb_decks = QComboBox()
         self.cb_decks.setMinimumWidth(180)
         self.cb_decks.currentTextChanged.connect(self._on_deck_changed)
         deck_layout.addWidget(self.cb_decks, 1)
 
-        btn_new_deck = QPushButton("➕ Neues Deck")
+        btn_new_deck = QPushButton(tr("cards.new_deck"))
         btn_new_deck.clicked.connect(self._create_deck)
         deck_layout.addWidget(btn_new_deck)
 
@@ -471,7 +485,7 @@ class FlashcardsDialog(QDialog):
 
         # Tabelle fuer Karten
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Vorderseite (Frage)", "Rückseite (Antwort)", "Box"])
+        self.table.setHorizontalHeaderLabels([tr("cards.header_front"), tr("cards.header_back"), tr("cards.header_box")])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -480,10 +494,10 @@ class FlashcardsDialog(QDialog):
         # Schnell-Hinzufügen Zeile
         add_layout = QHBoxLayout()
         self.edit_front = QLineEdit()
-        self.edit_front.setPlaceholderText("Vorderseite / Wort")
+        self.edit_front.setPlaceholderText(tr("cards.ph_front"))
         self.edit_back = QLineEdit()
-        self.edit_back.setPlaceholderText("Rückseite / Übersetzung")
-        btn_add = QPushButton("Hinzufügen")
+        self.edit_back.setPlaceholderText(tr("cards.ph_back"))
+        btn_add = QPushButton(tr("cards.add"))
         btn_add.setStyleSheet("background-color: #4F46E5; color: white; font-weight: bold; border-radius: 4px; padding: 5px 12px;")
         btn_add.clicked.connect(self._add_card)
 
@@ -495,22 +509,22 @@ class FlashcardsDialog(QDialog):
         # Aktionen (Import, KI-Karten, Löschen, Quiz starten)
         act_layout = QHBoxLayout()
 
-        btn_import = QPushButton("📥 Text-Import")
-        btn_import.setToolTip("Format: Zeilenweise 'Wort = Übersetzung'")
+        btn_import = QPushButton(tr("cards.import"))
+        btn_import.setToolTip(tr("cards.import_tooltip"))
         btn_import.clicked.connect(self._open_import_dialog)
         act_layout.addWidget(btn_import)
 
-        btn_ai = QPushButton("✨ KI-Karten (Gemini)")
+        btn_ai = QPushButton(tr("cards.ai_cards"))
         btn_ai.clicked.connect(self._generate_ai_cards)
         act_layout.addWidget(btn_ai)
 
-        btn_del = QPushButton("🗑️ Karte löschen")
+        btn_del = QPushButton(tr("cards.delete"))
         btn_del.clicked.connect(self._delete_selected_card)
         act_layout.addWidget(btn_del)
 
         act_layout.addStretch()
 
-        self.btn_quiz = QPushButton("▶ Quiz starten")
+        self.btn_quiz = QPushButton(tr("cards.start_quiz"))
         self.btn_quiz.setStyleSheet("""
             QPushButton {
                 background-color: #10B981;
@@ -556,7 +570,7 @@ class FlashcardsDialog(QDialog):
             item_f = QTableWidgetItem(c["front"])
             item_f.setData(Qt.ItemDataRole.UserRole, c["id"])
             item_b = QTableWidgetItem(c["back"])
-            item_box = QTableWidgetItem(f"Box {c['box']}")
+            item_box = QTableWidgetItem(tr("cards.box_label", box=c['box']))
             item_box.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
             self.table.setItem(row, 0, item_f)
@@ -567,7 +581,7 @@ class FlashcardsDialog(QDialog):
 
     def _create_deck(self) -> None:
         from PyQt6.QtWidgets import QInputDialog
-        name, ok = QInputDialog.getText(self, "Neues Deck", "Name des neuen Decks:")
+        name, ok = QInputDialog.getText(self, tr("cards.new_deck_title"), tr("cards.new_deck_prompt"))
         if ok and name.strip():
             deck = name.strip()
             if self.cb_decks.findText(deck) == -1:
@@ -600,17 +614,17 @@ class FlashcardsDialog(QDialog):
 
     def _open_import_dialog(self) -> None:
         dlg = QDialog(self)
-        dlg.setWindowTitle("Lernkarten aus Text importieren")
+        dlg.setWindowTitle(tr("cards.import_dlg_title"))
         dlg.resize(400, 320)
         l = QVBoxLayout(dlg)
-        l.addWidget(QLabel("Füge hier deine Karten ein (eine pro Zeile, z. B. <i>Hund = dog</i>):"))
+        l.addWidget(QLabel(tr("cards.import_dlg_desc")))
 
         edit = QTextEdit()
-        edit.setPlaceholderText("Guten Tag = Hello\nKatze = Cat\nApfel = Apple")
+        edit.setPlaceholderText(tr("cards.import_ph"))
         l.addWidget(edit, 1)
 
         btn_row = QHBoxLayout()
-        btn_ok = QPushButton("Importieren")
+        btn_ok = QPushButton(tr("cards.btn_import"))
         btn_ok.setStyleSheet("background-color: #4F46E5; color: white; font-weight: bold; border-radius: 4px; padding: 6px;")
         btn_row.addStretch()
         btn_row.addWidget(btn_ok)
@@ -619,13 +633,13 @@ class FlashcardsDialog(QDialog):
         def _do_import():
             parsed = parse_flashcards_text(edit.toPlainText())
             if not parsed:
-                QMessageBox.warning(dlg, "Import", "Keine gültigen Zeilen im Format 'Vorderseite = Rückseite' gefunden.")
+                QMessageBox.warning(dlg, tr("cards.import_err_title"), tr("cards.import_err_msg"))
                 return
             deck = self.cb_decks.currentText() or "Allgemein"
             if self.store:
                 for front, back in parsed:
                     self.store.add_card(deck, front, back)
-            QMessageBox.information(dlg, "Import erfolgreich", f"{len(parsed)} Karten zum Deck '{deck}' hinzugefügt! 🎉")
+            QMessageBox.information(dlg, tr("cards.import_succ_title"), tr("cards.import_succ_msg", count=len(parsed), deck=deck))
             dlg.accept()
             self._load_cards_for_current_deck()
 
@@ -636,17 +650,16 @@ class FlashcardsDialog(QDialog):
         if not gemini.has_key():
             QMessageBox.warning(
                 self,
-                "Gemini-Key fehlt",
-                "Für KI-generierte Lernkarten wird ein kostenloser Gemini-Key benötigt.\n"
-                "Klicke mit der rechten Maustaste auf Kylie -> 'Gemini-Key eintragen'.",
+                tr("cards.ai_nokey_title"),
+                tr("cards.ai_nokey_msg", name="Kylie"),
             )
             return
 
         from PyQt6.QtWidgets import QInputDialog
         topic, ok = QInputDialog.getText(
             self,
-            "KI-Lernkarten generieren",
-            "Zu welchem Thema möchtest du 10 Lernkarten?\n(z. B. 'Englisch Vokabeln Restaurant' oder 'Photosynthese'):",
+            tr("cards.ai_topic_title"),
+            tr("cards.ai_topic_prompt"),
         )
         if not ok or not topic.strip():
             return
@@ -654,7 +667,7 @@ class FlashcardsDialog(QDialog):
         self._ai_topic = topic.strip()
         self._gemini_worker = GeminiCardWorker(self._ai_topic)
         self._gemini_worker.success.connect(self._on_ai_cards_generated)
-        self._gemini_worker.failed.connect(lambda err: QMessageBox.warning(self, "KI-Fehler", f"Konnte keine Karten erstellen:\n{err}"))
+        self._gemini_worker.failed.connect(lambda err: QMessageBox.warning(self, tr("cards.ai_err_title"), tr("cards.ai_err_msg", err=err)))
         self._gemini_worker.start()
 
     def _on_ai_cards_generated(self, cards: list) -> None:
@@ -662,7 +675,7 @@ class FlashcardsDialog(QDialog):
         if self.store:
             for front, back in cards:
                 self.store.add_card(deck, front, back)
-        QMessageBox.information(self, "Lernkarten erstellt", f"{len(cards)} Lernkarten zum Thema '{self._ai_topic}' hinzugefügt! ✨")
+        QMessageBox.information(self, tr("cards.ai_succ_title"), tr("cards.ai_succ_msg", count=len(cards), topic=self._ai_topic))
         self._load_cards_for_current_deck()
 
     def _start_quiz(self) -> None:
