@@ -1,8 +1,13 @@
 # Eigene Sprites (optional)
 
 Lege hier Bilder ab - sobald `idle.gif` / `idle.png` existiert, nutzt Mochi **deine** Grafiken
-statt der eingebauten Kawaii-Katze. Fehlende Zustaende werden aus dem Idle-Bild abgeleitet
+statt der eingebauten Figur. Fehlende Zustaende werden aus dem Idle-Bild abgeleitet
 (Huepfen, Wackeln ...), `walk_left` wird automatisch aus `walk_right` gespiegelt.
+
+Die eigenen Sprites ersetzen die gezeichnete Figur **unabhaengig vom Charakter**, der in den
+Einstellungen gewaehlt ist. Ohne eigene Dateien zeichnet Mochi den gewaehlten Charakter
+(9 Figuren, z. B. Mochi, Luna, Hachi, Pip ...). Der Charakter laesst sich im Rechtsklick-Menue
+oder in den Einstellungen umschalten.
 
 | Datei (gif / png / webp)  | Zustand                     |
 |---------------------------|-----------------------------|

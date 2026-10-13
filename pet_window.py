@@ -10,13 +10,26 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QGuiApplication, QPainter
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
+import tools
 from pet_sprites import (
     BASE, FLOOR, PoseContext, SpriteLibrary, _draw_effects, compute_pose, draw_cat,
 )
+try:
+    from pet_sprites import CHARACTERS, draw_character
+except ImportError:         # alte pet_sprites ohne Charakter-Registry
+    CHARACTERS = {}
+
+    def draw_character(p, pose, char_id):
+        draw_cat(p, pose)
+
+
+def is_night(cfg) -> bool:
+    """Nachtmodus (23-7 Uhr) aktiv?"""
+    return bool(cfg.get("night_mode", True)) and (time.localtime().tm_hour >= 23 or time.localtime().tm_hour < 7)
 
 
 class PetState(Enum):
@@ -31,6 +44,7 @@ class PetState(Enum):
     SAD = "sad"
     DANCE = "dance"
     COOL = "cool"
+    PUSH = "push"
 
 
 WALKING = (PetState.WALK_LEFT, PetState.WALK_RIGHT)
@@ -48,6 +62,7 @@ INTERVALS = {
     PetState.WALK_RIGHT: 16,
     PetState.DRAGGED: 16,
     PetState.FALLING: 16,
+    PetState.PUSH: 16,
 }
 
 MENU_STYLE = """
@@ -73,6 +88,8 @@ class PetWindow(QWidget):
     quit_requested = pyqtSignal()
     petted = pyqtSignal()        # einfacher Klick
     moved = pyqtSignal()         # Position hat sich geaendert (Sprechblase folgt)
+    character_changed = pyqtSignal(str)
+    treat_given = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -89,6 +106,8 @@ class PetWindow(QWidget):
         self.setWindowTitle("Mochi")
 
         self.cfg = cfg
+        self.character = str(cfg.get("pet.character", "cat_mochi"))
+        self._chase_until = 0.0
         self.sprites = SpriteLibrary(base_dir, cfg.get("animations", {}) or {})
 
         self.state = PetState.IDLE
@@ -146,9 +165,42 @@ class PetWindow(QWidget):
             if hasattr(self, "_placed"):
                 self._py = old_bottom - self.height()
                 self._apply_pos()
+        char = str(self.cfg.get("pet.character", "cat_mochi"))
+        if char != self.character and char in CHARACTERS:
+            self.character = char
+            self.character_changed.emit(char)
+            self.update()
         self.wander_enabled = bool(self.cfg.get("pet.wander", True))
         if self.isVisible():
             self._schedule_wander()
+
+    def set_character(self, char_id: str) -> None:
+        if char_id in CHARACTERS and char_id != self.character:
+            self.character = char_id
+            self.cfg.set("pet.character", char_id)
+            self.cfg.save()
+            self.character_changed.emit(char_id)
+            self.react_happy()
+            self.update()
+
+    def char_info(self) -> dict:
+        return CHARACTERS.get(self.character) or {}
+
+    def push_animation(self, seconds: float = 1.5) -> None:
+        self.wake()
+        self.facing = 1
+        self.set_state(PetState.PUSH, seconds)
+
+    def chase_mouse(self, seconds: float = 15.0) -> None:
+        """Spielmodus: folgt dem Mauszeiger (x) mit der normalen Lauflogik."""
+        self.wake()
+        self._chase_until = time.monotonic() + seconds
+
+    def give_treat(self) -> None:
+        self.cfg.set("treats", int(self.cfg.get("treats", 0)) + 1)
+        self.cfg.save()
+        self.react_happy()
+        self.treat_given.emit()
 
     def _screen_for_x(self, cx: float):
         screens = QGuiApplication.screens()
@@ -299,11 +351,14 @@ class PetWindow(QWidget):
 
     def _on_wander(self) -> None:
         busy = self.state not in (PetState.IDLE, PetState.SLEEP) or self.frozen or self._dragging
-        if busy or not self.wander_enabled:
+        if busy or not self.wander_enabled or time.monotonic() < self._chase_until:
             self._schedule_wander()
             return
         r = random.random()
-        if r < 0.22:                              # einfach stehen bleiben
+        if is_night(self.cfg) and r < 0.7:        # nachts doppelt so oft schlafen
+            self.set_state(PetState.SLEEP)
+            self._schedule_wander(random.uniform(10, 20))
+        elif r < 0.22:                              # einfach stehen bleiben
             self.wake()
             self._schedule_wander()
         elif r < 0.42:                            # schlafen
@@ -337,8 +392,14 @@ class PetWindow(QWidget):
 
         if self._state_until is not None and now >= self._state_until:
             self._state_until = None
-            if self.state in (PetState.SUCCESS, PetState.SAD):
+            if self.state in (PetState.SUCCESS, PetState.SAD, PetState.PUSH):
                 self.set_state(PetState.IDLE)
+
+        if now < self._chase_until and not self.frozen and not self._dragging                 and self.state in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
+            lo, hi = self._x_bounds()
+            self._walk_target = max(lo, min(hi, QCursor.pos().x() - self.width() / 2))
+            if abs(self._walk_target - self._px) > 12:
+                self.set_state(PetState.WALK_RIGHT if self._walk_target > self._px else PetState.WALK_LEFT)
 
         s = self.state
         if s in WALKING:
@@ -476,7 +537,7 @@ class PetWindow(QWidget):
             effects = (pose.zzz, pose.dots, pose.sparkles, pose.hearts)
             if flip:
                 pose.zzz = pose.dots = pose.sparkles = pose.hearts = None
-            draw_cat(p, pose)
+            draw_character(p, pose, self.character)
             p.restore()
             if flip:
                 pose.zzz, pose.dots, pose.sparkles, pose.hearts = effects
@@ -606,49 +667,93 @@ class PetWindow(QWidget):
 
     def contextMenuEvent(self, e) -> None:
         self._click_timer.stop()
-        menu = style_menu(QMenu(self))
-        import gemini
-        if not gemini.has_key():
-            menu.addAction("\U0001F511  Gemini-Key eintragen").triggered.connect(self.settings_requested.emit)
-            menu.addSeparator()
-        menu.addAction("\U0001F4AC  Befehl eingeben").triggered.connect(self.input_requested.emit)
-        menu.addSeparator()
-
-        # Coole Tricks & Animationen
-        tricks = menu.addMenu("\u2728  Tricks & Spa\u00df")
-        style_menu(tricks)
-        tricks.addAction("\U0001F483  Mochi, tanz f\u00fcr mich!").triggered.connect(lambda: self.dance(6.0))
-        tricks.addAction("\U0001F576\uFE0F  Coole Katze (Sonnenbrille)").triggered.connect(lambda: self.be_cool(6.0))
-        tricks.addAction("\U0001F4A4  Schlafen legen").triggered.connect(lambda: self.set_state(PetState.SLEEP))
-        tricks.addAction("\U0001F43E  Aufwecken").triggered.connect(self.wake)
-
-        # Schnelle Tools
-        tools_menu = menu.addMenu("\u26A1  Schnell-Tools")
-        style_menu(tools_menu)
-        tools_menu.addAction("\U0001F441\uFE0F  Bildschirm beobachten (Vision)").triggered.connect(lambda: self.command_requested.emit("was mache ich gerade"))
-        tools_menu.addAction("\U0001F4C4  Word am Desktop erstellen").triggered.connect(lambda: self.command_requested.emit("erstelle ein word dokument am desktop"))
-        tools_menu.addAction("\U0001F4CA  PowerPoint am Desktop erstellen").triggered.connect(lambda: self.command_requested.emit("erstelle eine powerpoint am desktop"))
-        tools_menu.addAction("\U0001F4F8  Desktop Screenshot").triggered.connect(lambda: self.command_requested.emit("screenshot"))
-        tools_menu.addAction("\U0001F9F9  Desktop aufr\u00e4umen").triggered.connect(lambda: self.command_requested.emit("desktop aufraeumen"))
-        tools_menu.addAction("\U0001F552  Datum & Uhrzeit").triggered.connect(lambda: self.command_requested.emit("wie spaet ist es"))
-        tools_menu.addAction("\U0001F4BB  System-Status").triggered.connect(lambda: self.command_requested.emit("systeminfo"))
-        tools_menu.addAction("\U0001F50A  Lauter (+10%)").triggered.connect(lambda: self.command_requested.emit("lauter"))
-        tools_menu.addAction("\U0001F509  Leiser (-10%)").triggered.connect(lambda: self.command_requested.emit("leiser"))
-        tools_menu.addAction("\U0001F507  Stumm / Mute").triggered.connect(lambda: self.command_requested.emit("stumm"))
-        tools_menu.addAction("\u25B6\uFE0F  Musik Play/Pause").triggered.connect(lambda: self.command_requested.emit("pause"))
-
-        # Ordner
-        folders_menu = menu.addMenu("\U0001F4C2  Ordner \u00f6ffnen")
-        style_menu(folders_menu)
-        folders_menu.addAction("\U0001F4E5  Downloads").triggered.connect(lambda: self.command_requested.emit("oeffne downloads"))
-        folders_menu.addAction("\U0001F4C4  Dokumente").triggered.connect(lambda: self.command_requested.emit("oeffne dokumente"))
-        folders_menu.addAction("\U0001F5A5\uFE0F  Desktop").triggered.connect(lambda: self.command_requested.emit("oeffne desktop"))
-        folders_menu.addAction("\U0001F5D1\uFE0F  Papierkorb").triggered.connect(lambda: self.command_requested.emit("oeffne papierkorb"))
-
-        menu.addSeparator()
-        menu.addAction("\U0001F3E0  Zur Taskleiste zur\u00fccksetzen").triggered.connect(self.reset_to_taskbar)
-        menu.addAction("\u2699\uFE0F  Einstellungen").triggered.connect(self.settings_requested.emit)
-        menu.addSeparator()
-        menu.addAction("\U0001F44B  Beenden").triggered.connect(self.quit_requested.emit)
+        menu = self.build_menu()
         menu.exec(e.globalPos())
 
+    def build_menu(self) -> QMenu:
+        menu = style_menu(QMenu(self))
+        cmd = self.command_requested.emit
+        import gemini
+        if not gemini.has_key():
+            menu.addAction("🔑  Gemini-Key eintragen").triggered.connect(self.settings_requested.emit)
+            menu.addSeparator()
+        menu.addAction("💬  Befehl eingeben").triggered.connect(self.input_requested.emit)
+        menu.addSeparator()
+
+        # Charakter-Auswahl (Live-Wechsel)
+        if CHARACTERS:
+            char_menu = menu.addMenu("🎭  Charakter wählen")
+            style_menu(char_menu)
+            for cid, ci in CHARACTERS.items():
+                check = "✔  " if cid == self.character else "    "
+                char_menu.addAction(f"{check}{ci['emoji']}  {ci['name']} ({ci['species']})").triggered.connect(
+                    lambda _=False, c=cid: self.set_character(c))
+            menu.addSeparator()
+
+        # Coole Tricks & Animationen
+        tricks = menu.addMenu("✨  Tricks & Spaß")
+        style_menu(tricks)
+        name = self.char_info().get("name", "Buddy")
+        tricks.addAction(f"💃  {name}, tanz für mich!").triggered.connect(lambda: self.dance(6.0))
+        tricks.addAction("🕶️  Coole Pose (Sonnenbrille)").triggered.connect(lambda: self.be_cool(6.0))
+        tricks.addAction("💨  Hau-Ruck! Schiebe-Animation").triggered.connect(lambda: self.push_animation(1.5))
+        tricks.addAction("🐭  Fang die Maus! (15 s)").triggered.connect(lambda: self.chase_mouse(15.0))
+        tricks.addAction("🍖  Leckerli geben").triggered.connect(self.give_treat)
+        tricks.addAction("💤  Schlafen legen").triggered.connect(lambda: self.set_state(PetState.SLEEP))
+        tricks.addAction("🐾  Aufwecken").triggered.connect(self.wake)
+
+        # Schnelle Tools
+        tools_menu = menu.addMenu("⚡  Schnell-Tools")
+        style_menu(tools_menu)
+        slide_menu = tools_menu.addMenu("💨  Fenster wegschieben...")
+        style_menu(slide_menu)
+        try:
+            wins = tools.get_open_windows()
+        except Exception:       # Tool-Funktion fehlt oder Windows-API-Fehler
+            wins = []
+        for ow in wins[:10]:
+            title = ow["title"]
+            short = title[:28] + ("..." if len(title) > 28 else "")
+            slide_menu.addAction(f"❌  {short}").triggered.connect(
+                lambda _=False, t=title: cmd(f"schließe {t}"))
+        if not wins:
+            slide_menu.addAction("Keine Fenster gefunden").setEnabled(False)
+        tools_menu.addSeparator()
+        for text, c in (
+            ("⏱️  25 Min. Pomodoro-Fokus", "pomodoro starten"),
+            ("⏱️  5 Min. Kurzpause", "timer 5 minuten"),
+            ("☀️  Live-Wetterbericht", "wie ist das wetter"),
+            ("🧹  Papierkorb & Temp leeren", "leere den papierkorb"),
+            ("🌐  Netzwerk & IP-Info", "wie ist meine ip"),
+        ):
+            tools_menu.addAction(text).triggered.connect(lambda _=False, c=c: cmd(c))
+        tools_menu.addSeparator()
+        for text, c in (
+            ("👁️  Bildschirm beobachten (Vision)", "was mache ich gerade"),
+            ("📄  Word am Desktop erstellen", "erstelle ein word dokument am desktop"),
+            ("📊  PowerPoint am Desktop erstellen", "erstelle eine powerpoint am desktop"),
+            ("📸  Desktop Screenshot", "screenshot"),
+            ("🧹  Desktop aufräumen", "desktop aufraeumen"),
+            ("🕒  Datum & Uhrzeit", "wie spaet ist es"),
+            ("💻  System-Status", "systeminfo"),
+            ("🔊  Lauter (+10%)", "lauter"),
+            ("🔉  Leiser (-10%)", "leiser"),
+            ("🔇  Stumm / Mute", "stumm"),
+            ("▶️  Musik Play/Pause", "pause"),
+        ):
+            tools_menu.addAction(text).triggered.connect(lambda _=False, c=c: cmd(c))
+
+        # Ordner
+        folders_menu = menu.addMenu("📂  Ordner öffnen")
+        style_menu(folders_menu)
+        folders_menu.addAction("📥  Downloads").triggered.connect(lambda: self.command_requested.emit("oeffne downloads"))
+        folders_menu.addAction("📄  Dokumente").triggered.connect(lambda: self.command_requested.emit("oeffne dokumente"))
+        folders_menu.addAction("🖥️  Desktop").triggered.connect(lambda: self.command_requested.emit("oeffne desktop"))
+        folders_menu.addAction("🗑️  Papierkorb").triggered.connect(lambda: self.command_requested.emit("oeffne papierkorb"))
+
+        menu.addSeparator()
+        menu.addAction("🏠  Zur Taskleiste zurücksetzen").triggered.connect(self.reset_to_taskbar)
+        menu.addAction("⚙️  Einstellungen").triggered.connect(self.settings_requested.emit)
+        menu.addSeparator()
+        menu.addAction("👋  Beenden").triggered.connect(self.quit_requested.emit)
+        return menu

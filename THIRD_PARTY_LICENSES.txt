@@ -38,3 +38,10 @@ Mochi verwendet folgende Open-Source-Bibliotheken und -Komponenten:
    Copyright (c) 2013 Steve Canny, https://github.com/scanny
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files.
+
+6. wttr.in (Wetter-Dienst, nur Online-Abfrage, keine Bibliothek)
+   Mochi ruft fuer das Werkzeug "Wetter" den kostenlosen Dienst https://wttr.in ab.
+   Es wird kein API-Key benoetigt und keine Software von wttr.in ausgeliefert.
+   Die Wetterdaten stammen laut wttr.in aus dessen angegebenen Quellen (dort
+   genannt, z. B. Open-Meteo bzw. World Weather Online). Es gelten die
+   Nutzungsbedingungen von wttr.in; die aktuellen Quellenangaben stehen auf wttr.in.

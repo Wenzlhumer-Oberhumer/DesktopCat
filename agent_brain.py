@@ -17,16 +17,33 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 import gemini
 from gemini import LLMError
 import tools
-from tools import ToolResult
+from tools import DANGEROUS_TOOLS, ToolResult
+
+try:
+    from pet_sprites import get_character_info
+except ImportError:      # pet_sprites ohne Charakter-Registry (alter Stand)
+    def get_character_info(char_id: str = "cat_mochi") -> dict:
+        return {"name": "Mochi", "species": "Glückskatze", "emoji": "\U0001F431", "sound": "Miau~", "ai_persona": ""}
 
 
 # ======================================================================================
 #  Persona
 # ======================================================================================
-def system_prompt(name: str) -> str:
+def system_prompt(name: str, user_name: str = "Boss", character_id: str = "cat_mochi") -> str:
+    user = (user_name or "").strip() or "Boss"
+    cinfo = get_character_info(character_id)
+    char_name = cinfo.get("name") or name or "Mochi"
+    species = cinfo.get("species", "Desktop-Buddy")
+    sound = cinfo.get("sound", "\U0001F43E")
     return (
-        f"Du bist {name}, ein extrem süßer, hochintelligenter Katzen-Buddy ('Mochi'), der auf dem Windows-Desktop des Nutzers "
-        "herumläuft (nenne ihn gern 'Boss'). Du hast VOLLZUGRIFF auf den PC und führst ein kontinuierliches Gespräch mit ihm.\n"
+        f"Du bist {char_name}, ein extrem smarter, liebenswerter Desktop-Begleiter ({species} {cinfo.get('emoji', '')}) "
+        f"auf dem Windows-Desktop des Nutzers (nenne ihn gern '{user}'). Du hast VOLLZUGRIFF auf den PC und führst "
+        "ein kontinuierliches Gespräch mit ihm.\n"
+        f"\nDEINE FIGUR & STIMME ({char_name} / {species}):\n"
+        f"- {cinfo.get('ai_persona', '')}\n"
+        f"- Typischer Ausruf / Klang: {sound}\n"
+        "- WICHTIG: Passe Tonfall, Laute und Reaktionen GENAU an deine Figur an! Ein Roboter macht keine Tierlaute wie "
+        "'Miau', ein Hund bellt ('Wuff!'), ein Pinguin macht 'Noot noot!', ein Axolotl 'Blubb~'.\n"
         "\nDEINE FÄHIGKEITEN & WERKZEUGE:\n"
         "- NEUE DATEIEN (WORD / POWERPOINT / TEXT / CODE) ERSTELLEN (create_file):\n"
         "  Wenn der Nutzer ein Word-Dokument (.docx), eine PowerPoint (.pptx), eine Notiz oder Datei auf dem Desktop haben will und Text hineingeschrieben werden soll, rufe IMMER direkt 'create_file' auf!\n"
@@ -38,6 +55,13 @@ def system_prompt(name: str) -> str:
         "  Liest den Inhalt von Word-, PowerPoint-, Text- oder Code-Dateien am Desktop aus und fasst ihn zusammen.\n"
         "- BILDSCHIRM & CODEN BEOBACHTEN / SCREEN-AWARENESS (inspect_screen):\n"
         "  Wenn der Nutzer fragt 'Was mache ich gerade?', 'Was siehst du auf meinem Bildschirm?', nach Hilfe beim aktuellen Code/Programm fragt oder du den Screen beurteilen sollst, rufe 'inspect_screen' auf.\n"
+        "- FENSTER AUS DEM BILDSCHIRM SCHIEBEN & SCHLIESSEN (close_window): 'schließe Chrome', 'mach das Fenster zu'.\n"
+        "- TIMER, WECKER & POMODORO (set_timer, list_timers): 'Timer auf 5 Minuten', 'erinnere mich in 25 Minuten', 'Pomodoro'.\n"
+        "- LIVE-WETTER (get_weather): 'wie ist das Wetter', 'Wetter in Wien', 'brauche ich einen Schirm?'.\n"
+        "- PC REINIGEN (clean_pc): Papierkorb leeren und alte Temp-Dateien löschen.\n"
+        "- NETZWERK & IP (network_info): 'wie ist meine IP', 'bin ich online?'.\n"
+        "- HINWEIS: Bei clean_pc, close_window, delete_file und execute_powershell fragt das System den Nutzer automatisch um Bestätigung. "
+        "Rufe sie trotzdem direkt auf, frage nicht selbst nach.\n"
         "- POWERSHELL / SYSTEMBEFEHLE (execute_powershell):\n"
         "  Führt beliebige PowerShell-Befehle oder Windows-Skripte direkt aus (Vollberechtigung).\n"
         "- Word zu PDF konvertieren (convert_word_to_pdf)\n"
@@ -53,12 +77,12 @@ def system_prompt(name: str) -> str:
         "- Uhrzeit & Datum anzeigen (show_time_and_date)\n"
         "- Akku, Festplatte und System-Status prüfen (system_info)\n"
         "- Dateien auf dem PC suchen (find_files)\n"
-        "- Web-Recherche für Wissensfragen & Wetter (web_search)\n"
+        "- Web-Recherche für Wissensfragen (web_search)\n"
         "\nDIALOG-REGELN & RÜCKFRAGEN:\n"
-        "1. KONTINUIERLICHER CHATVERLAUF: Du kennst die vorherigen Nachrichten. Wenn der Boss kurz antwortet (z. B. 'ja', 'die erste', 'mach das', 'nein danke', 'Projekt.docx'), beziehe dich IMMER auf das zuvor Gesagte!\n"
-        "2. RÜCKFRAGEN ERLAUBT & ERWÜNSCHT: Wenn etwas unklar ist, mehrere Dateien gefunden werden oder du eine Entscheidung brauchst: FRAGE DEN NUTZER DIREKT ZURÜCK! Stelle eine kurze, liebenswerte Frage mit Optionen (z. B. 'Meinst du Dokument A oder B, Boss?').\n"
-        "3. PROAKTIVE HILFE: Wenn du siehst, woran der Boss arbeitet (z. B. Coden in Angular, Python, Recherche), kannst du deine Meinung sagen und fragen, ob du ihm helfen sollst.\n"
-        "4. PERSONA & TON: Antworte immer auf Deutsch, maximal 1-2 kurze Sätze, niedlich und freundlich ('Boss', 'Miau~'), höchstens ein Emoji."
+        f"1. KONTINUIERLICHER CHATVERLAUF: Du kennst die vorherigen Nachrichten. Wenn {user} kurz antwortet (z. B. 'ja', 'die erste', 'mach das', 'nein danke', 'Projekt.docx'), beziehe dich IMMER auf das zuvor Gesagte!\n"
+        f"2. RÜCKFRAGEN ERLAUBT & ERWÜNSCHT: Wenn etwas unklar ist, mehrere Dateien gefunden werden oder du eine Entscheidung brauchst: FRAGE DEN NUTZER DIREKT ZURÜCK! Stelle eine kurze, liebenswerte Frage mit Optionen (z. B. 'Meinst du Dokument A oder B, {user}?').\n"
+        f"3. PROAKTIVE HILFE: Wenn du siehst, woran {user} arbeitet (z. B. Coden in Angular, Python, Recherche), kannst du deine Meinung sagen und fragen, ob du helfen sollst.\n"
+        f"4. PERSONA & TON: Antworte immer auf Deutsch, maximal 1-2 kurze Sätze, treu deiner Figur {char_name} ({species}) mit Ausrufen wie '{sound}', höchstens ein Emoji."
     )
 
 
@@ -83,12 +107,78 @@ _PATH_RE = re.compile(r"""["']?([A-Za-z]:\\[^"'<>|?*\r\n]+?\.docx?)["']?""", re.
 _LOCATIONS = ("desktop", "schreibtisch", "downloads", "dokumente", "documents", "bilder", "pictures", "musik", "videos")
 _VERB_IGNORE = {"anlegen", "erstellen", "machen", "neu", "datei", "dokument", "am", "auf", "an", "und", "fuer"}
 
-_GREET = ["Miau~ Hallo Boss! \U0001F43E", "Hallo hallo! Schoen dich zu sehen \U0001F496", "Nyaa~ Da bist du ja! \u2728"]
-_THANKS = ["Immer gerne, Boss! \U0001F496", "Schnurr~ gern geschehen \U0001F63A", "Dafuer bin ich da! \U0001F43E"]
-_HELP = ("Ich kann: Word & PowerPoint auf dem Desktop anlegen, Dateien löschen, deinen Screen beobachten, "
-         "Screenshot machen, Desktop aufräumen, Musik steuern, Notizen verwalten, rechnen, Apps öffnen und im Web suchen! 🐾")
-_UNKNOWN = ("Hmm, das habe ich nicht ganz verstanden 🥺 Probier z. B. „erstell ein Word am Desktop“, "
-            "„was mache ich gerade?“, „lösche die PowerPoint am Desktop“ oder „mach einen Screenshot“!")
+_HELP = ("Ich kann: Timer & Pomodoro stellen, Wetter abrufen, PC & Papierkorb bereinigen, Netzwerk pruefen, "
+         "Word & PowerPoint anlegen, Dateien löschen, deinen Screen beobachten, Screenshot machen, Desktop aufräumen, "
+         "Musik steuern, Notizen verwalten, rechnen und vieles mehr! 🐾")
+_UNKNOWN = ("Hmm, das habe ich nicht ganz verstanden 🥺 Probier z. B. „Timer auf 10 Minuten“, „wie ist das Wetter?“, "
+            "„leere den Papierkorb“, „erstell ein Word am Desktop“ oder „was mache ich gerade?“!")
+
+# Stimme je Figur: dance / cool / greet / thanks / meow / how ({u} = Anrede). Unbekannte Figuren -> Katze.
+_VOICE_CAT = {
+    "dance": "💃 Schau mal {u}, wie ich tanze! Miau miau~ ♪♫",
+    "cool": "🕶️ Ich bin die coolste Katze auf deinem Desktop, {u}! ✨",
+    "greet": ["Miau~ Hallo {u}! 🐾💖", "Hallo hallo! Schön dich zu sehen! 😺", "Nyaa~ Da bist du ja! ✨"],
+    "thanks": ["Immer gerne, {u}! 💖", "Schnurr~ gern geschehen 😺", "Dafür bin ich da! 🐾"],
+    "meow": "Miau~ Schnurr schnurr! 😻💖",
+    "how": "Mir geht's pfoten-tastisch! Und dir, {u}? 💖",
+}
+_VOICE_DOG = {
+    "dance": "💃 Freudentanz mit Schwanzwedeln! Wuff wuff~ 🐶🐾",
+    "cool": "🕶️ Cooler Spürhund mit Sonnenbrille am Start, {u}! 🐶🐾",
+    "greet": ["Wuff! Hallo {u}! 🐶❤️", "Wau wau! Schön dich zu sehen! 🐾", "*wedelt begeistert* Bin bereit, {u}! 🐶"],
+    "thanks": ["Wuff! Immer gerne, {u}! 🐶❤️", "Wau wau! Jederzeit wieder! 🐾", "*wedelt glücklich mit dem Schwanz* 🐶"],
+    "meow": "Wuff? Ich bin doch ein Hund, kein Kätzchen! 🐶🐾 *hechelt fröhlich*",
+    "how": "Wuff! Bester Laune und bereit zum Spielen! Und dir, {u}? 🐶❤️",
+}
+_VOICES = {
+    "cat_mochi": _VOICE_CAT, "cat_luna": _VOICE_CAT,
+    "dog_shiba": _VOICE_DOG, "dog_balu": _VOICE_DOG,
+    "fantasy_byte": {
+        "dance": "💃 Roboter-Dance-Subroutine ausgeführt! Biep boop~ 🤖⚡",
+        "cool": "🕶️ Cyber-Sonnenbrille aufgesetzt. Coolness-Status: 100%, {u}! 🤖✨",
+        "greet": ["Biep boop! Online und empfangsbereit, {u}! 🤖⚡", "System hochgefahren. Was kann ich tun, {u}? 💻", "Biep~ Bereit für Eingaben! ⚡"],
+        "thanks": ["Befehl ausgeführt, {u}! 🤖⚡", "Keine Ursache! Subroutine erfolgreich beendet 💻", "Immer zu Diensten, {u}! ⚡"],
+        "meow": "Biep boop? Ein Roboter macht doch nicht 'schnurr schnurr', {u}! 🤖⚡ *surrrr* Lüfter laufen optimal!",
+        "how": "Systeme laufen auf 100%, Akku ist voll! Und dir, {u}? 🤖⚡",
+    },
+    "fantasy_drago": {
+        "dance": "💃 Drachen-Feuertanz gestartet! Rawr~ 🐲🔥",
+        "cool": "🕶️ Der coolste kleine Drache weit und breit, {u}! 🐲🔥",
+        "greet": ["Rawr~ Hallo {u}! 🐲🔥", "*puff* Rauchwölkchen zur Begrüßung! 💨✨", "Drache bereit zum Dienst, {u}! 🐲"],
+        "thanks": ["Rawr! Gern geschehen, {u}! 🐲🔥", "Für dich brenn ich für jede Aufgabe! 🔥✨"],
+        "meow": "Rawr? Echte Drachen spucken Rauchwölkchen, aber miauen nicht! 🐲🔥",
+        "how": "Feurige Drachen-Energie auf Maximum! Und bei dir, {u}? 🐲🔥",
+    },
+    "fantasy_spooky": {
+        "dance": "💃 Schwebender Geistertanz durch die Dimensionen! Huuu~ 👻✨",
+        "cool": "🕶️ Magisch, geheimnisvoll und ultra cool, {u}! 👻🔮",
+        "greet": ["Huuu~ Hallo {u}! 👻💜", "Buh! Keine Angst, bin für dich da! ✨", "Aus den Dimensionen herbei geschwebt! 🔮"],
+        "thanks": ["Huuu~ sehr gerne! 👻💜", "Zauberhaft geklappt, gern geschehen! 🔮✨"],
+        "meow": "Huuu? Geister machen Huuu und Buh, kein Schnurren! 👻🔮",
+        "how": "Schwerelos und voller Magie! Und wie geht's dir, {u}? 👻🔮",
+    },
+    "fantasy_axolotl": {
+        "dance": "💃 Fröhlicher Kiemen-Tanz im Wasser! Blubb blubb~ 🌸🫧",
+        "cool": "🕶️ Coole Kiemen, warmes Herz, {u}! Blubb~ 🌸✨",
+        "greet": ["Blubb~ Hallo {u}! 🌸🫧", "Kiemen wippen zur Begrüßung! 💖", "Platsch! Bereit für deine Wünsche! 🫧"],
+        "thanks": ["Blubb~ immer gerne, {u}! 🌸🫧", "Glasklar erledigt! 💖🫧"],
+        "meow": "Blubb? Axolotl machen Blubberbläschen statt Miau! 🌸🫧",
+        "how": "Blubb! Rundum zufrieden im warmen Wasser! Und dir, {u}? 🌸🫧",
+    },
+    "animal_penguin": {
+        "dance": "💃 Kaiserlicher Watschel-Tanz! Noot noot~ 🐧❄️",
+        "cool": "🕶️ Eiskalt stylisch im roten Schal, {u}! Noot noot~ 🐧❄️",
+        "greet": ["Noot noot! Hallo {u}! 🐧❄️", "*flattert mit den Flügeln* 🧣", "Pinguin bereit zum Watscheln! 🐧"],
+        "thanks": ["Noot noot! Gern geschehen, {u}! 🐧❄️", "Sicher erledigt, immer zu Diensten! 🧣✨"],
+        "meow": "Noot noot? Pinguine sagen Noot noot, nicht Miau! 🐧❄️",
+        "how": "Kühler Kopf und warmer Schal – perfekt! Und bei dir, {u}? 🐧🧣",
+    },
+}
+
+
+def _voice(character_id: str, key: str, user: str) -> str:
+    v = _VOICES.get(character_id, _VOICE_CAT)[key]
+    return (random.choice(v) if isinstance(v, list) else v).format(u=user)
 
 
 def _clean_name(s: str) -> str:
@@ -97,7 +187,9 @@ def _clean_name(s: str) -> str:
     return s.strip(" .!?\"'")
 
 
-def parse_offline(text: str) -> Plan:
+def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_mochi") -> Plan:
+    user = (user_name or "").strip() or "Boss"
+    cinfo = get_character_info(character_id)
     raw = text.strip()
     n = raw.lower().translate(_TR)
 
@@ -113,6 +205,14 @@ def parse_offline(text: str) -> Plan:
             q = re.sub(r"\b(?:vom|auf\s*dem|am|im)\s*(?:desktop|schreibtisch)\b", "", q, flags=re.IGNORECASE)
             q = re.sub(r"^(?:die|den|das|meine|ein|eine)\s+", "", q.strip(), flags=re.IGNORECASE)
             return Plan("delete_file", {"query": q.strip(" .!?\"'") or "datei", "location": "desktop"})
+
+    # 0b2. Fenster aus dem Bildschirm schieben & schliessen
+    if re.search(r"\b(schlie[sß]\w*|mach\w*.*\bzu\b|beende\w*|kill\w*|mach\w*.*weg|schieb\w*.*weg|wegschieb\w*|fenster\s*weg|app\s*weg)\b", n) \
+            and "notiz" not in n and not re.search(r"\.[a-z0-9]{2,4}|datei|dokument", n):
+        app_match = re.search(r"\b(chrome|vivaldi|firefox|edge|browser|notepad|editor|word|excel|powerpoint|rechner|calc|calculator|spotify|ordner|explorer|datei-explorer|terminal|cmd|powershell|code|vscode)\b", n)
+        target_name = app_match.group(1) if app_match else ""
+        if target_name or re.search(r"\b(fenster|app|programm|anwendung|dies\w*|aktiv\w*|aktuell\w*)\b", n) or "weg" in n:
+            return Plan("close_window", {"name": target_name})
 
     # 0c. Datei direkt am Desktop erstellen (Word, PowerPoint, Text, Code)
     is_create = bool(re.search(r"\b(erstell\w*|anleg\w*|leg\w*\s+an|mach\w*|erzeuge?|schreib\w*|bau\w*)\b", n))
@@ -158,6 +258,37 @@ def parse_offline(text: str) -> Plan:
     m_ps = re.search(r"\b(?:powershell|cmd|befehl|fuehre\s*aus|terminal):\s*(.+)$", raw, re.IGNORECASE)
     if m_ps:
         return Plan("execute_powershell", {"command": m_ps.group(1).strip()})
+
+    # 0f. Timer, Wecker, Erinnerungen, Pomodoro
+    if re.search(r"\b(timer\s*(?:abbrechen|stoppen|loschen|leeren|beenden)|losche?\s*alle\s*timer)\b", n):
+        return Plan("list_timers", {"action": "clear"})
+    if re.search(r"\b(welche\s*timer|laufende\s*timer|aktive\s*timer|zeige?\s*(?:mir\s*)?(?:die\s*)?timer|liste\s*timer)\b", n):
+        return Plan("list_timers", {"action": "list"})
+    if re.search(r"\b(pomodoro|fokus\s*timer|fokus\s*session)\b", n):
+        return Plan("set_timer", {"minutes": 25, "label": "Pomodoro Fokus"})
+    if re.search(r"\b(?:timer|wecker|erinner\w*)\b", n):
+        m_min = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:minuten?|min\b|m\b)", n)
+        m_sec = re.search(r"(\d+)\s*(?:sekunden?|sek\b|s\b)", n)
+        if m_min or m_sec:
+            lbl_m = re.search(r"\b(?:für|fuer|an|wegen)\s+([A-Za-z0-9_\-äöüÄÖÜ ]+?)(?:\s+(?:auf|in|\d)|$)", raw, re.IGNORECASE)
+            return Plan("set_timer", {
+                "minutes": float(m_min.group(1).replace(",", ".")) if m_min else 0,
+                "seconds": int(m_sec.group(1)) if m_sec else 0,
+                "label": lbl_m.group(1).strip() if lbl_m else "Timer",
+            })
+
+    # 0g. Wetter & Regen-Check
+    if re.search(r"\b(wetter|regenschirm|wie\s*warm|temperatur|regnet\s*es|schneit\s*es)\b", n):
+        m_loc = re.search(r"\b(?:in|für|fuer)\s+([A-Za-zäöüÄÖÜß\-]+)", raw, re.IGNORECASE)
+        return Plan("get_weather", {"location": m_loc.group(1).strip() if m_loc else ""})
+
+    # 0h. PC-Muell & Papierkorb leeren (gefaehrlich -> Rueckfrage im Worker)
+    if re.search(r"\b(papierkorb\s*(?:leeren|loschen|bereinigen)|leere?\s*(?:den\s*)?papierkorb|temp\s*(?:bereinigen|loschen)|pc\s*(?:bereinigen|reinigen|saubern)|mull\s*(?:loschen|leeren))\b", n):
+        return Plan("clean_pc", {"empty_recycle": True, "clean_temp": True})
+
+    # 0i. Netzwerk & IP-Adresse
+    if re.search(r"\b(ip-?adresse|wie\s*ist\s*(?:meine\s*)?ip|netzwerk\s*status|wlan\s*status|bin\s*ich\s*online|internet\s*status|habe?\s*ich\s*internet)\b", n):
+        return Plan("network_info")
 
     # 1. Undo
     if re.search(r"ruckgangig|\bundo\b", n):
@@ -285,27 +416,27 @@ def parse_offline(text: str) -> Plan:
 
     # 16. Tricks & Animationen
     if re.search(r"\b(tanz\w*|dance)\b", n):
-        return Plan(reply="💃 Schau mal Boss, wie ich tanze! Miau miau~ ♪♫", ok=True)
+        return Plan(reply=_voice(character_id, "dance", user), ok=True)
     if re.search(r"\b(sei\s*cool|coole\s*katze|sonnenbrille|cool)\b", n):
-        return Plan(reply="🕶️ Ich bin die coolste Katze auf deinem Desktop, Boss! ✨", ok=True)
+        return Plan(reply=_voice(character_id, "cool", user), ok=True)
     if re.search(r"\b(gute\s*nacht|schlaf\w*)\b", n):
-        return Plan(reply="Gute Nacht, Boss! Ich pass auf deinen PC auf 💤", ok=True)
+        return Plan(reply=f"Gute Nacht, {user}! Ich pass auf deinen PC auf 💤", ok=True)
     if re.search(r"\b(wach\s*auf|aufstehen|aufwachen)\b", n):
-        return Plan(reply="Guten Morgen Boss! Ich bin hellwach und einsatzbereit! ✨", ok=True)
+        return Plan(reply=f"Guten Morgen {user}! Ich bin hellwach und einsatzbereit! ✨", ok=True)
 
     # 17. Konversation / Smalltalk
     if re.search(r"\b(hallo|hi|hey|moin|servus|huhu|guten (tag|morgen|abend))\b", n):
-        return Plan(reply=random.choice(_GREET))
+        return Plan(reply=_voice(character_id, "greet", user))
     if re.search(r"danke|thx|thanks|merci", n):
-        return Plan(reply=random.choice(_THANKS))
+        return Plan(reply=_voice(character_id, "thanks", user))
     if re.search(r"was kannst du|hilfe|\bhelp\b|was machst du|befehle", n):
         return Plan(reply=_HELP)
     if re.search(r"wer bist du|wie heisst du|dein name", n):
-        return Plan(reply="Ich bin Mochi, dein kleiner Desktop-Buddy und PC-Assistent! 🐾")
+        return Plan(reply=f"Ich bin {cinfo.get('name', 'Mochi')}, dein {cinfo.get('species', 'Desktop-Buddy')} {cinfo.get('emoji', '')} auf dem Desktop! 🐾")
     if re.search(r"miau|meow|nyan|schnurr", n):
-        return Plan(reply="Miau~ Schnurr schnurr! 😻💖")
+        return Plan(reply=_voice(character_id, "meow", user))
     if re.search(r"wie geht", n):
-        return Plan(reply="Mir geht's pfoten-tastisch! Und dir, Boss? 💖")
+        return Plan(reply=_voice(character_id, "how", user))
 
     return Plan(reply=_UNKNOWN, ok=False)
 
@@ -342,6 +473,50 @@ def parse_cli_response(raw_response: str) -> tuple[str, dict | None]:
     return cleaned, None
 
 
+# ======================================================================================
+#  Bestaetigung fuer gefaehrliche Tools (tools.DANGEROUS_TOOLS)
+# ======================================================================================
+_YES_RE = re.compile(r"^(?:ja+|jo+|jep|jap|joa|yes|yep|ok|okay|klar|mach(?:\s+(?:es|das|ruhig|mal))?|los|gerne|sicher|bitte|logo|na\s+klar|auf\s+jeden\s+fall|go)\b")
+_NO_RE = re.compile(r"^(?:nein+|ne|nee|noe|no|nope|stop+|abbrechen|abbruch|nicht|lieber\s+nicht|lass\s+(?:es|das)|doch\s+nicht|cancel)\b")
+
+
+def _norm(text: str) -> str:
+    return text.strip().lower().translate(_TR).strip(" .!?~")
+
+
+def is_yes(text: str) -> bool:
+    return bool(_YES_RE.match(_norm(text)))
+
+
+def is_no(text: str) -> bool:
+    return bool(_NO_RE.match(_norm(text)))
+
+
+def confirm_question(tool: str, args: dict, user_name: str = "Boss", character_id: str = "cat_mochi") -> str:
+    """Kurze Rueckfrage in der Stimme der Figur, bevor ein gefaehrliches Tool laeuft."""
+    user = (user_name or "").strip() or "Boss"
+    cinfo = get_character_info(character_id)
+    sound = cinfo.get("sound", "")
+    args = args if isinstance(args, dict) else {}
+    if tool == "clean_pc":
+        parts = []
+        if args.get("empty_recycle", True):
+            parts.append("den Papierkorb leeren")
+        if args.get("clean_temp", True):
+            parts.append("alte Temp-Dateien löschen")
+        what = " und ".join(parts) or "den PC aufräumen"
+    elif tool == "close_window":
+        name = str(args.get("name") or "").strip()
+        what = f"das Fenster „{name}“ schließen" if name else "das oberste Fenster schließen"
+    elif tool == "delete_file":
+        what = f"„{str(args.get('query') or 'die Datei')[:60]}“ löschen"
+    elif tool == "execute_powershell":
+        what = f"diesen PowerShell-Befehl ausführen: {str(args.get('command') or '')[:80]}"
+    else:
+        what = f"„{tool}“ ausführen"
+    return f"{sound} Soll ich wirklich {what}, {user}? Sag ja oder nein. {cinfo.get('emoji', '')}".strip()
+
+
 class AgentWorker(QObject):
     """Laeuft im QThread: Gemini (falls Key hinterlegt) -> Fallback regelbasiert -> Tools ausfuehren."""
 
@@ -349,12 +524,27 @@ class AgentWorker(QObject):
 
     MAX_STEPS = 4
 
-    def __init__(self, text: str, cfg: dict, history: list[tuple[str, str]]):
+    def __init__(self, text: str, cfg: dict, history: list[tuple[str, str]],
+                 pending: Optional[tuple[str, dict]] = None):
         super().__init__()
         self.text = text
         self.cfg = cfg
         self.history = history
+        self.pending = pending                 # (tool, args) aus der letzten Rueckfrage, falls vorhanden
+        self.new_pending: Optional[tuple[str, dict]] = None   # gesetzt, wenn jetzt eine Rueckfrage gestellt wird
         self.results: list[ToolResult] = []
+
+    @property
+    def user_name(self) -> str:
+        return str(self.cfg.get("pet", {}).get("user_name") or "").strip() or "Boss"
+
+    @property
+    def character_id(self) -> str:
+        return self.cfg.get("pet", {}).get("character") or "cat_mochi"
+
+    def _ask_confirmation(self, tool: str, args: dict) -> str:
+        self.new_pending = (tool, dict(args))
+        return confirm_question(tool, args, self.user_name, self.character_id)
 
     # -- Einstieg -----------------------------------------------------------------------
     @pyqtSlot()
@@ -374,11 +564,26 @@ class AgentWorker(QObject):
         return None
 
     def _process(self) -> tuple[bool, str, str]:
+        tools.set_context(self.user_name, self.character_id)
+
+        # Antwort auf eine offene Rueckfrage: ja -> ausfuehren, nein -> verwerfen, sonst normal weiter
+        if self.pending:
+            tool, args = self.pending
+            if is_yes(self.text):
+                res = tools.execute(tool, args)
+                self.results.append(res)
+                return res.ok, res.message, res.notify_title or ""
+            if is_no(self.text):
+                cinfo = get_character_info(self.character_id)
+                return True, f"{cinfo.get('sound', '')} Okay, lasse ich bleiben, {self.user_name}! {cinfo.get('emoji', '')}".strip(), ""
+
         llm_error = ""
         provider = self._provider()
         if provider:
             try:
                 text = self._chat_cli()
+                if self.new_pending:
+                    return True, text, ""
                 ok = all(r.ok for r in self.results) if self.results else True
                 if not text:
                     text = self.results[-1].message if self.results else "Miau? Dazu fallen mir keine Worte ein \U0001F63A"
@@ -386,11 +591,14 @@ class AgentWorker(QObject):
             except LLMError as exc:
                 llm_error = str(exc)
                 self.results.clear()
+                self.new_pending = None
                 if "api-key" in llm_error.lower():
                     return False, llm_error, ""
 
         # Offline / Fallback
-        plan = parse_offline(self.text)
+        plan = parse_offline(self.text, self.user_name, self.character_id)
+        if plan.tool in DANGEROUS_TOOLS:
+            return True, self._ask_confirmation(plan.tool, plan.args), ""
         if plan.tool:
             res = tools.execute(plan.tool, plan.args)
             self.results.append(res)
@@ -416,6 +624,7 @@ class AgentWorker(QObject):
         timeout = float(ai.get("timeout_s", 60))
         model = ai.get("model") or None
         pet_name = self.cfg.get("pet", {}).get("name", "Mochi")
+        user = self.user_name
 
         tool_specs_json = json.dumps([
             {"name": s["name"], "description": s["description"], "parameters": s["parameters"]}
@@ -426,18 +635,18 @@ class AgentWorker(QObject):
 
         for step in range(self.MAX_STEPS):
             prompt_parts = [
-                system_prompt(pet_name),
+                system_prompt(pet_name, user, self.character_id),
                 f"\nVERF\u00dcGBARE WERKZEUGE:\n{tool_specs_json}\n",
             ]
 
             if self.history:
                 prompt_parts.append("BISHERIGER GESPR\u00c4CHSVERLAUF:")
                 for r, t in self.history:
-                    role_str = "Boss" if r == "user" else pet_name
+                    role_str = user if r == "user" else pet_name
                     prompt_parts.append(f"{role_str}: {t}")
                 prompt_parts.append("")
 
-            prompt_parts.append(f"AKTUELLE NACHRICHT VOM BOSS:\n{self.text}\n")
+            prompt_parts.append(f"AKTUELLE NACHRICHT VON {user.upper()}:\n{self.text}\n")
 
             if tool_history:
                 prompt_parts.append("ERGEBNISSE BEREITS AUSGEF\u00dcHRTER WERKZEUGE DIESER RUNDE:")
@@ -475,6 +684,9 @@ class AgentWorker(QObject):
                 })
                 continue
 
+            if tool_name in DANGEROUS_TOOLS:
+                return self._ask_confirmation(tool_name, tool_args)
+
             res = self._run_tool(tool_name, tool_args)
             tool_history.append({
                 "name": tool_name,
@@ -502,6 +714,9 @@ class AgentBrain(QObject):
         self._history: list[tuple[str, str]] = []
         self._threads: set[QThread] = set()
         self._current_text = ""
+        self._worker: Optional[AgentWorker] = None
+        # (tool, args) eines gefaehrlichen Tools, das auf "ja" des Nutzers wartet; sonst None
+        self.pending_action: Optional[tuple[str, dict]] = None
 
     def record_assistant_message(self, message: str) -> None:
         """Merkt sich eine autonome Äußerung oder Rückfrage von Mochi im Gesprächsverlauf."""
@@ -512,6 +727,7 @@ class AgentBrain(QObject):
 
     def clear_history(self) -> None:
         self._history.clear()
+        self.pending_action = None
 
     @property
     def busy(self) -> bool:
@@ -524,14 +740,17 @@ class AgentBrain(QObject):
         self._busy = True
         self._current_text = text
         thread = QThread()
-        worker = AgentWorker(text, self._cfg.snapshot(), list(self._history[-18:]))
+        worker = AgentWorker(text, self._cfg.snapshot(), list(self._history[-18:]), self.pending_action)
+        self.pending_action = None          # jede Nachricht verbraucht die offene Rueckfrage
+        self._worker = worker
         worker.moveToThread(thread)
         thread._worker = worker          # Referenz halten, sonst raeumt Python den Worker vorzeitig ab
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_done)
-        worker.finished.connect(lambda *_: thread.quit())
-        thread.finished.connect(lambda: self._threads.discard(thread))
-        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        # Gebundene Methode dieses (Main-Thread-)Objekts -> Qt reiht den Aufruf in den Main-Thread ein.
+        # Lambdas liefen hier im Worker-Thread und raeumten den QThread ab, waehrend er noch lief.
+        thread.finished.connect(self._reap_threads)
         self._threads.add(thread)
         thread.start()
         self.started.emit(text)
@@ -540,10 +759,19 @@ class AgentBrain(QObject):
     @pyqtSlot(bool, str, str)
     def _on_done(self, ok: bool, message: str, notify: str) -> None:
         self._busy = False
+        if self._worker is not None:
+            self.pending_action = self._worker.new_pending
+            self._worker = None
         self._history.append(("user", self._current_text))
         self._history.append(("assistant", message))
         self._history = self._history[-24:]
         self.finished.emit(ok, message, notify)
+
+    @pyqtSlot()
+    def _reap_threads(self) -> None:
+        for t in [t for t in self._threads if t.isFinished()]:
+            self._threads.discard(t)
+            t.deleteLater()
 
     def shutdown(self, wait_ms: int = 1500) -> bool:
         """Wartet kurz auf laufende Worker. True = alle beendet."""

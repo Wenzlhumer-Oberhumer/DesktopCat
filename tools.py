@@ -11,7 +11,9 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
+import threading
 import time
 import webbrowser
 from contextlib import contextmanager
@@ -24,6 +26,9 @@ import requests
 from paths import DATA_DIR
 
 LOG_FILE = DATA_DIR / "desktop_organize_log.json"
+
+# Tools, die erst nach ausdruecklichem "ja" des Nutzers laufen duerfen (siehe agent_brain.AgentBrain.pending_action)
+DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell"}
 
 
 @dataclass
@@ -53,6 +58,27 @@ def com_scope():
         yield
     finally:
         pythoncom.CoUninitialize()
+
+
+# Anrede und Figur fuer Tool-Meldungen; wird vom Agent-Worker bzw. der UI per set_context() gesetzt.
+_ctx = {"user": "Boss", "char": "cat_mochi"}
+
+
+def set_context(user_name: str = "Boss", character_id: str = "cat_mochi") -> None:
+    _ctx["user"] = (user_name or "").strip() or "Boss"
+    _ctx["char"] = character_id or "cat_mochi"
+
+
+def _user_name() -> str:
+    return _ctx["user"]
+
+
+def _emoji() -> str:
+    try:
+        from pet_sprites import get_character_info
+        return get_character_info(_ctx["char"]).get("emoji", "🐾")
+    except Exception:
+        return "🐾"
 
 
 def desktop_dir() -> Path:
@@ -863,7 +889,7 @@ def delete_file(query: str, location: str = "desktop") -> ToolResult:
     """Sucht eine Datei (z. B. 'powerpoint', 'test.docx') am Desktop und loescht sie direkt."""
     q = (query or "").strip().lower()
     if not q:
-        raise ToolError("Welche Datei soll ich löschen, Boss? 🐾")
+        raise ToolError(f"Welche Datei soll ich löschen, {_user_name()}? 🐾")
 
     loc = (location or "desktop").lower().strip()
     home = Path.home()
@@ -898,7 +924,7 @@ def delete_file(query: str, location: str = "desktop") -> ToolResult:
 
     try:
         matched.unlink()
-        return ToolResult(True, f"Ich habe „{matched.name}“ auf deinem Desktop gelöscht, Boss! 🗑️✨", "Datei gelöscht")
+        return ToolResult(True, f"Ich habe „{matched.name}“ auf deinem Desktop gelöscht, {_user_name()}! 🗑️✨", "Datei gelöscht")
     except Exception as exc:
         raise ToolError(f"Konnte „{matched.name}“ nicht löschen: {exc}")
 
@@ -1031,7 +1057,7 @@ def inspect_screen(question: str = "") -> ToolResult:
     if top:
         top_low = top.lower()
         if "angular" in top_low:
-            return ToolResult(True, f"Schön, was du da in Angular programmierst, Boss! 🐾 Soll ich dir bei Komponenten helfen?")
+            return ToolResult(True, f"Schön, was du da in Angular programmierst, {_user_name()}! 🐾 Soll ich dir bei Komponenten helfen?")
         elif "python" in top_low or ".py" in top_low:
             return ToolResult(True, f"Du programmierst gerade fleißig in Python! 🐍🐾 Sag Bescheid, wenn ich was testen soll.")
         elif "code" in top_low or "ide" in top_low:
@@ -1040,7 +1066,305 @@ def inspect_screen(question: str = "") -> ToolResult:
             return ToolResult(True, f"Du surfst gerade im Browser („{top[:40]}“)! 🌐🐾")
         return ToolResult(True, f"Du arbeitest gerade an „{top[:50]}“! 🐾")
 
-    return ToolResult(True, "Ich hab deinen Desktop im Blick, Boss! 🐾 Alles ruhig.")
+    return ToolResult(True, f"Ich hab deinen Desktop im Blick, {_user_name()}! 🐾 Alles ruhig.")
+
+
+# ======================================================================================
+#  20) Fenster auflisten & animiert wegschieben/schliessen
+# ======================================================================================
+class _RECT(ctypes.Structure):
+    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+
+def _process_name(pid: int) -> str:
+    """Exe-Name zu einer PID (ohne psutil)."""
+    k32 = ctypes.windll.kernel32
+    k32.OpenProcess.restype = ctypes.c_void_p
+    h = k32.OpenProcess(0x1000, False, pid)      # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return ""
+    try:
+        buf = ctypes.create_unicode_buffer(520)
+        size = ctypes.c_ulong(520)
+        if k32.QueryFullProcessImageNameW(ctypes.c_void_p(h), 0, buf, ctypes.byref(size)):
+            return os.path.basename(buf.value)
+        return ""
+    finally:
+        k32.CloseHandle(ctypes.c_void_p(h))
+
+
+_IGNORE_TITLES = {
+    "Program Manager", "Settings", "GDI+ Window", "ATKOSD2", "Mochi", "WindowsAgent", "Programmumschaltung",
+    "HardwareMonitorWindow", "Windows-Eingabeerfahrung", "Eingabeanzeige", "Task-Manager",
+}
+
+
+def get_open_windows() -> list[dict]:
+    """Sichtbare Benutzerfenster (Z-Order, oberstes zuerst): [{hwnd, title, process, rect=(x, y, w, h)}]."""
+    try:
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        results: list[dict] = []
+        own_pid = os.getpid()
+
+        def enum_cb(hwnd, lparam):
+            if user32.IsWindowVisible(hwnd):
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value.strip()
+                    r = _RECT()
+                    user32.GetWindowRect(hwnd, ctypes.byref(r))
+                    w, h = r.right - r.left, r.bottom - r.top
+                    if w > 120 and h > 120 and title not in _IGNORE_TITLES:
+                        pid = wintypes.DWORD()
+                        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                        pname = _process_name(pid.value)
+                        if pid.value != own_pid and pname.lower() not in ("shellexperiencehost.exe", "textinputhost.exe"):
+                            results.append({"hwnd": hwnd, "title": title, "process": pname, "rect": (r.left, r.top, w, h)})
+            return True
+
+        user32.EnumWindows(ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(enum_cb), 0)
+        return results
+    except Exception:
+        return []
+
+
+_WINDOW_ALIASES = {
+    "browser": ["chrome", "edge", "firefox", "vivaldi", "opera", "brave"],
+    "editor": ["notepad", "editor", "unbenannt", "code"],
+    "rechner": ["calculator", "rechner", "calc"],
+    "ordner": ["datei-explorer", "explorer", "downloads", "dokumente", "desktop"],
+    "terminal": ["powershell", "cmd", "terminal"],
+}
+
+
+def close_window(name: Optional[str] = None) -> ToolResult:
+    """Schiebt ein Fenster animiert aus dem Bildschirm und schliesst es (ohne Name: das oberste Fenster)."""
+    user = _user_name()
+    user32 = ctypes.windll.user32
+    windows = get_open_windows()
+    if not windows:
+        return ToolResult(False, f"Ich sehe gerade keine offenen Fenster zum Schliessen, {user}! \U0001F43E")
+
+    target = None
+    q = (name or "").strip().lower()
+    if q:
+        candidates = [q] + _WINDOW_ALIASES.get(q, [])
+        target = next((w for w in windows if any(c in w["title"].lower() or c in w["process"].lower() for c in candidates)), None)
+        if target is None and any(k in q for k in ("dies", "aktiv", "aktuell", "oberst", "fenster", "app")):
+            target = windows[0]
+    else:
+        target = windows[0]
+    if target is None:
+        sample = ", ".join(f"„{w['title'][:25]}“" for w in windows[:4])
+        return ToolResult(False, f"Konnte kein Fenster fuer „{name}“ finden \U0001F914 Offen sind z. B.: {sample}")
+
+    hwnd, title = target["hwnd"], target["title"]
+    if user32.IsZoomed(hwnd):
+        user32.ShowWindow(hwnd, 9)               # SW_RESTORE, sonst greift SetWindowPos nicht
+        time.sleep(0.04)
+    r = _RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(r))
+    x, y, w, h = r.left, r.top, r.right - r.left, r.bottom - r.top
+    screen_w = user32.GetSystemMetrics(0)
+    dist = max(screen_w + 60, x + screen_w) - x
+    frames = 28
+    for i in range(1, frames + 1):               # beschleunigt nach rechts aus dem Bildschirm
+        user32.SetWindowPos(hwnd, 0, int(x + dist * (i / frames) ** 2.2), int(y), w, h, 0x0004 | 0x0010)
+        time.sleep(0.015)
+    user32.PostMessageW(hwnd, 0x0010, 0, 0)      # WM_CLOSE (Programme duerfen noch "Speichern?" fragen)
+    time.sleep(0.15)
+    short = title if len(title) <= 35 else f"{title[:32]}..."
+    return ToolResult(True, f"Wuuusch! „{short}“ schwungvoll aus dem Bildschirm geschoben und geschlossen! \U0001F4A8✨")
+
+
+# ======================================================================================
+#  21) Timer & Erinnerungen (threading.Timer)
+# ======================================================================================
+_active_timers: list[dict] = []
+_timer_callbacks: list[Callable[[str, int, str], None]] = []
+_timer_lock = threading.Lock()
+_timer_seq = 0
+
+
+def register_timer_callback(cb: Callable[[str, int, str], None]) -> None:
+    """cb(label, duration_s, user_name) wird im Timer-THREAD (nicht UI-Thread!) aufgerufen, wenn ein Timer ablaeuft."""
+    if cb not in _timer_callbacks:
+        _timer_callbacks.append(cb)
+
+
+def _on_timer_fire(label: str, duration_s: int, u_name: str, timer_id: int) -> None:
+    with _timer_lock:
+        _active_timers[:] = [t for t in _active_timers if t["id"] != timer_id]
+    for cb in list(_timer_callbacks):
+        try:
+            cb(label, duration_s, u_name)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Timer] Callback-Fehler: {exc}")
+
+
+def set_timer(seconds: Optional[int] = None, minutes: Optional[float] = None, label: Optional[str] = None) -> ToolResult:
+    """Stellt einen Timer/eine Erinnerung auf N Minuten und/oder Sekunden (Standard: 5 Minuten)."""
+    global _timer_seq
+    total = 0
+    for val, mult in ((minutes, 60), (seconds, 1)):
+        try:
+            total += int(float(val) * mult) if val is not None else 0
+        except (ValueError, TypeError):
+            pass
+    if total <= 0:
+        total = 300
+    total = min(total, 24 * 3600)
+    user = _user_name()
+    lbl = (label or "").strip() or "Timer"
+
+    if total >= 3600:
+        dur = f"{total // 3600} Std. {(total % 3600) // 60} Min."
+    elif total >= 60:
+        mins, secs = divmod(total, 60)
+        dur = f"{mins} Minute{'n' if mins != 1 else ''}" + (f" und {secs} Sek." if secs else "")
+    else:
+        dur = f"{total} Sekunden"
+
+    with _timer_lock:
+        _timer_seq += 1
+        t = threading.Timer(total, _on_timer_fire, args=(lbl, total, user, _timer_seq))
+        t.daemon = True
+        _active_timers.append({"id": _timer_seq, "timer": t, "label": lbl, "total_sec": total, "start_time": time.time()})
+    t.start()
+    return ToolResult(True, f"Timer fuer „{lbl}“ auf {dur} gestellt! ⏰ Ich sag dir Bescheid, {user}! {_emoji()}",
+                      notify_title="Timer gestellt ⏰")
+
+
+def list_timers(action: str = "list") -> ToolResult:
+    """Zeigt laufende Timer ('list') oder bricht alle ab ('clear')."""
+    user = _user_name()
+    with _timer_lock:
+        if action == "clear":
+            for t in _active_timers:
+                t["timer"].cancel()
+            count = len(_active_timers)
+            _active_timers.clear()
+            return ToolResult(True, f"Ich habe alle {count} laufenden Timer abgebrochen, {user}! ⏰❌")
+        snapshot = list(_active_timers)
+    if not snapshot:
+        return ToolResult(True, f"Aktuell laufen keine Timer, {user}! ⏰ Brauchst du einen?")
+    now = time.time()
+    lines = []
+    for t in snapshot:
+        rem = max(0, int(t["total_sec"] - (now - t["start_time"])))
+        left = f"{rem // 60}m {rem % 60}s" if rem >= 60 else f"{rem}s"
+        lines.append(f"• „{t['label']}“: noch ca. {left}")
+    return ToolResult(True, f"Aktive Timer fuer {user}:\n" + "\n".join(lines) + f" ⏰{_emoji()}")
+
+
+# ======================================================================================
+#  22) Wetter (wttr.in, ohne Key und gratis)
+# ======================================================================================
+def get_weather(location: Optional[str] = None) -> ToolResult:
+    """Aktuelles Wetter fuer eine Stadt (leer = Standort per IP) von wttr.in."""
+    user, emo = _user_name(), _emoji()
+    loc = (location or "").strip()
+    try:
+        resp = requests.get(f"https://wttr.in/{requests.utils.quote(loc)}", params={"format": "j1", "lang": "de"},
+                            headers={"User-Agent": "curl/8.0", "Accept": "application/json"}, timeout=6)
+        resp.raise_for_status()
+        data = resp.json()
+        cur = data["current_condition"][0]
+    except (requests.RequestException, ValueError, KeyError, IndexError):
+        return ToolResult(False, f"Das Wetter kann ich gerade nicht abrufen \U0001F327️ Hast du Internet, {user}?")
+
+    temp, feels = cur.get("temp_C", "?"), cur.get("FeelsLikeC", cur.get("temp_C", "?"))
+    desc = (cur.get("lang_de") or cur.get("weatherDesc") or [{}])[0].get("value", "Heiter")
+    city = loc or (data.get("nearest_area") or [{}])[0].get("areaName", [{}])[0].get("value", "deinem Ort")
+    try:
+        rain = max(int(h.get("chanceofrain", 0)) for h in data["weather"][0]["hourly"])
+    except (KeyError, IndexError, ValueError, TypeError):
+        rain = 0
+
+    d = desc.lower()
+    if any(k in d for k in ("gewitter", "thunder")):
+        icon, advice = "⛈️", "Achtung vor Gewittern!"
+    elif any(k in d for k in ("regen", "rain", "schauer", "nieseln")):
+        icon, advice = "\U0001F327️", "Pack lieber einen Regenschirm ein!" if rain > 40 else "Es koennte nass werden!"
+    elif any(k in d for k in ("schnee", "snow")):
+        icon, advice = "❄️", "Zieh dich warm an, es schneit!"
+    elif any(k in d for k in ("sonn", "sun", "klar", "clear")):
+        icon, advice = "☀️", "Herrliches Wetter draussen!"
+    elif any(k in d for k in ("wolk", "cloud", "bedeckt", "overcast")):
+        icon, advice = "⛅", "Gemuetliches Wetter zum Coden!"
+    else:
+        icon, advice = "\U0001F324️", "Schau mal aus dem Fenster!"
+    rain_s = f" (Regenrisiko: {rain}%)" if rain > 15 else ""
+    return ToolResult(True, f"In {city} hat es gerade {temp}°C (gefuehlt {feels}°C), {desc}{rain_s}! {icon} {advice} {emo}",
+                      notify_title=f"Wetter in {city}: {temp}°C {icon}")
+
+
+# ======================================================================================
+#  23) PC-Reinigung (Papierkorb + alte Dateien direkt in %TEMP%)
+# ======================================================================================
+TEMP_MAX_AGE_S = 24 * 3600      # nur Dateien, die mindestens einen Tag alt sind
+
+
+def clean_pc(empty_recycle: bool = True, clean_temp: bool = True) -> ToolResult:
+    """Leert den Papierkorb und loescht Dateien in %TEMP%, die aelter als 24 h sind. Sonst wird nichts angefasst."""
+    user, emo = _user_name(), _emoji()
+    actions = []
+
+    if empty_recycle:
+        try:
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                            "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
+                           capture_output=True, timeout=30)
+            actions.append("Papierkorb geleert")
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    if clean_temp:
+        temp_dir = Path(os.environ.get("TEMP", ""))
+        # Sicherheitsgurt: nur ein Ordner, der wirklich "Temp" heisst, und nie das Home-Verzeichnis
+        if temp_dir.name.lower() == "temp" and temp_dir.is_dir() and temp_dir != Path.home():
+            deleted, freed, now = 0, 0, time.time()
+            for item in temp_dir.iterdir():
+                try:
+                    if item.is_symlink() or not item.is_file():
+                        continue
+                    st = item.stat()
+                    if now - st.st_mtime > TEMP_MAX_AGE_S:
+                        item.unlink()
+                        deleted += 1
+                        freed += st.st_size
+                except OSError:
+                    continue            # gesperrt / in Benutzung -> ueberspringen
+            if deleted:
+                actions.append(f"{deleted} Temp-Dateien ({freed / 1048576:.1f} MB) bereinigt")
+
+    if not actions:
+        return ToolResult(True, f"Da gab es nichts zu tun, alles blitzsauber, {user}! ✨{emo}")
+    return ToolResult(True, f"Aufgeraeumt, {user}! \U0001F9F9 {', '.join(actions)}. {emo}", notify_title="PC aufgeraeumt \U0001F9F9")
+
+
+# ======================================================================================
+#  24) Netzwerk & IP
+# ======================================================================================
+def network_info() -> ToolResult:
+    """Zeigt PC-Name, lokale IP und ob eine Internetverbindung besteht."""
+    hostname = socket.gethostname()
+    local_ip, online = "127.0.0.1", False
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.settimeout(1.5)
+            s.connect(("8.8.8.8", 80))       # UDP: sendet nichts, ermittelt nur die Route
+            local_ip = s.getsockname()[0]
+            online = True
+    except OSError:
+        pass
+    status = "Online \U0001F310" if online else "Offline ❌"
+    return ToolResult(True, f"Netzwerk-Status ({status}) fuer {_user_name()}:\n• PC-Name: {hostname}\n"
+                            f"• Lokale IP: {local_ip}\n• Internet: {'Verbunden ✅' if online else 'Getrennt ⚠️'}",
+                      notify_title="Netzwerk-Status \U0001F310")
 
 
 # ======================================================================================
@@ -1067,9 +1391,53 @@ TOOLS: dict[str, Callable[..., ToolResult]] = {
     "read_file_content": read_file_content,
     "execute_powershell": execute_powershell,
     "inspect_screen": inspect_screen,
+    "close_window": close_window,
+    "set_timer": set_timer,
+    "list_timers": list_timers,
+    "get_weather": get_weather,
+    "clean_pc": clean_pc,
+    "network_info": network_info,
 }
 
 TOOL_SPECS: list[dict] = [
+    {
+        "name": "set_timer",
+        "description": "Stellt einen Timer, Wecker oder eine Erinnerung (z. B. '5 Minuten', '25 Minuten Pomodoro', '10 Minuten fuer Pizza'). Bei Ablauf meldet sich der Buddy mit Benachrichtigung.",
+        "parameters": {"type": "object", "properties": {
+            "minutes": {"type": "number", "description": "Dauer in Minuten (z. B. 5, 25 oder 0.5)."},
+            "seconds": {"type": "integer", "description": "Optionale zusaetzliche Sekunden."},
+            "label": {"type": "string", "description": "Anlass des Timers (z. B. 'Pause', 'Tee', 'Pomodoro')."}}},
+    },
+    {
+        "name": "list_timers",
+        "description": "Zeigt alle laufenden Timer ('list') oder bricht alle ab ('clear').",
+        "parameters": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["list", "clear"], "description": "'list' anzeigen, 'clear' abbrechen."}}},
+    },
+    {
+        "name": "get_weather",
+        "description": "Ruft das aktuelle Wetter, die Temperatur und die Regenwahrscheinlichkeit ab (aktueller Standort oder genannte Stadt).",
+        "parameters": {"type": "object", "properties": {
+            "location": {"type": "string", "description": "Optional: Stadt, z. B. 'Wien'. Leer = aktueller Standort."}}},
+    },
+    {
+        "name": "clean_pc",
+        "description": "Leert den Papierkorb und loescht alte temporaere Dateien in %TEMP% (der Nutzer wird vorher um Bestaetigung gefragt).",
+        "parameters": {"type": "object", "properties": {
+            "empty_recycle": {"type": "boolean", "description": "Papierkorb leeren (Standard: true)."},
+            "clean_temp": {"type": "boolean", "description": "Alte Temp-Dateien loeschen (Standard: true)."}}},
+    },
+    {
+        "name": "network_info",
+        "description": "Prueft die Internetverbindung und zeigt PC-Name und lokale IP-Adresse.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "close_window",
+        "description": "Schiebt ein Fenster (z. B. 'chrome', 'notepad', 'dieses Fenster') animiert aus dem Bildschirm und schliesst es (der Nutzer wird vorher um Bestaetigung gefragt).",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "Optional: App oder Fenstername. Leer = oberstes Fenster."}}},
+    },
     {
         "name": "create_file",
         "description": "Erstellt eine echte Datei (Word .docx, PowerPoint .pptx, Text .txt/.md, Code) direkt am Desktop mit Inhalt. "

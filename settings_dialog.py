@@ -6,12 +6,17 @@ import webbrowser
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider,
+    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider,
     QVBoxLayout, QWidget,
 )
 
 import gemini
 from paths import set_autostart
+
+try:
+    from pet_sprites import CHARACTERS
+except ImportError:         # alte pet_sprites ohne Charakter-Registry
+    CHARACTERS = {}
 
 STYLE = """
 QDialog { background: #26282C; }
@@ -20,6 +25,10 @@ QLabel#title { font: 600 15pt "Segoe UI"; color: #FF8FB1; }
 QLabel#section { font: 600 11pt "Segoe UI"; color: #FFB3C6; margin-top: 6px; }
 QLabel#hint { color: #8D919B; font: 9pt "Segoe UI"; }
 QLabel#status { font: 10pt "Segoe UI"; font-weight: bold; }
+QLineEdit, QComboBox { background: #33353B; color: #F2F3F5; border: 1px solid #55575F; border-radius: 8px;
+        padding: 6px 8px; font: 10pt "Segoe UI"; }
+QComboBox QAbstractItemView { background: #2B2D31; color: #F2F3F5; selection-background-color: #FF8FB1;
+        selection-color: #26282C; }
 QCheckBox { color: #F2F3F5; font: 10pt "Segoe UI"; spacing: 8px; }
 QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1px solid #55575F; background: #33353B; }
 QCheckBox::indicator:checked { background: #FF8FB1; border: 1px solid #FF8FB1; }
@@ -40,9 +49,10 @@ QPushButton#primary:hover { background: #FFA5C0; }
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, cfg, parent=None):
+    def __init__(self, cfg, parent=None, hotkey_validator=None):
         super().__init__(parent)
         self.cfg = cfg
+        self._hotkey_ok = hotkey_validator or (lambda spec: bool(spec.strip()))
 
         self.setWindowTitle("Einstellungen")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
@@ -124,6 +134,19 @@ class SettingsDialog(QDialog):
 
         form2 = QFormLayout()
         form2.setSpacing(10)
+
+        self.char_combo = QComboBox()
+        cur_char = str(cfg.get("pet.character", "cat_mochi"))
+        for cid, ci in CHARACTERS.items():
+            self.char_combo.addItem(f"{ci['emoji']}  {ci['name']} ({ci['species']})", cid)
+        self.char_combo.setCurrentIndex(max(0, self.char_combo.findData(cur_char)))
+        self.char_combo.setEnabled(bool(CHARACTERS))
+        form2.addRow("Charakter", self.char_combo)
+
+        self.user_name_edit = QLineEdit(str(cfg.get("pet.user_name", "Boss")))
+        self.user_name_edit.setPlaceholderText("Boss (Standard)")
+        form2.addRow("Dein Name / Anrede", self.user_name_edit)
+
         self.speed = QSlider(Qt.Orientation.Horizontal)
         self.speed.setRange(30, 300)
         self.speed.setValue(int(cfg.get("pet.speed", 90)))
@@ -151,12 +174,37 @@ class SettingsDialog(QDialog):
         self.auto_update = QCheckBox("Automatisch nach Updates suchen")
         self.auto_update.setChecked(bool(cfg.get("update.auto", True)))
         form2.addRow("", self.auto_update)
+
+        self.breaks = QCheckBox("Erinnerung: kurz strecken")
+        self.breaks.setChecked(bool(cfg.get("wellbeing.breaks", True)))
+        form2.addRow("", self.breaks)
+
+        self.water = QCheckBox("Erinnerung: Wasser trinken")
+        self.water.setChecked(bool(cfg.get("wellbeing.water", True)))
+        form2.addRow("", self.water)
+
+        self.break_min = QSlider(Qt.Orientation.Horizontal)
+        self.break_min.setRange(10, 180)
+        self.break_min.setValue(int(cfg.get("wellbeing.break_min", 60)))
+        self.break_min_lbl = QLabel()
+        form2.addRow("Erinnerung alle", self._with_label(self.break_min, self.break_min_lbl, " Min."))
+
+        self.battery_warn = QCheckBox("Akku-Warnung unter 15 %")
+        self.battery_warn.setChecked(bool(cfg.get("battery_warn", True)))
+        form2.addRow("", self.battery_warn)
+
+        self.night_mode = QCheckBox("Nachtmodus (23\u20137 Uhr: ruhig & m\u00fcde)")
+        self.night_mode.setChecked(bool(cfg.get("night_mode", True)))
+        form2.addRow("", self.night_mode)
+
+        self.hotkey_edit = QLineEdit(str(cfg.get("hotkey", "ctrl+alt+p")))
+        self.hotkey_edit.setPlaceholderText("z. B. ctrl+alt+p")
+        form2.addRow("Tastenk\u00fcrzel", self.hotkey_edit)
         root.addLayout(form2)
 
-        hk = QLabel(f"Tastenk\u00fcrzel zum Eingeben: {str(cfg.get('hotkey', 'ctrl+alt+p')).upper()} "
-                    "(\u00e4nderbar in config.json, Neustart n\u00f6tig)")
-        hk.setObjectName("hint")
-        root.addWidget(hk)
+        self.hotkey_hint = QLabel("Format: ctrl / alt / shift / win + Taste, z. B. ctrl+alt+p oder ctrl+shift+f5")
+        self.hotkey_hint.setObjectName("hint")
+        root.addWidget(self.hotkey_hint)
 
         # -- Dialog-Buttons -----------------------------------------------------------
         btns = QHBoxLayout()
@@ -233,6 +281,21 @@ class SettingsDialog(QDialog):
 
     def _save(self) -> None:
         c = self.cfg
+        hotkey = self.hotkey_edit.text().strip().lower()
+        if not self._hotkey_ok(hotkey):
+            self.hotkey_hint.setText("\u274c  Ung\u00fcltiges Tastenk\u00fcrzel - Beispiel: ctrl+alt+p")
+            self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
+            return
+        c.set("hotkey", hotkey)
+        char = self.char_combo.currentData()
+        if char:
+            c.set("pet.character", str(char))
+        c.set("pet.user_name", self.user_name_edit.text().strip() or "Boss")
+        c.set("wellbeing.breaks", self.breaks.isChecked())
+        c.set("wellbeing.water", self.water.isChecked())
+        c.set("wellbeing.break_min", self.break_min.value())
+        c.set("battery_warn", self.battery_warn.isChecked())
+        c.set("night_mode", self.night_mode.isChecked())
         c.set("ai.enabled", self.ai_enabled.isChecked())
         c.set("pet.speed", self.speed.value())
         c.set("pet.scale", self.scale.value() / 100.0)

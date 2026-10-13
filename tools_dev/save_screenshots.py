@@ -1,4 +1,5 @@
 """Erzeugt Screenshots der Katzen-Zustaende fuer Phase 3."""
+import os
 import sys
 from pathlib import Path
 
@@ -6,11 +7,12 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPainter, QPixmap, QColor
 from PyQt6.QtWidgets import QApplication
 
-from pet_sprites import PoseContext, compute_pose, draw_cat
+from pet_sprites import CHARACTERS, PoseContext, compute_pose, draw_cat, draw_character
 
 def render_state(state: str, t: float = 1.0) -> QPixmap:
     pix = QPixmap(160, 160)
@@ -22,6 +24,23 @@ def render_state(state: str, t: float = 1.0) -> QPixmap:
     draw_cat(p, pose)
     p.end()
     return pix
+
+def save_character_sheet(out_dir: Path):
+    """Alle Figuren (IDLE) nebeneinander auf dunklem Grund."""
+    n = len(CHARACTERS)
+    sheet = QPixmap(160 * n, 180)
+    sheet.fill(QColor("#202025"))
+    p = QPainter(sheet)
+    p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
+    for i, cid in enumerate(CHARACTERS):
+        p.save()
+        p.translate(i * 160, 10)
+        draw_character(p, compute_pose(PoseContext(key="idle", t=0.5, age=0.5)), cid)
+        p.restore()
+    p.end()
+    sheet.save(str(out_dir / "characters.png"))
+    print(f"Figuren-Sheet gespeichert: {out_dir / 'characters.png'}")
+
 
 def main():
     app = QApplication.instance() or QApplication(sys.argv)
@@ -58,6 +77,7 @@ def main():
     p.end()
     overview.save(str(out_dir / "overview.png"))
     print(f"Uebersicht gespeichert: {out_dir / 'overview.png'}")
+    save_character_sheet(out_dir)
 
 if __name__ == "__main__":
     main()

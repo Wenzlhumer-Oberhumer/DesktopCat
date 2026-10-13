@@ -4,6 +4,40 @@
 
 ---
 
+## 🆕 Neu in v2.1
+
+- **🐾 9 Charaktere zur Auswahl:** Umschalten live per Rechtsklick ➜ *Charakter* oder in den Einstellungen. Die KI-Antworten und die Offline-Antworten sprechen im Stil des gewählten Charakters.
+  | Figur | Art |
+  |---|---|
+  | **Mochi** (Standard) | Calico-Glückskatze |
+  | **Luna** | Midnight-Katze |
+  | **Hachi** | Shiba Inu |
+  | **Balu** | Golden-Welpe |
+  | **Drago** | Baby-Drache |
+  | **Byte** | Cyber-Bot |
+  | **Spooky** | Geist-Slime |
+  | **Lotti** | Rosa Axolotl |
+  | **Pip** | Kaiser-Pinguin |
+- **🗣️ Eigener Name / Anrede:** Mochi spricht dich nicht mehr fix mit „Boss“ an, sondern mit dem Namen, den du in den Einstellungen einträgst.
+- **🛠️ Neue Werkzeuge:**
+  - **Timer & Pomodoro:** Mochi erinnert dich per Tray-Benachrichtigung, wenn die Zeit um ist.
+  - **Live-Wetter:** „Wie ist das Wetter in Wien?“ über wttr.in. Ohne API-Key und kostenlos.
+  - **PC aufräumen:** leert den Papierkorb und löscht alte Temp-Dateien (mit Rückfrage).
+  - **Netzwerk- & IP-Info:** zeigt deine IP-Adressen und Netzwerkdaten.
+  - **Fenster wegschieben & schließen:** bringt Fenster aus dem Weg oder schließt sie (mit Rückfrage).
+- **🛡️ Sicherheitsabfrage:** Vor gefährlichen Aktionen (Papierkorb/Temp leeren, Fenster schließen, Datei löschen, PowerShell) fragt Mochi nach. Antworte mit **„ja“** oder **„nein“**. Ohne „ja“ passiert nichts.
+- **✨ Extras:**
+  - **Wohlfühl-Erinnerungen:** Mochi erinnert ans Strecken und Wassertrinken, in der Stimme deines Charakters. Pausiert automatisch, wenn eine Anwendung im Vollbild läuft.
+  - **Akku-Warnung:** meldet sich, wenn der Akku unter 15 % fällt und das Gerät nicht am Netzteil hängt.
+  - **Nachtmodus (23–7 Uhr):** Mochi schläft öfter und ruft seltener dazwischen.
+  - **Spielmodus „Fang die Maus“:** Mochi läuft 15 Sekunden lang deinem Mauszeiger hinterher.
+  - **„Leckerli geben“:** Herzchen und ein Spruch, dazu ein Zähler („Schon 12 Leckerli bekommen!“).
+  - **Hotkey änderbar:** der globale Hotkey (Standard `Strg + Alt + P`) lässt sich in den Einstellungen umstellen.
+- **💸 Alles bleibt kostenlos:** Keine kostenpflichtigen APIs. Gemini läuft wie bisher mit dem eigenen Gratis-Key, Wetter über wttr.in ohne Schlüssel.
+- **📝 Status:** v2.1 ist im Entwicklungsstand. Die Abnahme-Checkliste steht in `ref/plan/08_V2_1.md`.
+
+---
+
 ## ✨ Features
 
 - **🐾 100 % Transparentes Always-on-Top Fenster:**
@@ -35,7 +69,7 @@
 
 - **💬 Elegante Dark-Mode UI & Reiches Kontextmenü:**
   - Schwebende Sprechblase mit animiertem Fade-In/Fade-Out und Pfeil, der auf Mochis Kopf zeigt.
-  - Schlanke Eingabeleiste ("Was soll ich tun, Boss? 🐾"): Öffnet sich per **Doppelklick**, per globalem Hotkey (**`Strg + Alt + P`**), über das Tray-Icon oder Rechtsklick-Menü.
+  - Schlanke Eingabeleiste ("Was soll ich tun, Boss? 🐾" – „Boss“ wird durch deinen eingestellten Namen ersetzt): Öffnet sich per **Doppelklick**, per globalem Hotkey (**`Strg + Alt + P`**), über das Tray-Icon oder Rechtsklick-Menü.
   - Klick auf die Sprechblase öffnet direkt den Antwort-Modus oder installiert anstehende Updates.
 
 - **🤖 Gemini-KI mit kostenlosem Key in 3 Klicks:**
@@ -83,7 +117,10 @@
 | **Größe ändern (Zoom)** | **`Strg + Mausrad`** oder **`Shift + Mausrad`** direkt über dem Pet |
 | **Hochheben / Werfen** | Mit linker Maustaste ziehen und loslassen |
 | **Schnell-Aktionen** | Rechtsklick ➜ *✨ Tricks & Spaß* oder *⚡ Schnell-Tools* |
-| **Einstellungen** | Rechtsklick ➜ *Einstellungen* (Gemini-Key, Verhalten, Autostart) |
+| **Charakter wechseln** | Rechtsklick ➜ *Charakter* (oder in den Einstellungen) |
+| **Leckerli geben** | Rechtsklick ➜ *Leckerli geben* |
+| **Fang die Maus** | Rechtsklick ➜ *Spielmodus* (Figur läuft 15 s dem Mauszeiger nach) |
+| **Einstellungen** | Rechtsklick ➜ *Einstellungen* (Gemini-Key, Charakter, Name, Hotkey, Erinnerungen, Autostart) |
 | **Beenden** | Rechtsklick ➜ *Beenden* |
 
 ---
@@ -129,7 +166,13 @@ Das Skript:
 
 ---
 
+## 🙏 Credits
+
+Die Charakter-Designs, die Persona-Texte und die Werkzeuge Timer, Wetter, PC aufräumen, Netzwerk-Info und Fenster wegschieben stammen aus dem Projekt **WindowsCat** von **Stefan Wenzlhumer** (Repo: `Wenzlhumer-Oberhumer/WindowsCat`) und wurden in Mochi v2.1 übernommen. Vielen Dank dafür!
+
+---
+
 ## 📄 Lizenz & Third-Party
 
 Mochi steht unter der **GNU General Public License v3.0 (GPLv3)**, da es die PyQt6-Bibliothek nutzt.
-Detaillierte Lizenzhinweise zu allen Drittanbieter-Komponenten (PyQt6, Pillow, pywin32, docx, pptx) finden sich in `THIRD_PARTY_LICENSES.txt`.
+Detaillierte Lizenzhinweise zu allen Drittanbieter-Komponenten (PyQt6, Pillow, pywin32, docx, pptx, wttr.in) finden sich in `THIRD_PARTY_LICENSES.txt`.

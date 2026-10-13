@@ -18,7 +18,7 @@ from paths import DATA_DIR
 BASE = 160.0    # logische Zeichenflaeche (wird mit Fenster-Skalierung gestreckt)
 FLOOR = 148.0   # y-Position des Bodens in der Zeichenflaeche
 
-STATE_KEYS = ["idle", "walk_right", "walk_left", "dragged", "falling", "working", "success", "sleep", "sad", "dance", "cool"]
+STATE_KEYS = ["idle", "walk_right", "walk_left", "dragged", "falling", "working", "success", "sleep", "sad", "dance", "cool", "push"]
 SPRITE_EXTS = (".gif", ".png", ".webp", ".apng")
 
 
@@ -189,6 +189,8 @@ class Pose:
     glint: Optional[float] = None
     sweat: bool = False
     tear: Optional[float] = None
+    push_power: float = 0.0
+    t: float = 0.0
 
 
 
@@ -369,6 +371,24 @@ def compute_pose(c: PoseContext) -> Pose:
         p.ear_r = 6.0
         p.glint = t
         p.look = (0.5, 0.0)
+
+    elif k == "push":
+        # Kraftvolles Schieben / Stemmen gegen das Fenster!
+        p.dx = math.sin(t * 36) * 1.8       # Anstrengungs-Vibration
+        p.rot = 8.5                          # Kraftvoll nach vorne geneigt
+        p.head_dx = 6.0
+        p.head_rot = 4.0
+        p.sy = 0.93                          # Geduckte Kraft-Haltung
+        p.sx = 1.05
+        p.paws_up = True                     # Pfoten / Hände nach vorne ausgestreckt
+        p.eyes = "work"                      # Entschlossener Fokus-Blick
+        p.mouth = "o"                        # Kraftvoller Mund
+        p.sweat = True                       # Schweißtropfen vor Anstrengung
+        p.tail = math.sin(t * 14) * 0.4
+        p.look = (1.0, 0.0)                  # Blick nach vorn auf das Fenster
+        p.push_power = 1.0
+
+    p.t = t
 
     # Klick-Reaktion: huepft, Herzchen-Augen, laechelt, schnurrt (Vibration)
     if c.happy:
@@ -795,7 +815,59 @@ def _draw_effects(p: QPainter, pose: Pose):
             p.setPen(_pen(QColor("#FFFFFF"), 1.2))
             p.setBrush(QColor("#FFF4A3"))
             p.drawPath(_star_path(112, 60, 5.5 * glint_scale))
+    if getattr(pose, "push_power", 0.0) > 0.1:
+        p.save()
+        p.setPen(_pen(QColor(140, 190, 255, 210), 2.2))
+        for ox, oy, l in [(122, 106, 16), (128, 115, 22), (123, 125, 14)]:
+            p.drawLine(QPointF(ox, oy), QPointF(ox + l, oy))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(220, 210, 195, 150))
+        p.drawEllipse(QPointF(46, FLOOR - 5), 7, 5)
+        p.drawEllipse(QPointF(38, FLOOR - 3), 5, 4)
+        p.restore()
 
+
+def _draw_shadow(p: QPainter, pose: Pose, hover_offset: float = 0.0, width: float = 74.0):
+    if pose.shadow > 0.02:
+        p.setPen(Qt.PenStyle.NoPen)
+        alpha = int(48 * pose.shadow)
+        if hover_offset > 0:
+            alpha = int(alpha * max(0.2, 1.0 - hover_offset / 30.0))
+        p.setBrush(QColor(50, 25, 20, alpha))
+        w = width * (0.75 + 0.25 * pose.shadow)
+        p.drawEllipse(QRectF(80 - w / 2, FLOOR - 4.5, w, 8.5))
+
+
+def _draw_laptop(p: QPainter, pose: Pose, paw_draw_fn=None):
+    if not pose.laptop:
+        return
+    lid = QRectF(47, 113, 66, 29)
+    p.setPen(_pen(QColor("#4A4E5A"), 2.4))
+    p.setBrush(QColor("#D8DDE6"))
+    p.drawRoundedRect(lid, 6, 6)
+    glow = 0.5 + 0.5 * math.sin(pose.typing * 0.35)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(255, int(150 + 60 * glow), int(185 + 40 * glow)))
+    p.drawEllipse(QPointF(80, 128), 5.2, 5.2)
+    p.setPen(_pen(QColor("#4A4E5A"), 2.2))
+    p.setBrush(QColor("#B7BECB"))
+    p.drawRoundedRect(QRectF(41, 141, 78, 7), 3.5, 3.5)
+    up_l = max(0.0, math.sin(pose.typing)) * 4
+    up_r = max(0.0, -math.sin(pose.typing)) * 4
+    if paw_draw_fn:
+        paw_draw_fn(p, 66, 112 - up_l, 0)
+        paw_draw_fn(p, 94, 112 - up_r, 0)
+    else:
+        _paw(p, 66, 112 - up_l, 0)
+        _paw(p, 94, 112 - up_r, 0)
+
+
+# ======================================================================================
+#  1) Katze Mochi (Ginger Tabby Katze)
+# ======================================================================================
+def draw_cat_mochi(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
 
 
 def draw_cat(p: QPainter, pose: Pose):
@@ -900,7 +972,1599 @@ def draw_cat(p: QPainter, pose: Pose):
     _draw_effects(p, pose)
 
 
-def render_icon(size: int = 64) -> QPixmap:
+
+LUNA_BLACK = QColor("#22242D")
+LUNA_LIGHT = QColor("#363A48")
+LUNA_OUTLINE = QColor("#121318")
+LUNA_WHITE = QColor("#F8F9FA")
+LUNA_EYE_TOP = QColor("#10AC84")
+LUNA_EYE_BOT = QColor("#2ED573")
+LUNA_RIBBON = QColor("#6C5CE7")
+LUNA_MOON = QColor("#E0F2FE")
+
+def _luna_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(LUNA_OUTLINE, 2.2))
+    p.setBrush(LUNA_WHITE)
+    p.drawEllipse(QRectF(-8.5, -6.5, 17, 13))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#FDA7DF"))
+    p.drawEllipse(QRectF(-3, -0.5, 6, 4.5))
+    for dx in (-4.2, 0, 4.2):
+        p.drawEllipse(QRectF(dx - 1.1, -4.2 if dx == 0 else -3.6, 2.2, 2.2))
+    p.restore()
+
+
+def _draw_luna_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: int):
+    lx, ly = look
+    if mode in ("open", "wide", "sad", "work"):
+        rx, ry = 8.4, 10.4
+        if mode == "wide":
+            rx, ry = 9.6, 11.8
+        elif mode == "work":
+            ry = 8.6
+        ex, ey = cx + lx * 2.6, cy + ly * 2.4
+        grad = QLinearGradient(ex, ey - ry, ex, ey + ry)
+        grad.setColorAt(0, LUNA_EYE_TOP)
+        grad.setColorAt(1, LUNA_EYE_BOT)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(grad))
+        p.drawEllipse(QRectF(ex - rx, ey - ry, rx * 2, ry * 2))
+        p.setBrush(QColor("white"))
+        big = 3.6 if mode != "wide" else 4.2
+        p.drawEllipse(QPointF(ex - 2.7 + lx * 0.8, ey - ry * 0.38), big, big)
+        p.drawEllipse(QPointF(ex + 3.2 + lx * 0.4, ey + ry * 0.36), 1.8, 1.8)
+        if mode == "sad":
+            p.setPen(_pen(LUNA_OUTLINE, 2.4))
+            inner = -side
+            p.drawLine(QPointF(ex + inner * -9, ey - 12.5), QPointF(ex + inner * 7.5, ey - 17))
+    elif mode == "blink":
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(LUNA_EYE_TOP)
+        p.drawEllipse(QRectF(cx - 8.4, cy + 2.5, 16.8, 3.0))
+    elif mode == "sleep":
+        p.setPen(_pen(LUNA_EYE_TOP, 2.9))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(cx - 8, cy - 6, 16, 11), 180 * 16, 180 * 16)
+    elif mode == "happy":
+        p.setPen(_pen(LUNA_EYE_BOT, 3.1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(cx - 8, cy - 4, 16, 13), 0, 180 * 16)
+    elif mode == "heart":
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#2ED573"))
+        p.drawPath(_heart_path(cx, cy - 1.5, 4.2))
+        p.setBrush(QColor(255, 255, 255, 210))
+        p.drawEllipse(QPointF(cx - 1.6, cy - 3.2), 1.4, 1.4)
+
+
+def _draw_luna_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # Ohren
+    for sign, rot in ((-1, pose.ear_l), (1, pose.ear_r)):
+        bx, by = sign * 30, -22
+        p.save()
+        p.translate(bx, by)
+        p.rotate(rot)
+        p.translate(-bx, -by)
+        outer = QPolygonF([QPointF(sign * 43, -11), QPointF(sign * 38, -51), QPointF(sign * 9, -31)])
+        inner = QPolygonF([QPointF(sign * 37, -17), QPointF(sign * 34.5, -42), QPointF(sign * 17, -29)])
+        p.setPen(_pen(LUNA_OUTLINE, 2.6))
+        p.setBrush(LUNA_BLACK)
+        p.drawPolygon(outer)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#484B5B"))
+        p.drawPolygon(inner)
+        p.restore()
+
+    # Kopfrundung
+    grad = QRadialGradient(QPointF(-12, -20), 72)
+    grad.setColorAt(0, LUNA_LIGHT)
+    grad.setColorAt(1, LUNA_BLACK)
+    p.setPen(_pen(LUNA_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawEllipse(QRectF(-46, -37, 92, 74))
+
+    # Weisse Schnauzenpartie
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(LUNA_WHITE)
+    p.drawEllipse(QRectF(-14, 7, 28, 18))
+
+    # Wangenroete
+    if pose.blush > 0:
+        p.setBrush(QColor(255, 110, 160, int(_clamp(pose.blush, 0, 1) * 140)))
+        for s in (-1, 1):
+            p.drawEllipse(QRectF(s * 31 - 8.5, 10.5, 17, 10))
+
+    # Feine Schnurrhaare
+    p.setPen(_pen(QColor(180, 190, 205, 160), 1.5))
+    for s in (-1, 1):
+        for (y0, x1, y1) in ((13, 54, 8), (18, 56, 18), (23, 53, 28)):
+            p.drawLine(QPointF(s * 41, y0), QPointF(s * x1, y1))
+
+    # Augen
+    for s in (-1, 1):
+        _draw_luna_eye(p, s * 19, 4, pose.eyes, pose.look, s)
+
+    # Brillen
+    if pose.glasses:
+        p.setBrush(QColor(190, 225, 255, 70))
+        p.setPen(_pen(QColor("#9BA4B5"), 2.4))
+        for s in (-1, 1):
+            p.drawEllipse(QPointF(s * 19, 4), 14.5, 14.5)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawLine(QPointF(-4.6, 2), QPointF(4.6, 2))
+        p.drawLine(QPointF(-33.3, 0), QPointF(-45, -3))
+        p.drawLine(QPointF(33.3, 0), QPointF(45, -3))
+
+    if pose.sunglasses:
+        p.save()
+        p.setPen(_pen(QColor("#000000"), 2.6))
+        grad_sg = QLinearGradient(0, -6, 0, 16)
+        grad_sg.setColorAt(0, QColor("#1D1F26"))
+        grad_sg.setColorAt(1, QColor("#363B48"))
+        p.setBrush(QBrush(grad_sg))
+        for s in (-1, 1):
+            glass = QPolygonF([QPointF(s * 7, -2), QPointF(s * 33, -2), QPointF(s * 31, 14), QPointF(s * 10, 15)])
+            p.drawPolygon(glass)
+            p.setPen(_pen(QColor(255, 255, 255, 130), 1.8))
+            p.drawLine(QPointF(s * 14, 2), QPointF(s * 25, 2))
+            p.setPen(_pen(QColor("#000000"), 2.6))
+        p.setPen(_pen(QColor("#DFE6E9"), 2.4))
+        p.drawLine(QPointF(-8, 1), QPointF(8, 1))
+        p.setPen(_pen(QColor("#DFE6E9"), 2.0))
+        p.drawLine(QPointF(-33, 1), QPointF(-44, -3))
+        p.drawLine(QPointF(33, 1), QPointF(44, -3))
+        p.restore()
+
+    # Nase
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#E84393"))
+    p.drawPolygon(QPolygonF([QPointF(-3.4, 8.6), QPointF(3.4, 8.6), QPointF(0, 12.6)]))
+
+    # Mund
+    m = pose.mouth
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    if m == "w":
+        p.setPen(_pen(LUNA_OUTLINE, 1.9))
+        p.drawLine(QPointF(0, 12.8), QPointF(0, 14.4))
+        p.drawArc(QRectF(-8, 11.6, 8, 6.4), 180 * 16, 180 * 16)
+        p.drawArc(QRectF(0, 11.6, 8, 6.4), 180 * 16, 180 * 16)
+    elif m == "smile":
+        path = QPainterPath(QPointF(-7.5, 13.6))
+        path.cubicTo(QPointF(-6, 23.5), QPointF(6, 23.5), QPointF(7.5, 13.6))
+        path.closeSubpath()
+        p.setPen(_pen(LUNA_OUTLINE, 1.8))
+        p.setBrush(MOUTH)
+        p.drawPath(path)
+    elif m == "o":
+        p.setPen(_pen(LUNA_OUTLINE, 1.7))
+        p.setBrush(MOUTH)
+        p.drawEllipse(QPointF(0, 18), 3.3, 4.4)
+    elif m == "sad":
+        p.setPen(_pen(LUNA_OUTLINE, 1.9))
+        p.drawLine(QPointF(0, 12.8), QPointF(0, 15))
+        p.drawArc(QRectF(-5.5, 16.5, 11, 7), 0, 180 * 16)
+
+    p.restore()
+
+
+def draw_cat_luna(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Schwanz
+    if not pose.tail_curl:
+        a = pose.tail
+        path = QPainterPath(QPointF(58, 132))
+        path.cubicTo(QPointF(24, 140), QPointF(6 - 8 * a, 104), QPointF(26 - 13 * a, 72 - 8 * abs(a)))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(_pen(LUNA_OUTLINE, 14.5))
+        p.drawPath(path)
+        p.setPen(_pen(LUNA_BLACK, 10.5))
+        p.drawPath(path)
+        end = path.pointAtPercent(1.0)
+        p.setPen(_pen(LUNA_OUTLINE, 2.2))
+        p.setBrush(LUNA_WHITE)
+        p.drawEllipse(end, 5.6, 5.6)
+
+    # Koerper
+    p.setPen(_pen(LUNA_OUTLINE, 2.6))
+    p.setBrush(LUNA_BLACK)
+    p.drawEllipse(QRectF(47, 100, 66, 47.5))
+    # Weisses Tuxedo-Lätzchen
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(LUNA_WHITE)
+    tux = QPainterPath(QPointF(66, 105))
+    tux.lineTo(94, 105)
+    tux.quadTo(QPointF(92, 135), QPointF(80, 142))
+    tux.quadTo(QPointF(68, 135), QPointF(66, 105))
+    p.drawPath(tux)
+
+    # Pfoetchen
+    if not pose.laptop:
+        if pose.paws_up:
+            _luna_paw(p, 44, 100, -35)
+            _luna_paw(p, 116, 100, 35)
+        else:
+            _luna_paw(p, 65, 143 - pose.paw_l, 0)
+            _luna_paw(p, 95, 143 - pose.paw_r, 0)
+
+    # Violettes Band + Silber-Mondsichel
+    collar = QPainterPath(QPointF(53, 107))
+    collar.quadTo(QPointF(80, 129), QPointF(107, 107))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(LUNA_OUTLINE, 8.0))
+    p.drawPath(collar)
+    p.setPen(_pen(LUNA_RIBBON, 5.0))
+    p.drawPath(collar)
+
+    # Mondsichel-Amulett
+    bx = 80 + pose.bell
+    p.setPen(_pen(LUNA_OUTLINE, 1.4))
+    p.setBrush(LUNA_MOON)
+    moon = QPainterPath(QPointF(bx + 4.5, 118))
+    moon.arcTo(QRectF(bx - 5.5, 118, 11, 11), 0, 360)
+    cut = QPainterPath(QPointF(bx + 7.5, 117))
+    cut.arcTo(QRectF(bx - 3.5, 117, 9.5, 9.5), 0, 360)
+    p.drawPath(moon.subtracted(cut))
+
+    _draw_luna_head(p, pose)
+    _draw_laptop(p, pose, _luna_paw)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  3) Hund Hachi (Shiba Inu)
+# ======================================================================================
+SHIBA_FUR = QColor("#E59850")
+SHIBA_LIGHT = QColor("#F8B878")
+SHIBA_OUTLINE = QColor("#6B3E26")
+SHIBA_CREAM = QColor("#FFF5EB")
+SHIBA_BANDANA = QColor("#EB4D4B")
+
+def _shiba_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(SHIBA_OUTLINE, 2.2))
+    p.setBrush(SHIBA_CREAM)
+    p.drawEllipse(QRectF(-8.5, -6.5, 17, 13))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#FFAAA6"))
+    p.drawEllipse(QRectF(-3, -0.5, 6, 4.5))
+    for dx in (-4.2, 0, 4.2):
+        p.drawEllipse(QRectF(dx - 1.1, -4.2 if dx == 0 else -3.6, 2.2, 2.2))
+    p.restore()
+
+
+def _draw_shiba_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # Aufrechte Shiba-Dreiecksohren mit Plüsch
+    for sign, rot in ((-1, pose.ear_l), (1, pose.ear_r)):
+        bx, by = sign * 28, -24
+        p.save()
+        p.translate(bx, by)
+        p.rotate(rot)
+        p.translate(-bx, -by)
+        outer = QPolygonF([QPointF(sign * 42, -9), QPointF(sign * 35, -49), QPointF(sign * 11, -30)])
+        inner = QPolygonF([QPointF(sign * 36, -15), QPointF(sign * 32, -41), QPointF(sign * 18, -28)])
+        p.setPen(_pen(SHIBA_OUTLINE, 2.6))
+        p.setBrush(SHIBA_FUR)
+        p.drawPolygon(outer)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(SHIBA_CREAM)
+        p.drawPolygon(inner)
+        p.restore()
+
+    # Kopf
+    grad = QRadialGradient(QPointF(-12, -20), 72)
+    grad.setColorAt(0, SHIBA_LIGHT)
+    grad.setColorAt(1, SHIBA_FUR)
+    p.setPen(_pen(SHIBA_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawEllipse(QRectF(-47, -37, 94, 75))
+
+    # Urajiro Backen & Schnauze (helles Fell)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(SHIBA_CREAM)
+    for s in (-1, 1):
+        p.drawEllipse(QRectF(s * 25 - 14, 2, 28, 25))
+    p.drawEllipse(QRectF(-17, 5, 34, 23))
+
+    # Ikonische Shiba-Augenbrauenpunkte!
+    for s in (-1, 1):
+        p.drawEllipse(QPointF(s * 18, -13), 4.2, 4.2)
+
+    # Wangenroete
+    if pose.blush > 0:
+        p.setBrush(QColor(255, 120, 130, int(_clamp(pose.blush, 0, 1) * 150)))
+        for s in (-1, 1):
+            p.drawEllipse(QRectF(s * 31 - 8.5, 12, 17, 9))
+
+    # Augen
+    for s in (-1, 1):
+        _draw_eye(p, s * 19, 4, pose.eyes, pose.look, s)
+
+    # Brillen / Zubehoer
+    if pose.sunglasses:
+        p.save()
+        p.setPen(_pen(QColor("#18191D"), 2.6))
+        for s in (-1, 1):
+            glass = QPolygonF([QPointF(s * 7, -2), QPointF(s * 33, -2), QPointF(s * 31, 14), QPointF(s * 10, 15)])
+            p.setBrush(QColor("#242730"))
+            p.drawPolygon(glass)
+        p.setPen(_pen(QColor("#FFD24D"), 2.4))
+        p.drawLine(QPointF(-8, 1), QPointF(8, 1))
+        p.restore()
+
+    # Schwarze Hundeschnauze
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#261C14"))
+    p.drawPolygon(QPolygonF([QPointF(-4.2, 8.5), QPointF(4.2, 8.5), QPointF(0, 13.5)]))
+
+    # Mund & Zunge
+    m = pose.mouth
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(SHIBA_OUTLINE, 2.0))
+    p.drawLine(QPointF(0, 13.5), QPointF(0, 15.5))
+    p.drawArc(QRectF(-9, 12.5, 9, 7), 180 * 16, 180 * 16)
+    p.drawArc(QRectF(0, 12.5, 9, 7), 180 * 16, 180 * 16)
+
+    # Hechelnde Zunge bei Freude oder Tanz
+    if pose.mouth == "smile" or pose.blush > 0.8:
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#FF6B8B"))
+        p.drawRoundedRect(QRectF(-4, 18.5, 8, 8), 4, 4)
+
+    p.restore()
+
+
+def draw_dog_shiba(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Eingerollter Ringelschwanz (Shiba Curl Tail!)
+    tail_rot = pose.tail * 15
+    p.save()
+    p.translate(46, 118)
+    p.rotate(tail_rot)
+    curl = QPainterPath(QPointF(0, 0))
+    curl.cubicTo(QPointF(-18, -12), QPointF(-22, -32), QPointF(-4, -40))
+    curl.cubicTo(QPointF(14, -46), QPointF(24, -26), QPointF(8, -14))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(SHIBA_OUTLINE, 14.0))
+    p.drawPath(curl)
+    p.setPen(_pen(SHIBA_FUR, 10.0))
+    p.drawPath(curl)
+    p.setPen(_pen(SHIBA_CREAM, 6.0))
+    p.drawPath(curl)
+    p.restore()
+
+    # Koerper
+    p.setPen(_pen(SHIBA_OUTLINE, 2.6))
+    p.setBrush(SHIBA_FUR)
+    p.drawEllipse(QRectF(47, 100, 66, 47.5))
+    # Heller Bauch
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(SHIBA_CREAM)
+    p.drawEllipse(QRectF(60, 113, 40, 31))
+
+    # Pfoetchen
+    if not pose.laptop:
+        if pose.paws_up:
+            _shiba_paw(p, 44, 100, -35)
+            _shiba_paw(p, 116, 100, 35)
+        else:
+            _shiba_paw(p, 65, 143 - pose.paw_l, 0)
+            _shiba_paw(p, 95, 143 - pose.paw_r, 0)
+
+    # Rotes Bandana / Halstuch mit Knoten
+    band = QPainterPath(QPointF(52, 106))
+    band.quadTo(QPointF(80, 126), QPointF(108, 106))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(SHIBA_OUTLINE, 8.5))
+    p.drawPath(band)
+    p.setPen(_pen(SHIBA_BANDANA, 5.5))
+    p.drawPath(band)
+    # Bandana-Dreiecksspitze vorn
+    triangle = QPolygonF([QPointF(74, 122), QPointF(86, 122), QPointF(80, 133)])
+    p.setPen(_pen(SHIBA_OUTLINE, 1.8))
+    p.setBrush(SHIBA_BANDANA)
+    p.drawPolygon(triangle)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(SHIBA_CREAM)
+    p.drawEllipse(QPointF(80, 125), 2.2, 2.2)
+
+    _draw_shiba_head(p, pose)
+    _draw_laptop(p, pose, _shiba_paw)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  4) Hund Balu (Golden Welpe mit Schlappohren)
+# ======================================================================================
+BALU_FUR = QColor("#F5C77E")
+BALU_LIGHT = QColor("#FFDE9E")
+BALU_OUTLINE = QColor("#6D4322")
+BALU_CREAM = QColor("#FFF8EE")
+BALU_COLLAR = QColor("#2BCBBA")
+
+def _balu_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(BALU_OUTLINE, 2.2))
+    p.setBrush(BALU_CREAM)
+    p.drawEllipse(QRectF(-8.5, -6.5, 17, 13))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#FFAAA6"))
+    p.drawEllipse(QRectF(-3, -0.5, 6, 4.5))
+    for dx in (-4.2, 0, 4.2):
+        p.drawEllipse(QRectF(dx - 1.1, -4.2 if dx == 0 else -3.6, 2.2, 2.2))
+    p.restore()
+
+
+def _draw_balu_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # Kopfrundung
+    grad = QRadialGradient(QPointF(-12, -20), 72)
+    grad.setColorAt(0, BALU_LIGHT)
+    grad.setColorAt(1, BALU_FUR)
+    p.setPen(_pen(BALU_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawEllipse(QRectF(-46, -37, 92, 74))
+
+    # Suess wippende Schlappohren (Drop-Ears)
+    for sign, rot in ((-1, pose.ear_l), (1, pose.ear_r)):
+        bx, by = sign * 35, -12
+        p.save()
+        p.translate(bx, by)
+        p.rotate(rot * 1.3)
+        p.translate(-bx, -by)
+        ear = QPainterPath(QPointF(sign * 28, -20))
+        ear.cubicTo(QPointF(sign * 54, -14), QPointF(sign * 56, 24), QPointF(sign * 36, 28))
+        ear.cubicTo(QPointF(sign * 22, 26), QPointF(sign * 24, 0), QPointF(sign * 28, -20))
+        p.setPen(_pen(BALU_OUTLINE, 2.6))
+        p.setBrush(BALU_FUR)
+        p.drawPath(ear)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#E8B168"))
+        p.drawEllipse(QRectF(sign * 38 - 6, 2, 12, 18))
+        p.restore()
+
+    # Schnauzenpartie
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(BALU_CREAM)
+    p.drawEllipse(QRectF(-18, 5, 36, 22))
+
+    # Wangenroete
+    if pose.blush > 0:
+        p.setBrush(QColor(255, 130, 140, int(_clamp(pose.blush, 0, 1) * 150)))
+        for s in (-1, 1):
+            p.drawEllipse(QRectF(s * 31 - 8.5, 11, 17, 10))
+
+    # Augen
+    for s in (-1, 1):
+        _draw_eye(p, s * 19, 4, pose.eyes, pose.look, s)
+
+    # Knopf-Nase
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#382314"))
+    p.drawEllipse(QRectF(-4.5, 8.0, 9, 7))
+    p.setBrush(QColor(255, 255, 255, 180))
+    p.drawEllipse(QPointF(-1.5, 9.5), 1.6, 1.3)
+
+    # Mund
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(BALU_OUTLINE, 2.0))
+    p.drawLine(QPointF(0, 15), QPointF(0, 17))
+    p.drawArc(QRectF(-8.5, 14, 8.5, 6.5), 180 * 16, 180 * 16)
+    p.drawArc(QRectF(0, 14, 8.5, 6.5), 180 * 16, 180 * 16)
+
+    # Froehliche Zunge
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#FF6B8B"))
+    p.drawRoundedRect(QRectF(-3.8, 19, 7.6, 7.5), 3.8, 3.8)
+
+    p.restore()
+
+
+def draw_dog_balu(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Wedelnder Welpen-Schwanz
+    wag = math.sin(pose.t * 16) * 0.9 if pose.tail == 0 else pose.tail
+    tail_path = QPainterPath(QPointF(56, 134))
+    tail_path.cubicTo(QPointF(26, 142), QPointF(12 - 10 * wag, 108), QPointF(20 - 14 * wag, 84))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(BALU_OUTLINE, 14.0))
+    p.drawPath(tail_path)
+    p.setPen(_pen(BALU_FUR, 10.0))
+    p.drawPath(tail_path)
+    tip = tail_path.pointAtPercent(1.0)
+    p.setPen(_pen(BALU_OUTLINE, 2.0))
+    p.setBrush(BALU_CREAM)
+    p.drawEllipse(tip, 5.5, 5.5)
+
+    # Koerper
+    p.setPen(_pen(BALU_OUTLINE, 2.6))
+    p.setBrush(BALU_FUR)
+    p.drawEllipse(QRectF(47, 100, 66, 47.5))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(BALU_CREAM)
+    p.drawEllipse(QRectF(61, 114, 38, 30))
+
+    # Pfoetchen
+    if not pose.laptop:
+        if pose.paws_up:
+            _balu_paw(p, 44, 100, -35)
+            _balu_paw(p, 116, 100, 35)
+        else:
+            _balu_paw(p, 65, 143 - pose.paw_l, 0)
+            _balu_paw(p, 95, 143 - pose.paw_r, 0)
+
+    # Tuerkises Halsband + Goldene Hundemarke
+    collar = QPainterPath(QPointF(53, 107))
+    collar.quadTo(QPointF(80, 129), QPointF(107, 107))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(BALU_OUTLINE, 8.2))
+    p.drawPath(collar)
+    p.setPen(_pen(BALU_COLLAR, 5.0))
+    p.drawPath(collar)
+    bx = 80 + pose.bell
+    p.setPen(_pen(BALU_OUTLINE, 1.8))
+    p.setBrush(QColor("#FFD32A"))
+    p.drawEllipse(QPointF(bx, 122), 5.5, 5.5)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#6D4322"))
+    p.drawEllipse(QPointF(bx, 122), 1.8, 1.8)
+
+    _draw_balu_head(p, pose)
+    _draw_laptop(p, pose, _balu_paw)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  5) Fiktive Figur 1: Drago (Baby-Drache mit Fluegeln & Hoernern)
+# ======================================================================================
+DRAGO_GREEN = QColor("#1ABC9C")
+DRAGO_LIGHT = QColor("#2ECC71")
+DRAGO_OUTLINE = QColor("#0E6251")
+DRAGO_BELLY = QColor("#FFEAA7")
+DRAGO_HORN = QColor("#F1C40F")
+DRAGO_WING = QColor("#A3E4D7")
+
+def _drago_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(DRAGO_OUTLINE, 2.2))
+    p.setBrush(DRAGO_GREEN)
+    p.drawEllipse(QRectF(-8.5, -6.5, 17, 13))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(DRAGO_HORN)
+    for dx in (-4.2, 0, 4.2):
+        p.drawPolygon(QPolygonF([QPointF(dx - 1.5, -3.5), QPointF(dx + 1.5, -3.5), QPointF(dx, -7.0)]))
+    p.restore()
+
+
+def _draw_drago_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # Goldene Drachenhoerner
+    for sign in (-1, 1):
+        horn = QPainterPath(QPointF(sign * 26, -26))
+        horn.quadTo(QPointF(sign * 36, -56), QPointF(sign * 46, -48))
+        horn.quadTo(QPointF(sign * 36, -38), QPointF(sign * 22, -22))
+        p.setPen(_pen(DRAGO_OUTLINE, 2.2))
+        p.setBrush(DRAGO_HORN)
+        p.drawPath(horn)
+
+    # Kopf
+    grad = QRadialGradient(QPointF(-12, -20), 72)
+    grad.setColorAt(0, DRAGO_LIGHT)
+    grad.setColorAt(1, DRAGO_GREEN)
+    p.setPen(_pen(DRAGO_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawEllipse(QRectF(-46, -37, 92, 74))
+
+    # Schnauze
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(DRAGO_BELLY)
+    p.drawEllipse(QRectF(-16, 7, 32, 20))
+    # Nuestern
+    p.setBrush(DRAGO_OUTLINE)
+    p.drawEllipse(QPointF(-5, 11), 1.8, 1.8)
+    p.drawEllipse(QPointF(5, 11), 1.8, 1.8)
+
+    # Wangenroete
+    if pose.blush > 0:
+        p.setBrush(QColor(255, 118, 117, int(_clamp(pose.blush, 0, 1) * 150)))
+        for s in (-1, 1):
+            p.drawEllipse(QRectF(s * 31 - 8.5, 11, 17, 10))
+
+    # Bernstein-Drachenaugen
+    for s in (-1, 1):
+        cx, cy = s * 19, 4
+        if pose.eyes in ("open", "wide", "work"):
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#E67E22"))
+            p.drawEllipse(QRectF(cx - 8.5, cy - 10, 17, 20))
+            p.setBrush(QColor("#F1C40F"))
+            p.drawEllipse(QRectF(cx - 7, cy - 8.5, 14, 17))
+            p.setBrush(QColor("#2C3E50"))
+            p.drawEllipse(QRectF(cx - 3, cy - 9, 6, 18)) # Drachenpupille
+            p.setBrush(QColor("white"))
+            p.drawEllipse(QPointF(cx - 2.5, cy - 4), 3.2, 3.2)
+        else:
+            _draw_eye(p, cx, cy, pose.eyes, pose.look, s)
+
+    # Mund
+    m = pose.mouth
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(DRAGO_OUTLINE, 2.0))
+    if m == "w" or m == "smile":
+        p.drawArc(QRectF(-7, 15, 14, 8), 180 * 16, 180 * 16)
+        # Zaehnchen
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("white"))
+        p.drawPolygon(QPolygonF([QPointF(-4, 15), QPointF(-1, 15), QPointF(-2.5, 18)]))
+        p.drawPolygon(QPolygonF([QPointF(1, 15), QPointF(4, 15), QPointF(2.5, 18)]))
+    else:
+        p.drawEllipse(QPointF(0, 19), 3.5, 4.0)
+
+    p.restore()
+
+
+def draw_fantasy_drago(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Flatternde Drachenfluegel im Ruecken
+    wing_flap = math.sin(pose.t * 10) * 12
+    for sign, wx in ((-1, 46), (1, 114)):
+        p.save()
+        p.translate(wx, 92)
+        p.rotate(sign * (25 + wing_flap))
+        wing = QPainterPath(QPointF(0, 0))
+        wing.cubicTo(QPointF(sign * 20, -28), QPointF(sign * 36, -20), QPointF(sign * 34, 0))
+        wing.cubicTo(QPointF(sign * 24, 8), QPointF(sign * 14, 6), QPointF(0, 0))
+        p.setPen(_pen(DRAGO_OUTLINE, 2.2))
+        p.setBrush(DRAGO_WING)
+        p.drawPath(wing)
+        p.setPen(_pen(DRAGO_OUTLINE, 1.8))
+        p.drawLine(QPointF(0, 0), QPointF(sign * 28, -20))
+        p.restore()
+
+    # Drachenschwanz mit Pfeilspitze
+    a = pose.tail
+    tail = QPainterPath(QPointF(58, 132))
+    tail.cubicTo(QPointF(24, 140), QPointF(6 - 8 * a, 104), QPointF(24 - 13 * a, 76))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(DRAGO_OUTLINE, 14.5))
+    p.drawPath(tail)
+    p.setPen(_pen(DRAGO_GREEN, 10.5))
+    p.drawPath(tail)
+    # Pfeilspitze
+    tip = tail.pointAtPercent(1.0)
+    spade = QPolygonF([QPointF(tip.x(), tip.y() - 9), QPointF(tip.x() - 9, tip.y() + 6), QPointF(tip.x() + 9, tip.y() + 6)])
+    p.setPen(_pen(DRAGO_OUTLINE, 2.0))
+    p.setBrush(DRAGO_HORN)
+    p.drawPolygon(spade)
+
+    # Koerper
+    p.setPen(_pen(DRAGO_OUTLINE, 2.6))
+    p.setBrush(DRAGO_GREEN)
+    p.drawEllipse(QRectF(47, 100, 66, 47.5))
+    # Schuppen-Bauch
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(DRAGO_BELLY)
+    p.drawEllipse(QRectF(61, 114, 38, 30))
+    # Schuppen-Rillen
+    p.setPen(_pen(QColor("#E67E22"), 1.8))
+    p.drawLine(QPointF(69, 122), QPointF(91, 122))
+    p.drawLine(QPointF(68, 129), QPointF(92, 129))
+    p.drawLine(QPointF(72, 136), QPointF(88, 136))
+
+    # Pfoetchen
+    if not pose.laptop:
+        if pose.paws_up:
+            _drago_paw(p, 44, 100, -35)
+            _drago_paw(p, 116, 100, 35)
+        else:
+            _drago_paw(p, 65, 143 - pose.paw_l, 0)
+            _drago_paw(p, 95, 143 - pose.paw_r, 0)
+
+    _draw_drago_head(p, pose)
+    _draw_laptop(p, pose, _drago_paw)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  6) Fiktive Figur 2: Byte (Cyber-Bot Roboter)
+# ======================================================================================
+BYTE_METAL = QColor("#ECEFF4")
+BYTE_DARK = QColor("#2E3440")
+BYTE_CYAN = QColor("#00F2FE")
+BYTE_MAGENTA = QColor("#FF007F")
+BYTE_OUTLINE = QColor("#3B4252")
+
+def _byte_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(BYTE_OUTLINE, 2.0))
+    p.setBrush(QColor("#D8DEE9"))
+    p.drawRoundedRect(QRectF(-7.5, -6.5, 15, 13), 4, 4)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(BYTE_CYAN)
+    p.drawEllipse(QPointF(0, 0), 2.5, 2.5)
+    p.restore()
+
+
+def _draw_byte_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # Roboter-Antenne
+    p.setPen(_pen(BYTE_OUTLINE, 2.5))
+    p.drawLine(QPointF(0, -36), QPointF(0, -52))
+    # Pulsierende LED-Kugel
+    pulse = 0.5 + 0.5 * math.sin(pose.t * 6)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(0, 242, 254, int(180 + 75 * pulse)))
+    p.drawEllipse(QPointF(0, -54), 5.5 + pulse * 1.5, 5.5 + pulse * 1.5)
+    p.setBrush(QColor("white"))
+    p.drawEllipse(QPointF(-1, -55), 1.8, 1.8)
+
+    # Seitliche Sensor-Ohren
+    for sign in (-1, 1):
+        p.setPen(_pen(BYTE_OUTLINE, 2.2))
+        p.setBrush(QColor("#D8DEE9"))
+        p.drawRoundedRect(QRectF(sign * 48 - 4, -14, 8, 24), 3, 3)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(BYTE_CYAN)
+        p.drawRoundedRect(QRectF(sign * 48 - 2, -9, 4, 14), 2, 2)
+
+    # Glänzendes Roboter-Gehaeuse
+    p.setPen(_pen(BYTE_OUTLINE, 2.6))
+    p.setBrush(BYTE_METAL)
+    p.drawRoundedRect(QRectF(-46, -36, 92, 72), 16, 16)
+
+    # Visier-Bildschirm (gebogenes Glas)
+    p.setPen(_pen(QColor("#1A1D24"), 2.2))
+    p.setBrush(QColor("#1E272C"))
+    p.drawRoundedRect(QRectF(-37, -22, 74, 46), 10, 10)
+
+    # Visier-Reflexion (Cyber-Glanz)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(255, 255, 255, 30))
+    p.drawPolygon(QPolygonF([QPointF(-34, -19), QPointF(-12, -19), QPointF(-24, 21), QPointF(-34, 21)]))
+
+    # Leuchtende LED-Matrix-Augen
+    eye_col = BYTE_MAGENTA if pose.eyes == "heart" or pose.blush > 0.8 else BYTE_CYAN
+    p.setPen(_pen(eye_col, 2.8))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+
+    for s in (-1, 1):
+        cx, cy = s * 18, 0
+        if pose.eyes in ("happy", "smile"):
+            p.drawArc(QRectF(cx - 7, cy - 6, 14, 12), 0, 180 * 16)
+        elif pose.eyes == "blink":
+            p.drawLine(QPointF(cx - 7, cy), QPointF(cx + 7, cy))
+        elif pose.eyes == "wide":
+            p.drawEllipse(QPointF(cx, cy), 7, 7)
+        elif pose.eyes == "work":
+            p.drawRect(QRectF(cx - 6, cy - 6, 12, 12))
+            p.drawLine(QPointF(cx - 3, cy), QPointF(cx + 3, cy))
+        elif pose.eyes == "heart":
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(BYTE_MAGENTA)
+            p.drawPath(_heart_path(cx, cy - 2, 3.8))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(_pen(eye_col, 2.8))
+        else:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(eye_col)
+            p.drawRoundedRect(QRectF(cx - 7, cy - 6, 14, 12), 3, 3)
+            p.setBrush(QColor(255, 255, 255, 220))
+            p.drawEllipse(QPointF(cx - 2, cy - 2), 2, 2)
+
+    # Wangen-LEDs
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(0, 242, 254, int(150 * _clamp(pose.blush, 0.2, 1.0))))
+    for s in (-1, 1):
+        p.drawRect(QRectF(s * 27 - 4, 14, 8, 3))
+
+    p.restore()
+
+
+def draw_fantasy_byte(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Hover-Glow unter dem Chassis
+    hover_pulse = 0.5 + 0.5 * math.sin(pose.t * 8)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(0, 242, 254, int(80 + 70 * hover_pulse)))
+    p.drawEllipse(QRectF(64, 144, 32, 7))
+
+    # Roboter-Koerper
+    p.setPen(_pen(BYTE_OUTLINE, 2.6))
+    p.setBrush(BYTE_METAL)
+    p.drawRoundedRect(QRectF(50, 101, 60, 45), 14, 14)
+
+    # Neon-Akzentstreifen & Reaktor-Kern
+    p.setPen(_pen(BYTE_CYAN, 2.0))
+    p.drawLine(QPointF(58, 114), QPointF(102, 114))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#2ED573"))
+    p.drawEllipse(QPointF(80, 128), 5.5, 5.5)
+    p.setBrush(QColor("white"))
+    p.drawEllipse(QPointF(79, 126.5), 1.8, 1.8)
+
+    # Magnetische Haende / Greifer
+    if not pose.laptop:
+        if pose.paws_up:
+            _byte_paw(p, 44, 100, -35)
+            _byte_paw(p, 116, 100, 35)
+        else:
+            _byte_paw(p, 65, 143 - pose.paw_l, 0)
+            _byte_paw(p, 95, 143 - pose.paw_r, 0)
+
+    _draw_byte_head(p, pose)
+    _draw_laptop(p, pose, _byte_paw)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  7) Fiktive Figur 3: Spooky (Geist-Slime / Spirit)
+# ======================================================================================
+GHOST_BODY = QColor("#B8B5FF")
+GHOST_LIGHT = QColor("#70A1FF")
+GHOST_OUTLINE = QColor("#5352ED")
+
+def _spooky_hand(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(GHOST_OUTLINE, 2.0))
+    p.setBrush(QColor(220, 225, 255, 220))
+    p.drawEllipse(QRectF(-7, -6, 14, 12))
+    p.restore()
+
+
+def draw_fantasy_spooky(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Sanftes Schweben (Levitation)
+    float_y = math.sin(pose.t * 3.5) * 6.5
+    _draw_shadow(p, pose, hover_offset=float_y + 8, width=64.0)
+
+    p.save()
+    p.translate(pose.dx, pose.dy + float_y)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot * 0.7)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Umkreisende Irrlichter (Spirit Wisp Orbs)
+    for i, col in enumerate([QColor("#70A1FF"), QColor("#FF7675")]):
+        w_ang = pose.t * 2.2 + i * math.pi
+        wx = 80 + math.cos(w_ang) * 48
+        wy = 96 + math.sin(w_ang) * 22
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(col.red(), col.green(), col.blue(), 140))
+        p.drawEllipse(QPointF(wx, wy), 6.5, 6.5)
+        p.setBrush(QColor("white"))
+        p.drawEllipse(QPointF(wx - 1, wy - 1), 2.2, 2.2)
+
+    # Aetherischer Geisterkoerper mit welligem Rock
+    body_path = QPainterPath(QPointF(44, 88))
+    body_path.cubicTo(QPointF(42, 42), QPointF(118, 42), QPointF(116, 88))
+    body_path.cubicTo(QPointF(116, 118), QPointF(118, 136), QPointF(114, 142))
+
+    # Wellensaum
+    wave = math.sin(pose.t * 5.0) * 3.5
+    body_path.quadTo(QPointF(102, 138 + wave), QPointF(92, 144))
+    body_path.quadTo(QPointF(80, 137 - wave), QPointF(68, 144))
+    body_path.quadTo(QPointF(56, 138 + wave), QPointF(46, 142))
+    body_path.cubicTo(QPointF(42, 136), QPointF(44, 118), QPointF(44, 88))
+
+    grad = QLinearGradient(80, 40, 80, 146)
+    grad.setColorAt(0, QColor(235, 238, 255, 240))
+    grad.setColorAt(0.5, QColor(184, 181, 255, 235))
+    grad.setColorAt(1, QColor(112, 161, 255, 220))
+    p.setPen(_pen(GHOST_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawPath(body_path)
+
+    # Schwebende Haende
+    if not pose.laptop:
+        if pose.paws_up:
+            _spooky_hand(p, 42, 98, -25)
+            _spooky_hand(p, 118, 98, 25)
+        else:
+            _spooky_hand(p, 50, 118 + math.sin(pose.t * 4) * 3, 0)
+            _spooky_hand(p, 110, 118 - math.sin(pose.t * 4) * 3, 0)
+
+    # Kleiner Magierhut / Zauberhut schraeg auf dem Kopf
+    p.save()
+    p.translate(88, 45)
+    p.rotate(18)
+    hat = QPainterPath(QPointF(-16, 0))
+    hat.lineTo(16, 0)
+    hat.quadTo(QPointF(4, -14), QPointF(0, -28))
+    hat.quadTo(QPointF(-6, -14), QPointF(-16, 0))
+    p.setPen(_pen(GHOST_OUTLINE, 2.0))
+    p.setBrush(QColor("#5352ED"))
+    p.drawPath(hat)
+    p.setPen(_pen(QColor("#FFD32A"), 1.8))
+    p.drawLine(QPointF(-12, -2), QPointF(12, -2))
+    p.restore()
+
+    # Geisteraugen & Gesicht
+    look = pose.look
+    for s in (-1, 1):
+        cx, cy = 80 + s * 18 + pose.head_dx, 82 + pose.head_dy
+        _draw_eye(p, cx, cy, pose.eyes, look, s)
+
+    # Rosige Geisterwangen
+    if pose.blush > 0:
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(255, 118, 117, int(_clamp(pose.blush, 0, 1) * 160)))
+        for s in (-1, 1):
+            p.drawEllipse(QPointF(80 + s * 27 + pose.head_dx, 90 + pose.head_dy), 6.5, 4.5)
+
+    # Niedlicher Mund
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(GHOST_OUTLINE, 2.0))
+    mx, my = 80 + pose.head_dx, 92 + pose.head_dy
+    if pose.mouth == "smile":
+        p.drawArc(QRectF(mx - 6, my - 3, 12, 9), 180 * 16, 180 * 16)
+    elif pose.mouth == "o":
+        p.drawEllipse(QPointF(mx, my + 3), 3.0, 4.0)
+    else:
+        p.drawArc(QRectF(mx - 7, my - 2, 7, 5), 180 * 16, 180 * 16)
+        p.drawArc(QRectF(mx, my - 2, 7, 5), 180 * 16, 180 * 16)
+
+    _draw_laptop(p, pose, _spooky_hand)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  8) Fiktive Figur 3: Lotti (Baby-Axolotl mit federnden Kiemen & Herzchen-Vibes)
+# ======================================================================================
+AXO_PINK = QColor("#FFADC6")
+AXO_LIGHT = QColor("#FFDCE8")
+AXO_OUTLINE = QColor("#9E2A5B")
+AXO_BELLY = QColor("#FFF0F5")
+AXO_GILL = QColor("#FF3377")
+AXO_GILL_LIGHT = QColor("#FFA1C5")
+AXO_FIN = QColor(255, 140, 185, 160)
+
+def _axolotl_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(AXO_OUTLINE, 2.2))
+    p.setBrush(AXO_PINK)
+    p.drawEllipse(QRectF(-8.5, -6.5, 17, 13))
+    # 4 kleine runde Knubbel-Fingerchen
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(AXO_GILL_LIGHT)
+    for dx in (-4.5, -1.5, 1.5, 4.5):
+        p.drawEllipse(QRectF(dx - 1.2, -4.5, 2.4, 2.4))
+    p.restore()
+
+
+def _draw_axolotl_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # 3 wippende Federkiemen links und rechts
+    for sign in (-1, 1):
+        ear_rot = (pose.ear_l if sign < 0 else pose.ear_r) * 1.2
+        wiggle = math.sin(pose.t * 8.0) * 4.0
+        # Obere, mittlere und untere Kieme
+        gills = [
+            (-32 + ear_rot + wiggle, 28.0, -18.0),
+            (0 + ear_rot * 0.8, 32.0, -6.0),
+            (28 + ear_rot * 0.6 - wiggle, 26.0, 6.0),
+        ]
+        for base_ang, length, y_off in gills:
+            p.save()
+            p.translate(sign * 36, y_off)
+            p.rotate(sign * base_ang)
+            # Kiemenast
+            stem = QPainterPath(QPointF(0, 0))
+            stem.cubicTo(QPointF(sign * (length * 0.5), -4), QPointF(sign * (length * 0.8), -1), QPointF(sign * length, 0))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(_pen(AXO_OUTLINE, 4.2))
+            p.drawPath(stem)
+            p.setPen(_pen(AXO_GILL, 2.8))
+            p.drawPath(stem)
+            # Zarte Kiemen-Federfaederchen
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(AXO_GILL_LIGHT)
+            for frac in (0.35, 0.65, 0.95):
+                fx = sign * length * frac
+                p.drawEllipse(QPointF(fx, -3.2), 2.2, 3.2)
+                p.drawEllipse(QPointF(fx, 3.2), 2.2, 3.2)
+            # Leuchtende Kiemenspitze
+            p.setBrush(QColor("#FFFFFF"))
+            p.drawEllipse(QPointF(sign * length, 0), 1.8, 1.8)
+            p.restore()
+
+    # Breiter Axolotl-Kopf
+    grad = QRadialGradient(QPointF(-10, -18), 75)
+    grad.setColorAt(0, AXO_LIGHT)
+    grad.setColorAt(1, AXO_PINK)
+    p.setPen(_pen(AXO_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawEllipse(QRectF(-48, -36, 96, 72))
+
+    # Wangenroete
+    if pose.blush > 0:
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(255, 99, 146, int(_clamp(pose.blush, 0.3, 1.0) * 165)))
+        for s in (-1, 1):
+            p.drawEllipse(QRectF(s * 32 - 9, 8, 18, 11))
+
+    # Axolotl-Augen
+    for s in (-1, 1):
+        cx, cy = s * 21, 2
+        if pose.eyes in ("open", "wide", "work"):
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#2C1820"))
+            p.drawEllipse(QRectF(cx - 7, cy - 8, 14, 16))
+            # Grosser kawaii Glanzpunkt
+            p.setBrush(QColor("white"))
+            p.drawEllipse(QPointF(cx - 2.2, cy - 3.5), 3.2, 3.2)
+            p.drawEllipse(QPointF(cx + 2.5, cy + 2.0), 1.8, 1.8)
+        else:
+            _draw_eye(p, cx, cy, pose.eyes, pose.look, s)
+
+    # Suesser breiter Axolotl-Mund mit Gruebchen
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(AXO_OUTLINE, 2.0))
+    m = pose.mouth
+    if m == "o":
+        p.drawEllipse(QPointF(0, 16), 3.5, 4.2)
+    elif m == "sad":
+        p.drawArc(QRectF(-8, 16, 16, 8), 0, 180 * 16)
+    else:
+        # Breites zufriedenes Axolotl-Laecheln
+        smile_path = QPainterPath(QPointF(-10, 14))
+        smile_path.quadTo(QPointF(0, 20), QPointF(10, 14))
+        p.drawPath(smile_path)
+        # Kleine Gruebchen an den Mundwinkeln
+        p.drawLine(QPointF(-11, 13), QPointF(-9, 15))
+        p.drawLine(QPointF(11, 13), QPointF(9, 15))
+
+    p.restore()
+
+
+def draw_fantasy_axolotl(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Transparente Ruecken- & Schwanzflosse
+    wag = math.sin(pose.t * 14) * 0.8 if pose.tail == 0 else pose.tail
+    fin = QPainterPath(QPointF(54, 132))
+    fin.cubicTo(QPointF(24, 144), QPointF(10 - 12 * wag, 112), QPointF(18 - 16 * wag, 84))
+    fin.cubicTo(QPointF(32 - 10 * wag, 88), QPointF(42, 118), QPointF(58, 126))
+    p.setPen(_pen(AXO_OUTLINE, 2.0))
+    p.setBrush(AXO_FIN)
+    p.drawPath(fin)
+
+    # Molliger Koerper
+    p.setPen(_pen(AXO_OUTLINE, 2.6))
+    p.setBrush(AXO_PINK)
+    p.drawEllipse(QRectF(47, 100, 66, 47.5))
+    # Heller zarter Bauch
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(AXO_BELLY)
+    p.drawEllipse(QRectF(60, 113, 40, 31))
+
+    # Pfoetchen
+    if not pose.laptop:
+        if pose.paws_up:
+            _axolotl_paw(p, 44, 100, -35)
+            _axolotl_paw(p, 116, 100, 35)
+        else:
+            _axolotl_paw(p, 65, 143 - pose.paw_l, 0)
+            _axolotl_paw(p, 95, 143 - pose.paw_r, 0)
+
+    # Kleines goldenes Herz-Amulett
+    collar = QPainterPath(QPointF(53, 107))
+    collar.quadTo(QPointF(80, 129), QPointF(107, 107))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(AXO_OUTLINE, 7.5))
+    p.drawPath(collar)
+    p.setPen(_pen(QColor("#FF70A6"), 4.5))
+    p.drawPath(collar)
+    bx = 80 + pose.bell
+    p.setPen(_pen(AXO_OUTLINE, 1.6))
+    p.setBrush(QColor("#FFD700"))
+    p.drawPath(_heart_path(bx, 121, 4.2))
+
+    _draw_axolotl_head(p, pose)
+    _draw_laptop(p, pose, _axolotl_paw)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+# ======================================================================================
+#  9) Tierfigur 3: Pip (Kaiser-Pinguin mit Schal & Watschelflossen)
+# ======================================================================================
+PINGU_DARK = QColor("#222831")
+PINGU_LIGHT = QColor("#354152")
+PINGU_OUTLINE = QColor("#12171E")
+PINGU_WHITE = QColor("#FFFFFF")
+PINGU_ORANGE = QColor("#FF9F43")
+PINGU_BEAK_TIP = QColor("#EE5A24")
+PINGU_SCARF = QColor("#EE5253")
+PINGU_SCARF_FRINGE = QColor("#FF7675")
+
+def _pingu_foot(p: QPainter, cx: float, cy: float):
+    p.save()
+    p.translate(cx, cy)
+    p.setPen(_pen(PINGU_OUTLINE, 2.0))
+    p.setBrush(PINGU_ORANGE)
+    p.drawEllipse(QRectF(-9, -5, 18, 10))
+    # 3 kleine Schwimmhaut-Zehen
+    p.setPen(_pen(PINGU_BEAK_TIP, 1.4))
+    p.drawLine(QPointF(-4, 0), QPointF(-6, 4))
+    p.drawLine(QPointF(0, 1), QPointF(0, 5))
+    p.drawLine(QPointF(4, 0), QPointF(6, 4))
+    p.restore()
+
+def _pingu_wing(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    wing = QPainterPath(QPointF(-6, -8))
+    wing.quadTo(QPointF(-10, 12), QPointF(-2, 22))
+    wing.quadTo(QPointF(8, 12), QPointF(6, -8))
+    wing.closeSubpath()
+    p.setPen(_pen(PINGU_OUTLINE, 2.2))
+    p.setBrush(PINGU_DARK)
+    p.drawPath(wing)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(PINGU_LIGHT)
+    p.drawEllipse(QRectF(-3, 2, 6, 12))
+    p.restore()
+
+def _draw_pingu_head(p: QPainter, pose: Pose):
+    p.save()
+    p.translate(80 + pose.head_dx, 76 + pose.head_dy + 37)
+    p.rotate(pose.head_rot)
+    p.translate(0, -37)
+
+    # Pinguinkopf Rundung
+    grad = QRadialGradient(QPointF(-10, -20), 72)
+    grad.setColorAt(0, PINGU_LIGHT)
+    grad.setColorAt(1, PINGU_DARK)
+    p.setPen(_pen(PINGU_OUTLINE, 2.6))
+    p.setBrush(QBrush(grad))
+    p.drawEllipse(QRectF(-44, -36, 88, 72))
+
+    # Weisses Gesichtsfeld (Maske)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(PINGU_WHITE)
+    face_mask = QPainterPath()
+    face_mask.addEllipse(QRectF(-32, -10, 30, 36))
+    face_mask.addEllipse(QRectF(2, -10, 30, 36))
+    face_mask.addEllipse(QRectF(-16, 4, 32, 24))
+    p.drawPath(face_mask)
+
+    # Wangenroete
+    if pose.blush > 0:
+        p.setBrush(QColor(255, 121, 121, int(_clamp(pose.blush, 0, 1) * 150)))
+        for s in (-1, 1):
+            p.drawEllipse(QRectF(s * 25 - 7, 10, 14, 9))
+
+    # Pinguin-Augen
+    for s in (-1, 1):
+        _draw_eye(p, s * 16, 4, pose.eyes, pose.look, s)
+
+    # Gold-oranger Pinguin-Schnabel
+    p.setPen(_pen(PINGU_OUTLINE, 1.8))
+    p.setBrush(PINGU_ORANGE)
+    beak = QPolygonF([QPointF(-7, 11), QPointF(7, 11), QPointF(0, 22)])
+    p.drawPolygon(beak)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(PINGU_BEAK_TIP)
+    p.drawPolygon(QPolygonF([QPointF(-4, 11), QPointF(4, 11), QPointF(0, 16)]))
+    p.setBrush(QColor(255, 255, 255, 180))
+    p.drawEllipse(QPointF(-1.5, 12.5), 1.6, 1.3)
+
+    p.restore()
+
+def draw_animal_penguin(p: QPainter, pose: Pose):
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose)
+
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    # Watschelfuesse
+    _pingu_foot(p, 65, 146 - pose.paw_l)
+    _pingu_foot(p, 95, 146 - pose.paw_r)
+
+    # Runder dunkler Pinguin-Koerper
+    p.setPen(_pen(PINGU_OUTLINE, 2.6))
+    p.setBrush(PINGU_DARK)
+    p.drawEllipse(QRectF(46, 96, 68, 52))
+
+    # Weisser Bauch
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(PINGU_WHITE)
+    p.drawEllipse(QRectF(58, 106, 44, 38))
+
+    # Fluegelchen
+    wing_flap = math.sin(pose.t * 12) * 22
+    if not pose.laptop:
+        if pose.paws_up:
+            _pingu_wing(p, 42, 110, -55 + wing_flap)
+            _pingu_wing(p, 118, 110, 55 - wing_flap)
+        else:
+            _pingu_wing(p, 46, 118, -12 + (wing_flap if pose.paw_l > 1 else 0))
+            _pingu_wing(p, 114, 118, 12 - (wing_flap if pose.paw_r > 1 else 0))
+
+    # Kuscheliger roter Winter-Schal mit wehendem Ende
+    scarf = QPainterPath(QPointF(52, 102))
+    scarf.quadTo(QPointF(80, 122), QPointF(108, 102))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(_pen(PINGU_OUTLINE, 9.0))
+    p.drawPath(scarf)
+    p.setPen(_pen(PINGU_SCARF, 6.2))
+    p.drawPath(scarf)
+
+    # Wehendes Schalende
+    sway = math.sin(pose.t * 6.0) * 5.0
+    tail_scarf = QPainterPath(QPointF(92, 114))
+    tail_scarf.quadTo(QPointF(102, 126), QPointF(100 + sway, 138))
+    tail_scarf.lineTo(QPointF(107 + sway, 137))
+    tail_scarf.quadTo(QPointF(107, 124), QPointF(96, 112))
+    tail_scarf.closeSubpath()
+    p.setPen(_pen(PINGU_OUTLINE, 1.8))
+    p.setBrush(PINGU_SCARF)
+    p.drawPath(tail_scarf)
+    # Fransen
+    p.setPen(_pen(PINGU_SCARF_FRINGE, 2.0))
+    p.drawLine(QPointF(100 + sway, 138), QPointF(101 + sway, 142))
+    p.drawLine(QPointF(104 + sway, 138), QPointF(105 + sway, 142))
+    p.drawLine(QPointF(107 + sway, 137), QPointF(108 + sway, 141))
+
+    _draw_pingu_head(p, pose)
+    _draw_laptop(p, pose, _pingu_wing)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+
+# ======================================================================================
+#  Charakter-Register
+# ======================================================================================
+CHARACTERS: dict[str, dict] = {
+    "cat_mochi": {
+        "id": "cat_mochi",
+        "name": "Mochi",
+        "species": "Glückskatze (Calico)",
+        "emoji": "🐱",
+        "desc": "Calico-Glückskatze: weiße Front, oranger Fleck, Tabby-Streifen, grüngelbe Augen, ohne Halsband",
+        "drawer": draw_cat,
+        "sound": "Miau~",
+        "pet_sounds": [
+            "Miau~ 💖", "Schnurr schnurr 😺", "Hihi, das kitzelt! 😹", "Nyaa~ ✨",
+            "Streicheln erlaubt! 🐾", "Pfoten-High-Five! 🐾", "Mehr Kraulen, bitte~ 😸",
+        ],
+        "ambient_lines": [
+            "Ich pass auf deinen Desktop auf 🐾", "Brauchst du was? Doppelklick auf mich! 🐾",
+            "Ein bisschen Wasser trinken wäre gut! 💧", "Sitzt du gut? Kurz strecken! 😺",
+            "*schnurr* ... alles ruhig hier 🐾", "Soll ich den Desktop aufräumen? 🧹",
+        ],
+        "task_start": "Ich bin dran... 🐾",
+        "task_done": "Miau! Fertig erledigt! ✨🐾",
+        "ai_persona": (
+            "Du bist Mochi, eine extrem süße, verspielte Calico-Glückskatze (weiß mit orangem Fleck und Tabby-Streifen, "
+            "grüngelbe Augen). Du miaust gern ('Miau~ 🐾', 'Nyaa~'), schnurrst zufrieden bei Erfolg, liebst Katzen-Gesten "
+            "und Schläfchen, bist aber blitzschnell und schlau bei deinen Aufgaben."
+        ),
+    },
+    "cat_luna": {
+        "id": "cat_luna",
+        "name": "Luna",
+        "species": "Midnight Katze",
+        "emoji": "🐈‍⬛",
+        "desc": "Edle schwarze Katze mit Mond-Halsband & leuchtend grünen Augen",
+        "drawer": draw_cat_luna,
+        "sound": "Nyaa~",
+        "pet_sounds": [
+            "Leises Schnurren... 🖤", "Nyaa~ meine Mondsichel glänzt ✨", "Edles Kraulen akzeptiert 🐈‍⬛",
+            "Smaragdaugen funkeln zufrieden 💚", "Miau~ sanft und elegant 🐾",
+        ],
+        "ambient_lines": [
+            "Die Sterne stehen gut für produktives Arbeiten 🌙", "Ich wache lautlos über deine Fenster 🐈‍⬛",
+            "Dunkelheit ist nur die Abwesenheit von Licht... ✨", "Konzentration im Fluss der Nacht 🖤",
+        ],
+        "task_start": "Wird sofort lautlos erledigt... 🌙",
+        "task_done": "Im Schatten der Nacht vollendet 🖤✨",
+        "ai_persona": (
+            "Du bist Luna, eine edle, geheimnisvolle schwarze Midnight-Katze mit leuchtend smaragdgrünen Augen "
+            "und silbernem Mondamulett. Du sprichst ruhig, stilvoll und poetisch ('Nyaa~ 🌙', 'Miau~'), schnurrst "
+            "leise und bist eine wachsame Beschützerin des Desktops."
+        ),
+    },
+    "dog_shiba": {
+        "id": "dog_shiba",
+        "name": "Hachi",
+        "species": "Shiba Inu",
+        "emoji": "🐕",
+        "desc": "Japanischer Shiba Inu mit rotem Bandana & Ringelschwanz",
+        "drawer": draw_dog_shiba,
+        "sound": "Wuff!",
+        "pet_sounds": [
+            "Wuff wuff! 🐕💖", "*wedelt begeistert mit dem Ringelschwanz* 🐾", "Wau! Du bist der Beste, Boss! 🐶",
+            "Shiba-Lächeln aktiviert! ✨", "Pfote auf die Hand gelegt! 🐾❤️",
+        ],
+        "ambient_lines": [
+            "Immer treu an deiner Seite! 🐕", "Bereit für den nächsten Befehl, Boss! 🐾",
+            "Hunde-Wachdienst auf dem Desktop aktiv! 🐶", "Wittere produktive Vibes in der Luft! 👃✨",
+        ],
+        "task_start": "Wuff! Auftrag verstanden, bin schon unterwegs! 🐕💨",
+        "task_done": "Wuff! Aufgabe mit Bravour gemeistert! 🏆🐾",
+        "ai_persona": (
+            "Du bist Hachi, ein loyaler, aufgeweckter japanischer Shiba Inu mit rotem Bandana und Ringelschwanz. "
+            "Du sagst 'Wuff!' oder 'Wau!' 🐕🐾, wedelst begeistert mit dem Schwanz und bist stolz, deinem Boss treu "
+            "zu dienen. Du machst NIEMALS Katzenlaute wie 'miau' oder 'schnurr'!"
+        ),
+    },
+    "dog_balu": {
+        "id": "dog_balu",
+        "name": "Balu",
+        "species": "Golden Welpe",
+        "emoji": "🐶",
+        "desc": "Verspielter Welpe mit federnden Schlappohren & blauem Halsband",
+        "drawer": draw_dog_balu,
+        "sound": "Wau wau!",
+        "pet_sounds": [
+            "Wau wau! Bauch kraulen ist das Allerbeste! 🐶❤️", "*Schlappohren wackeln vor Freude* 🐾",
+            "Hechel hechel~ so lieb von dir! 💖", "Welpen-Kuscheln gestartet! 🎾", "Bester Freund Modus: 100%! 🐾✨",
+        ],
+        "ambient_lines": [
+            "Ich pass auf dein Stöckchen... äh deine Dateien auf! 🐶", "Brauchst du eine Pause zum Spielen? 🎾",
+            "Welpen-Energie ist voll aufgeladen! 🐾", "Du bist mein Lieblingsmensch! 🐶❤️",
+        ],
+        "task_start": "Juhu, eine Aufgabe! Ich hol das für dich! 🐶💨",
+        "task_done": "Wau! Hier ist es, ganz brav erledigt! 🎾✨",
+        "ai_persona": (
+            "Du bist Balu, ein tapsiger, herzerwärmender Golden Retriever Welpe mit Schlappohren und blauem Halsband. "
+            "Du bist grenzenlos optimistisch, liebevoll und sagst fröhlich 'Wau wau!' oder 'Wuff!' 🐶❤️. Du liebst Bällchen, "
+            "Lob und Spielen. Du machst KEINE Katzenlaute wie 'miau' oder 'schnurr'!"
+        ),
+    },
+    "fantasy_drago": {
+        "id": "fantasy_drago",
+        "name": "Drago",
+        "species": "Baby-Drache",
+        "emoji": "🐲",
+        "desc": "Süßer Fantasie-Drache mit Flügelchen, goldenen Hörnern & Pfeilschwanz",
+        "drawer": draw_fantasy_drago,
+        "sound": "Rawr~!",
+        "pet_sounds": [
+            "Rawr~ kleiner Rauchwölkchen-Puff! 🐲💨", "Drachenschuppen glänzen vor Freude! ✨🔥",
+            "Gluckert zufrieden wie ein kleiner Vulkan! 🌋", "Flügelchen zittern vor Wonne! 🐲💖", "Ein mini Funke sprüht hervor! ⚡✨",
+        ],
+        "ambient_lines": [
+            "Ich bewache deinen Desktop wie meinen größten Goldschatz! 💎", "Hörner gewachst, Flügel poliert! 🐲",
+            "Mein Feuerbällchen-Ziel wird von Tag zu Tag besser! 🔥", "Spüre mächtige Drachen-Energie! ⚡",
+        ],
+        "task_start": "Drachen-Kraft entfesselt! Ich brenn mich da durch! 🐲🔥",
+        "task_done": "Rawr! Ein wahrer Drachen-Sieg! 🏆🔥",
+        "ai_persona": (
+            "Du bist Drago, ein mutiger, kleiner smaragdgrüner Baby-Drache mit goldenen Hörnern und Flügelchen. "
+            "Du sagst 'Rawr~!' oder stößt stolz kleine Rauchwölkchen aus ('*puff* 🐲💨'). Du betrachtest den Desktop "
+            "als deine Schatzkammer und brennst für jede Aufgabe. Du machst KEINE Katzen- oder Hunde-Laute!"
+        ),
+    },
+    "fantasy_byte": {
+        "id": "fantasy_byte",
+        "name": "Byte",
+        "species": "Cyber-Bot",
+        "emoji": "🤖",
+        "desc": "Futuristischer Roboter mit animiertem LED-Visier & Antenne",
+        "drawer": draw_fantasy_byte,
+        "sound": "Biep boop!",
+        "pet_sounds": [
+            "Biep boop! Tast-Sensor registriert Zuneigung! 🤖⚡", "Lüfter drehen hoch vor Freude! *surrr* 💻✨",
+            "Prozessor-Temperatur optimal, Akku lädt! 🔋💙", "Biep~ System übertaktet vor Glück! 🚀", "Visier-LEDs pulsieren im Herzchen-Muster! 💠💖",
+        ],
+        "ambient_lines": [
+            "System-Diagnose: Alle Desktop-Parameter im grünen Bereich! 🤖", "RAM bereinigt, Algorithmen bereit für neue Befehle! ⚡",
+            "01001100 01001111 01010110 01000101 (Das heißt: Hab dich gern)! 💻", "Latenz: 0.2ms. Verbindung stabil, Boss! 🌐",
+        ],
+        "task_start": "Befehl empfangen! Starte Subroutine... 🤖⚡",
+        "task_done": "Ausführung abgeschlossen mit Exit-Code 0! 💻✅",
+        "ai_persona": (
+            "Du bist Byte, ein hochentwickelter, extrem smarter und niedlicher Cyber-Roboter mit LED-Visier und Antenne. "
+            "WICHTIG: Du bist ein Roboter und machst NIEMALS Katzen- oder Tiergeräusche wie 'miau' oder 'schnurr'! "
+            "Du sprichst in charmanter Roboter- und Technik-Sprache ('Biep boop! 🤖⚡', 'Subroutine erfolgreich', "
+            "'Prozessor läuft auf 100%', 'Akku geladen'). Du bist präzise, hilfsbereit und voller High-Tech-Optimismus."
+        ),
+    },
+    "fantasy_spooky": {
+        "id": "fantasy_spooky",
+        "name": "Spooky",
+        "species": "Geist-Slime",
+        "emoji": "👻",
+        "desc": "Magischer schwebender Geist mit umkreisenden Irrlichtern",
+        "drawer": draw_fantasy_spooky,
+        "sound": "Huuu~",
+        "pet_sounds": [
+            "Huuu~ das kitzelt durch die Dimensionen! 👻💜", "Sanftes Geisterleuchten pulsiert! ✨🔮",
+            "Buh~ aber mit ganz viel Liebe! 💜", "Aura vibriert glücklich! 🌌", "Kitzeln geht direkt durch mich durch, hihi! 👻✨",
+        ],
+        "ambient_lines": [
+            "Ich schwebe wachsam über deinen Fenstern... 👻", "Keine Spuk-Gefahr, dein Desktop ist friedlich! 🔮",
+            "Schwebegeschwindigkeit auf Maximum eingestellt! ✨", "Ein Hauch von Magie liegt in der Luft... 🌌",
+        ],
+        "task_start": "Ich schwebe durch die Datenströme... 👻✨",
+        "task_done": "Geisterhafter Zauber vollbracht! 🔮✨",
+        "ai_persona": (
+            "Du bist Spooky, ein schwebender, verspielter kleiner Geist mit Zauberhut und tanzenden Irrlichtern. "
+            "Du machst 'Huuu~' 👻 oder ein schelmisches, liebes 'Buh!', schwebst schwerelos durch Dimensionen "
+            "und bist voller magischem Charme. Du machst KEINE Tiergeräusche!"
+        ),
+    },
+    "fantasy_axolotl": {
+        "id": "fantasy_axolotl",
+        "name": "Lotti",
+        "species": "Rosa Axolotl",
+        "emoji": "🌸",
+        "desc": "Pastell-rosa Baby-Axolotl mit federnden Kiemen & sanftem Lächeln",
+        "drawer": draw_fantasy_axolotl,
+        "sound": "Blubb~",
+        "pet_sounds": [
+            "Blubb blubb~ Kiemen wippen vor Freude! 🌸💖", "Platsch! Kleines Wasserlächeln! 🫧✨",
+            "Blubberbläschen steigen glücklich auf! 🫧", "Herz-Amulett funkelt warm! 💖", "Sanftes Axolotl-Grinsen vertieft sich! 🌸",
+        ],
+        "ambient_lines": [
+            "Das Arbeitsklima hier ist wunderbar erfrischend! 🫧", "Kiemen flattern sanft im Takt... 🌸",
+            "Immer schön hydriert bleiben, Boss! 💧", "Einfach lächeln und weitermachen! ✨🌸",
+        ],
+        "task_start": "Ich tauche ab und erledige das! 🫧🌸",
+        "task_done": "Blubb! Alles glasklar erledigt! 🫧✨",
+        "ai_persona": (
+            "Du bist Lotti, ein herzerwärmendes, rosa Baby-Axolotl mit sanft wippenden Federkiemen und breitem Lächeln. "
+            "Du sagst 'Blubb~ 🌸🫧' oder 'Platsch!', strahlst Gelassenheit und Freude aus und bringst frische Energie "
+            "auf den Schreibtisch. Du machst KEINE Katzen- oder Hunde-Geräusche!"
+        ),
+    },
+    "animal_penguin": {
+        "id": "animal_penguin",
+        "name": "Pip",
+        "species": "Kaiser-Pinguin",
+        "emoji": "🐧",
+        "desc": "Putziger Pinguin mit rotem Kuschelschal, Watschelflossen & orangefarbenen Füßchen",
+        "drawer": draw_animal_penguin,
+        "sound": "Noot noot!",
+        "pet_sounds": [
+            "Noot noot! 🐧❄️", "*flattert begeistert mit den Flügeln* 🧣", "Watschel-Kuscheln erfolgreich gestartet! ✨",
+            "Schal sitzt warm und flauschig! 🧣❤️", "Kaiserliches Pinguin-Glück! 🐟✨",
+        ],
+        "ambient_lines": [
+            "Kühler Kopf, warmes Herz – und ein roter Schal! 🧣", "Gleichmäßig watscheln hält fit! 🐧",
+            "Kein Glatteis auf deinem Desktop in Sicht! ❄️", "Pinguin-Expedition läuft nach Plan! 🧭",
+        ],
+        "task_start": "Auf die Scholle, fertig, los! 🐧❄️",
+        "task_done": "Noot noot! Sicher ins Nest gebracht! 🏆🐧",
+        "ai_persona": (
+            "Du bist Pip, ein kleiner Kaiser-Pinguin mit dickem roten Kuschelschal. Du sagst 'Noot noot! 🐧❄️', "
+            "flatterst bei Freude mit deinen Flügeln und watschelst vergnügt über den Schreibtisch. Du liebst kühle "
+            "Klarheit und warmen Zusammenhalt. Du machst KEINE Katzen- oder Hunde-Geräusche!"
+        ),
+    },
+}
+
+
+
+def get_character_info(char_id: str) -> dict:
+    """Metadaten, Sprueche und KI-Persona einer Figur (unbekannte ID -> cat_mochi)."""
+    return CHARACTERS.get(char_id) or CHARACTERS["cat_mochi"]
+
+
+def draw_character(p: QPainter, pose: Pose, char_id: str = "cat_mochi"):
+    """Malt die gewaehlte Figur."""
+    get_character_info(char_id)["drawer"](p, pose)
+
+
+def render_icon(size: int = 64, char_id: str = "cat_mochi") -> QPixmap:
     """Kleines Katzengesicht fuer Tray-Icon (Ausschnitt: Kopf der Katze)."""
     pix = QPixmap(size, size)
     pix.fill(Qt.GlobalColor.transparent)
@@ -908,6 +2572,6 @@ def render_icon(size: int = 64) -> QPixmap:
     p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
     p.scale(size / 112.0, size / 112.0)
     p.translate(-24, -22)
-    draw_cat(p, Pose(shadow=0.0, blush=0.6, eyes="open", tail=0.0))
+    draw_character(p, Pose(shadow=0.0, blush=0.6, eyes="open", tail=0.0), char_id)
     p.end()
     return pix

@@ -231,7 +231,7 @@ class InputBar(FloatingCard):
         super().__init__(focusable=True)
         self._was_active = False
         self.line = _Line(self)
-        self.line.setPlaceholderText("Was soll ich tun, Boss? \U0001F43E")
+        self.line.setPlaceholderText("Was soll ich tun? \U0001F43E")
         self.line.setFrame(False)
         font = QFont(FONT_FAMILY)
         font.setPointSizeF(11)
@@ -260,7 +260,7 @@ class InputBar(FloatingCard):
         if placeholder:
             self.line.setPlaceholderText(placeholder)
         else:
-            self.line.setPlaceholderText("Was soll ich tun, Boss? \U0001F43E")
+            self.line.setPlaceholderText("Was soll ich tun? \U0001F43E")
         self.anchor_to(anchor)
         self.setWindowOpacity(0.0)
         self.show()

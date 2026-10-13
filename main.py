@@ -10,6 +10,7 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from typing import Optional
 
 from paths import APP_DIR, DATA_DIR, FROZEN, set_autostart
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_installer
@@ -81,9 +82,15 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 from agent_brain import AgentBrain
 from config import Config
 from pet_sprites import render_icon
-from pet_window import PetState, PetWindow, style_menu
+try:
+    from pet_sprites import get_character_info
+except ImportError:         # alte pet_sprites ohne Charakter-Registry
+    def get_character_info(char_id):
+        return {}
+from pet_window import PetState, PetWindow, is_night, style_menu
 from settings_dialog import SettingsDialog
 from speech_bubble import InputBar, SpeechBubble
+import tools
 
 APP_ID = "MochiDesktopBuddy"
 HOTKEY_ID = 0xB0B0
@@ -108,27 +115,31 @@ class AmbientVisionWorker(QObject):
             comment = self._analyze()
         except Exception:
             comment = ""
-        self.finished.emit(comment or "")
+        user = str(self.cfg.get("pet", {}).get("user_name", "Boss")).strip() or "Boss"
+        self.finished.emit((comment or "").replace("Boss", user))
 
     def _analyze(self) -> str:
         top = self.top_window or ""
         top_low = top.lower()
         apps_str = ", ".join(self.open_apps[:6])
+        user = str(self.cfg.get("pet", {}).get("user_name", "Boss")).strip() or "Boss"
+        cinfo = get_character_info(self.cfg.get("pet", {}).get("character", "cat_mochi"))
+        who = cinfo.get("ai_persona") or "Du bist Mochi, ein extrem neugieriger, süßer Katzen-Buddy."
 
         # Schritt 1: Cloud-Vision ueber die Gemini API, falls ein Key hinterlegt ist
         if gemini.has_key() and self.b64_img:
             try:
                 prompt = (
-                    f"Du bist Mochi, ein extrem neugieriger, süßer Katzen-Buddy auf dem Windows-Desktop des Nutzers ('Boss'). "
-                    f"Aktives Fenster des Bosses: '{top}'. Offene Programme: {apps_str}.\n"
-                    "Schau dir den Screenshot und das aktive Fenster genau an. Was macht der Boss gerade (z. B. Coden in Angular/Python/React, Dokumente schreiben, Recherche, Surfen, Design)?\n"
+                    f"{who} Du lebst als Desktop-Buddy auf dem Windows-Desktop des Nutzers ('{user}'). "
+                    f"Aktives Fenster von {user}: '{top}'. Offene Programme: {apps_str}.\n"
+                    f"Schau dir den Screenshot und das aktive Fenster genau an. Was macht {user} gerade (z. B. Coden in Angular/Python/React, Dokumente schreiben, Recherche, Surfen, Design)?\n"
                     "Reagiere spontan, lebensfroh und liebenswert darauf:\n"
                     "- Sag kurz, wie du es findest,\n"
                     "- ODER biete ihm charmant deine Hilfe an bzw. stelle eine neugierige Frage dazu.\n"
                     "WICHTIG:\n"
                     "- Maximal 1-2 kurze Sätze auf Deutsch.\n"
                     "- Höchstens ein Emoji.\n"
-                    "- Nenne den Nutzer gern 'Boss'.\n"
+                    f"- Nenne den Nutzer gern '{user}'.\n"
                     "- Sei niemals belehrend, sondern sympathisch und neugierig."
                 )
                 comment = gemini.ask(prompt, timeout_s=45, image_b64=self.b64_img)
@@ -173,7 +184,7 @@ class AmbientVisionWorker(QObject):
 
 CLICK_LINES = [
     "Miau~ \U0001F496", "Schnurr schnurr \U0001F63A", "Hihi, das kitzelt! \U0001F6B8", "Nyaa~ \u2728",
-    "Streicheln erlaubt! \U0001F43E", "Du bist der Beste, Boss! \U0001F496", "Pfoten-High-Five! \U0001F43E",
+    "Streicheln erlaubt! \U0001F43E", "Pfoten-High-Five! \U0001F43E",
     "Mehr Kraulen, bitte~ \U0001F63B",
 ]
 CHATTER_LINES = [
@@ -232,8 +243,45 @@ class HotkeyFilter(QAbstractNativeEventFilter):
         return False, 0
 
 
+def _is_fullscreen_foreground() -> bool:
+    """True, wenn ein Vollbild-Fenster (Praesentation, Video, Spiel) im Vordergrund ist."""
+    try:
+        u32 = ctypes.windll.user32
+        hwnd = u32.GetForegroundWindow()
+        if not hwnd:
+            return False
+        cls = ctypes.create_unicode_buffer(64)
+        u32.GetClassNameW(hwnd, cls, 64)
+        if cls.value in ("Progman", "WorkerW", "Shell_TrayWnd"):
+            return False
+        r = ctypes.wintypes.RECT()
+        u32.GetWindowRect(hwnd, ctypes.byref(r))
+        return any(r.left <= g.left() and r.top <= g.top() and r.right >= g.right() + 1 and r.bottom >= g.bottom() + 1
+                   for g in (s.geometry() for s in QGuiApplication.screens()))
+    except Exception:
+        return False
+
+
+class _PowerStatus(ctypes.Structure):
+    _fields_ = [("ac", ctypes.c_ubyte), ("flag", ctypes.c_ubyte), ("percent", ctypes.c_ubyte),
+                ("sys", ctypes.c_ubyte), ("life", ctypes.c_ulong), ("full", ctypes.c_ulong)]
+
+
+def _battery() -> tuple[int, bool]:
+    """(Prozent, am Netzteil); (-1, True) wenn kein Akku/unbekannt."""
+    try:
+        st = _PowerStatus()
+        if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(st)) and st.percent <= 100 and st.flag != 128:
+            return int(st.percent), st.ac == 1
+    except Exception:
+        pass
+    return -1, True
+
+
 class Buddy(QObject):
     """Verdrahtet alle Module miteinander."""
+
+    timer_expired = pyqtSignal(str, int, str)      # kommt aus einem Hintergrund-Thread (tools-Timer)
 
     def __init__(self, app: QApplication, cfg: Config):
         super().__init__()
@@ -256,7 +304,14 @@ class Buddy(QObject):
         self.tray.show()
 
         # Signale
+        self.timer_expired.connect(self._on_timer_expired)
+        try:
+            tools.register_timer_callback(lambda label, sec, u: self.timer_expired.emit(label, int(sec), u or ""))
+        except AttributeError:      # tools.py ohne Timer-Unterstuetzung
+            pass
         self.pet.moved.connect(self._follow)
+        self.pet.character_changed.connect(self._on_character_changed)
+        self.pet.treat_given.connect(self._on_treat)
         self.pet.petted.connect(self._on_petted)
         self.pet.command_requested.connect(self._on_submit)
         self.pet.input_requested.connect(self.open_input)
@@ -284,10 +339,24 @@ class Buddy(QObject):
         self._chatter.setSingleShot(True)
         self._chatter.timeout.connect(self._on_chatter)
 
+        # Wohlfuehl-Erinnerungen und Akku-Warnung
+        self._wellbeing = QTimer(self)
+        self._wellbeing.timeout.connect(self._on_wellbeing)
+        self._wellbeing_water = False
+        self._battery_timer = QTimer(self)
+        self._battery_timer.timeout.connect(self._check_battery)
+        self._battery_warned = False
+
         # Autonome Screen- und Coding-Beobachtung alle paar Minuten
         self._vision_timer = QTimer(self)
         self._vision_timer.setSingleShot(True)
         self._vision_timer.timeout.connect(self._on_autonomous_vision)
+
+    def user_name(self) -> str:
+        return str(self.cfg.get("pet.user_name", "Boss")).strip() or "Boss"
+
+    def char_info(self) -> dict:
+        return get_character_info(self.pet.character)
 
     def _update_tray_menu(self) -> None:
         self.tray_menu.clear()
@@ -326,16 +395,18 @@ class Buddy(QObject):
                 hint = "Hi! Klick mich rechts \u2192 Gemini-Key eintragen, dann werde ich schlau \U0001f9e0"
             else:
                 hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
-                hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
+                hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
         else:
             hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
-            hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
+            hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
             if not self._hotkey_ok:
-                hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick auf mich = Befehl"
+                hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Mochi')} \U0001F43E Doppelklick auf mich = Befehl"
 
         QTimer.singleShot(1500, lambda: self._say(hint, 6000))
         self._schedule_chatter()
         self._schedule_vision(initial_delay_s=50)
+        self._schedule_wellbeing()
+        self._battery_timer.start(60000)
         QTimer.singleShot(30000, lambda: self._check_update(manual=False))
 
     def _about(self) -> None:
@@ -422,7 +493,8 @@ class Buddy(QObject):
         self.bubble.hide_now()
         self.pet.freeze(True)
         self.pet.wake()
-        placeholder = "Antworte Mochi... \U0001F43E" if (reply_mode or getattr(self, "_mochi_asked_question", False)) else "Was soll ich tun, Boss? \U0001F43E"
+        placeholder = (f"Antworte {self.char_info().get('name', 'Mochi')}... \U0001F43E" if (reply_mode or getattr(self, "_mochi_asked_question", False))
+                       else f"Was soll ich tun, {self.user_name()}? \U0001F43E")
         self.input.popup(self.pet.head_anchor(), placeholder)
 
     def _on_bubble_clicked(self) -> None:
@@ -475,11 +547,69 @@ class Buddy(QObject):
             self._mochi_asked_question = True
 
 
+    def _on_timer_expired(self, label: str, duration_s: int, u_name: str) -> None:
+        self.pet.wake()
+        self.pet.celebrate(4.0)
+        cinfo = self.char_info()
+        mins = duration_s // 60
+        time_hint = f"{mins} Min." if mins > 0 else f"{duration_s} Sek."
+        msg = f"\u23F0 {cinfo.get('sound', 'Ring, ring')}, {u_name or self.user_name()}! Dein Timer f\u00fcr \u201e{label}\u201c ({time_hint}) ist abgelaufen! {cinfo.get('emoji', '')}"
+        self.bubble.hide_now()
+        self._say(msg, 7000)
+        self.tray.showMessage(f"\u23F0 Timer abgelaufen: {label}", f"Die Zeit f\u00fcr \u201e{label}\u201c ({time_hint}) ist um!", self.icon, 7000)
+        self.brain.record_assistant_message(msg)
+
+    def _on_character_changed(self, _cid: str) -> None:
+        ci = self.char_info()
+        self._say(f"{ci.get('sound', '')} Ich bin {ci.get('name', 'Mochi')}! {ci.get('emoji', '')}", 3000)
+
+    def _on_treat(self) -> None:
+        n = int(self.cfg.get("treats", 0))
+        ci = self.char_info()
+        self._say(f"{ci.get('sound', 'Mjam!')} Danke, {self.user_name()}! \U0001F356 Schon {n} Leckerli bekommen! \U0001F496", 4000)
+
+    # -- Wohlfuehl-Erinnerungen & Akku ---------------------------------------------------------
+    def _schedule_wellbeing(self) -> None:
+        self._wellbeing.stop()
+        wb = self.cfg.get("wellbeing", {}) or {}
+        if wb.get("breaks", True) or wb.get("water", True):
+            self._wellbeing.start(max(1, int(wb.get("break_min", 60))) * 60000)
+
+    def _on_wellbeing(self) -> None:
+        wb = self.cfg.get("wellbeing", {}) or {}
+        if is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy or self.input.isVisible():
+            return
+        kinds = [k for k, on in (("break", wb.get("breaks", True)), ("water", wb.get("water", True))) if on]
+        if not kinds:
+            return
+        self._wellbeing_water = not self._wellbeing_water       # abwechseln
+        kind = "water" if (self._wellbeing_water and "water" in kinds) or kinds == ["water"] else "break"
+        ci = self.char_info()
+        u = self.user_name()
+        text = (f"{ci.get('sound', '')} {u}, Wasser trinken \U0001F4A7" if kind == "water"
+                else f"{ci.get('sound', '')} {u}, kurz strecken? \U0001F938")
+        self.pet.wake()
+        self._say(text.strip(), 7000)
+
+    def _check_battery(self) -> None:
+        pct, ac = _battery()
+        if pct < 0 or ac or pct >= 20:
+            self._battery_warned = False       # erst wieder warnen, wenn zwischenzeitlich geladen wurde
+            return
+        if pct < 15 and not self._battery_warned and self.cfg.get("battery_warn", True):
+            self._battery_warned = True
+            self.pet.wake()
+            self.pet.sad(3.0)
+            self._say(f"\U0001F50B Nur noch {pct} % Akku, {self.user_name()}! Bitte Ladekabel anschlie\u00dfen.", 9000)
+            self.tray.showMessage("Akku fast leer", f"Nur noch {pct} % Akku.", self.icon, 7000)
+
     # -- Interaktion -------------------------------------------------------------------------
     def _on_petted(self) -> None:
         if self.brain.busy:
             return
-        self._say(random.choice(CLICK_LINES), 2500)
+        u = self.user_name()
+        lines = self.char_info().get("pet_sounds") or CLICK_LINES + [f"Du bist der Beste, {u}! \U0001F496"]
+        self._say(random.choice(lines), 2500)
 
     def _on_tray(self, reason) -> None:
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
@@ -491,11 +621,22 @@ class Buddy(QObject):
             return
         self._settings_open = True
         try:
-            dlg = SettingsDialog(self.cfg)
+            old_spec = str(self.cfg.get("hotkey", "ctrl+alt+p"))
+            dlg = SettingsDialog(self.cfg, hotkey_validator=lambda spec: parse_hotkey(spec) is not None)
             dlg.setWindowIcon(self.icon)
             if dlg.exec():
                 self.pet.apply_config()
                 self._schedule_chatter()
+                self._schedule_wellbeing()
+                spec = str(self.cfg.get("hotkey", "ctrl+alt+p"))
+                if spec != old_spec:
+                    self.hotkey.unregister()
+                    if not self.hotkey.register(spec):      # von anderem Programm belegt -> alten behalten
+                        self.cfg.set("hotkey", old_spec)
+                        self.cfg.save()
+                        self._hotkey_ok = self.hotkey.register(old_spec)
+                        self._say("Dieses Tastenk\u00fcrzel ist schon belegt \U0001F63F Ich behalte das alte.", 4500)
+                        return
                 self._say("Gespeichert! \U0001F43E", 2000)
         finally:
             self._settings_open = False
@@ -503,6 +644,10 @@ class Buddy(QObject):
     # -- Intelligente Umgebungs- und Code-Beobachtung (Screen & Coding Companion) ---
     def _smart_ambient_comment(self) -> Optional[str]:
         """Prüft das aktive Fenster und liefert einen charmanten, kontextbezogenen Kommentar."""
+        text = self._smart_ambient_raw()
+        return text.replace("Boss", self.user_name()) if text else text
+
+    def _smart_ambient_raw(self) -> Optional[str]:
         try:
             import tools
             ctx = tools.get_active_window_context()
@@ -568,6 +713,9 @@ class Buddy(QObject):
             self._chatter.start(random.randint(90, 180) * 1000)
 
     def _on_chatter(self) -> None:
+        if is_night(self.cfg):
+            self._schedule_chatter()
+            return
         idle = self.pet.state in (PetState.IDLE, PetState.SLEEP)
         if idle and not self.brain.busy and not self.input.isVisible() and not self.bubble.isVisible():
             if self.pet.state == PetState.SLEEP:
@@ -578,7 +726,7 @@ class Buddy(QObject):
                 self._last_chatter = comment
                 self._say(comment)
             else:
-                self._say(random.choice(CHATTER_LINES))
+                self._say(random.choice(self.char_info().get("ambient_lines") or CHATTER_LINES))
         self._schedule_chatter()
 
     # -- Autonome Screen- und Coding-Beobachtung (Gemini Vision + Kontext) --------
@@ -590,7 +738,7 @@ class Buddy(QObject):
             self._vision_timer.start(delay * 1000)
 
     def _on_autonomous_vision(self) -> None:
-        if self.brain.busy or self.input.isVisible() or self.pet.state == PetState.WORKING:
+        if is_night(self.cfg) or self.brain.busy or self.input.isVisible() or self.pet.state == PetState.WORKING:
             self._schedule_vision()
             return
 
@@ -617,13 +765,17 @@ class Buddy(QObject):
         thread._worker = worker
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_ambient_vision_done)
-        worker.finished.connect(lambda *_: thread.quit())
-        thread.finished.connect(lambda: self._vision_threads.discard(thread))
-        thread.finished.connect(thread.deleteLater)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(self._reap_vision_threads)     # gebunden -> laeuft im Main-Thread
         self._vision_threads.add(thread)
         thread.start()
 
         self._schedule_vision()
+
+    def _reap_vision_threads(self) -> None:
+        for t in [t for t in self._vision_threads if t.isFinished()]:
+            self._vision_threads.discard(t)
+            t.deleteLater()
 
     def _on_ambient_vision_done(self, comment: str) -> None:
         comment = (comment or "").strip()

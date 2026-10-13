@@ -30,6 +30,9 @@ def main():
         "test_cli_loop",
         "test_gemini",
         "test_updater",
+        "test_characters",
+        "test_new_tools",
+        "test_confirm",
     ]
 
     total = 0

@@ -15,6 +15,8 @@ CONFIG_PATH = DATA_DIR / "config.json"
 DEFAULTS: dict[str, Any] = {
     "pet": {
         "name": "Mochi",
+        "character": "cat_mochi",
+        "user_name": "Boss",    # Anrede durch den Buddy
         "speed": 90,            # Pixel pro Sekunde
         "scale": 1.0,
         "wander": True,
@@ -35,6 +37,10 @@ DEFAULTS: dict[str, Any] = {
     "autostart": True,
     "first_run_done": False,
     "hotkey": "ctrl+alt+p",
+    "wellbeing": {"breaks": True, "break_min": 60, "water": True},
+    "battery_warn": True,
+    "night_mode": True,
+    "treats": 0,
     "update": {
         "auto": True,
         "last_check": 0.0,
