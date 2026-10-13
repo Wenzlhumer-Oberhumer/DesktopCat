@@ -50,6 +50,26 @@ Filename: "{app}\Mochi.exe"; Flags: nowait; Check: WizardSilent
 Filename: "taskkill"; Parameters: "/IM Mochi.exe /F"; Flags: runhidden; RunOnceId: "KillMochi"
 
 [Code]
+// Auto-Update startet das Setup und beendet Mochi danach: kurz warten, sonst bricht ein
+// stilles Setup wegen AppMutex ab. Haengt Mochi, wird es im Silent-Modus beendet.
+function InitializeSetup(): Boolean;
+var
+  I, ResultCode: Integer;
+begin
+  I := 0;
+  while CheckForMutexes('MochiDesktopPetMutex') and (I < 20) do
+  begin
+    Sleep(500);
+    I := I + 1;
+  end;
+  if CheckForMutexes('MochiDesktopPetMutex') and WizardSilent then
+  begin
+    Exec('taskkill.exe', '/IM Mochi.exe /F', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1000);
+  end;
+  Result := True;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   AppDataDir: String;

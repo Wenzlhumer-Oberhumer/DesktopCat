@@ -42,8 +42,23 @@ def test_invalid_key_message():
 
 
 def test_quota_message():
-    res, _ = _ask(_resp(429, {"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}))
+    # 429 gilt pro Modell -> alle Modelle durchprobieren, dann Kontingent melden
+    quota = {"error": {"status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded"}}
+    res, post = _ask(*[_resp(429, quota) for _ in gemini.MODELS])
     assert isinstance(res, LLMError) and "Kontingent" in str(res)
+    assert post.call_count == len(gemini.MODELS)
+
+
+def test_forbidden_model_falls_back_and_is_not_invalid_key():
+    ok = _resp(200, {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]})
+    res, _ = _ask(_resp(403, {"error": {"status": "PERMISSION_DENIED", "message": "not allowed on free tier"}}), ok)
+    assert res == "OK"
+
+
+def test_requests_minimal_thinking():
+    ok = _resp(200, {"candidates": [{"content": {"parts": [{"text": "OK"}]}}]})
+    _, post = _ask(ok)
+    assert post.call_args.kwargs["json"]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
 
 
 def test_404_falls_back_to_next_model():

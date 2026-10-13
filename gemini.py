@@ -9,7 +9,9 @@ from typing import Optional
 import requests
 
 KEY_URL = "https://aistudio.google.com/app/apikey"
-MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest"]   # *-latest-Aliase ueberleben Modellwechsel
+# Schnelle Lite-Modelle zuerst (Free Tier); *-latest-Aliase ueberleben Modellwechsel.
+# Das volle Flash-Modell nur als Reserve, falls die Lite-Modelle ueberlastet sind.
+MODELS = ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-flash-latest"]
 _API = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 _CRED_TARGET = "Mochi/GeminiApiKey"
 
@@ -69,11 +71,18 @@ def _error_text(resp: requests.Response) -> str:
     except ValueError:
         err = {}
     status, msg = str(err.get("status", "")), str(err.get("message", ""))
-    if resp.status_code in (401, 403) or "API_KEY_INVALID" in resp.text or "API key not valid" in msg:
+    if _key_invalid(resp):
         return "Mein API-Key ist ungültig – bitte in den Einstellungen neu eintragen 🔑"
     if resp.status_code == 429 or status == "RESOURCE_EXHAUSTED":
         return "Mein Gratis-Kontingent ist gerade aufgebraucht – versuch es gleich nochmal 😿"
+    if resp.status_code in (500, 503):
+        return "Gemini ist gerade überlastet – versuch es gleich nochmal 😿"
     return f"Gemini-Fehler {resp.status_code}: {msg[:160] or resp.reason}"
+
+
+def _key_invalid(resp: requests.Response) -> bool:
+    # Nur echte Key-Fehler; ein 403 kann auch "Modell im Free Tier nicht erlaubt" heissen
+    return resp.status_code == 401 or "API_KEY_INVALID" in resp.text or "API key not valid" in resp.text
 
 
 def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
@@ -86,7 +95,9 @@ def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
     parts: list[dict] = [{"text": prompt}]
     if image_b64:
         parts.append({"inlineData": {"mimeType": "image/png", "data": image_b64}})
-    payload = {"contents": [{"role": "user", "parts": parts}]}
+    # minimales "Nachdenken": halbiert die Antwortzeit, reicht fuer Mochis kurze Antworten
+    payload = {"contents": [{"role": "user", "parts": parts}],
+               "generationConfig": {"thinkingConfig": {"thinkingLevel": "minimal"}}}
 
     models = [m for m in [model, *MODELS] if m]
     last = "Gemini ist gerade nicht erreichbar 😿"
@@ -95,10 +106,12 @@ def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
             resp = requests.post(_API.format(model=m), json=payload, timeout=(6, timeout_s),
                                  headers={"x-goog-api-key": key})
         except requests.Timeout:
-            raise LLMError("Die KI antwortet nicht (Zeitüberschreitung) ⌛")
+            last = "Die KI antwortet nicht (Zeitüberschreitung) ⌛"
+            continue
         except requests.RequestException:
             raise LLMError("Keine Internetverbindung zu Gemini 📡")
-        if resp.status_code == 404:          # Modell gibt es nicht (mehr) -> naechstes probieren
+        # Modell weg (404), gesperrt (403), Kontingent pro Modell (429) oder ueberlastet (5xx) -> naechstes
+        if not _key_invalid(resp) and resp.status_code in (403, 404, 429, 500, 503):
             last = _error_text(resp)
             continue
         if not resp.ok:
