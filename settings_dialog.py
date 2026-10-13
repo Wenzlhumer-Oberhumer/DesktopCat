@@ -131,6 +131,10 @@ class SettingsDialog(QDialog):
         self.autostart = QCheckBox("Mit Windows starten")
         self.autostart.setChecked(bool(cfg.get("autostart", True)))
         form2.addRow("", self.autostart)
+
+        self.auto_update = QCheckBox("Automatisch nach Updates suchen")
+        self.auto_update.setChecked(bool(cfg.get("update.auto", True)))
+        form2.addRow("", self.auto_update)
         root.addLayout(form2)
 
         hk = QLabel(f"Tastenk\u00fcrzel zum Eingeben: {str(cfg.get('hotkey', 'ctrl+alt+p')).upper()} "
@@ -274,5 +278,6 @@ class SettingsDialog(QDialog):
         c.set("pet.chatter", self.chatter.isChecked())
         c.set("autostart", self.autostart.isChecked())
         set_autostart(self.autostart.isChecked())
+        c.set("update.auto", self.auto_update.isChecked())
         c.save()
         self.accept()

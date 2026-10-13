@@ -35,6 +35,10 @@ DEFAULTS: dict[str, Any] = {
     "autostart": True,
     "first_run_done": False,
     "hotkey": "ctrl+alt+p",
+    "update": {
+        "auto": True,
+        "last_check": 0.0,
+    },
 }
 
 

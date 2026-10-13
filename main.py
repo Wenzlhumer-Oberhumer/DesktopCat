@@ -10,7 +10,8 @@ import sys
 import traceback
 from pathlib import Path
 
-from paths import APP_DIR, DATA_DIR, set_autostart
+from paths import APP_DIR, DATA_DIR, FROZEN, set_autostart
+from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_installer
 from version import __version__
 
 # Sicherstellen, dass Module aus APP_DIR importiert werden koennen, auch nach os.chdir(DATA_DIR)
@@ -280,6 +281,9 @@ class Buddy(QObject):
         self._last_ambient_comment = ""
         self._mochi_asked_question = False
         self._vision_threads: set[QThread] = set()
+        self._pending_update: dict | None = None
+        self._update_worker: QThread | None = None
+        self._download_worker: QThread | None = None
 
         # Globales Tastenkuerzel
         self.hotkey = HotkeyFilter(self._hotkey_pressed)
@@ -305,6 +309,10 @@ class Buddy(QObject):
         self._act(self.tray_menu, "\U0001F4C4  Word-Dokument am Desktop erstellen", lambda: self._on_submit("erstelle ein word dokument am desktop"))
         self._act(self.tray_menu, "\U0001F3E0  Zur Taskleiste zur\u00fccksetzen", self.pet.reset_to_taskbar)
         self.tray_menu.addSeparator()
+        if getattr(self, "_pending_update", None):
+            ver = self._pending_update.get("version", "")
+            self._act(self.tray_menu, f"✨ Update auf v{ver} installieren", self._start_update_download)
+        self._act(self.tray_menu, "🔄 Nach Updates suchen", lambda: self._check_update(manual=True))
         self._act(self.tray_menu, "\u2699\uFE0F  Einstellungen", self.open_settings)
         self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Mochi (v{__version__})", self._about)
         self._act(self.tray_menu, "\U0001F44B  Beenden", self.quit)
@@ -338,6 +346,7 @@ class Buddy(QObject):
         QTimer.singleShot(1500, lambda: self._say(hint, 6000))
         self._schedule_chatter()
         self._schedule_vision(initial_delay_s=50)
+        QTimer.singleShot(30000, lambda: self._check_update(manual=False))
 
     def _about(self) -> None:
         self._say(f"Mochi v{__version__} \U0001F43E\nDein KI-Desktop-Buddy!", 6000)
@@ -346,6 +355,60 @@ class Buddy(QObject):
         self.hotkey.unregister()
         self.tray.hide()
         self.app.quit()
+
+    # -- Auto-Update -------------------------------------------------------------------
+    def _check_update(self, manual: bool = False) -> None:
+        if not manual:
+            if not FROZEN or not self.cfg.get("update.auto", True):
+                return
+            last_check = float(self.cfg.get("update.last_check", 0.0))
+            if time.time() - last_check < 86400:
+                return
+        self.cfg.set("update.last_check", time.time())
+        self.cfg.save()
+
+        if manual:
+            self._say("Suche nach Updates... 🔍", 3000)
+
+        self._update_worker = CheckUpdateWorker(manual=manual)
+        self._update_worker.check_completed.connect(self._on_update_checked)
+        self._update_worker.start()
+
+    def _on_update_checked(self, res: dict) -> None:
+        status = res.get("status")
+        manual = res.get("manual", False)
+        if status == "update_available":
+            self._pending_update = res
+            ver = res.get("version", "")
+            self._say(f"Es gibt ein Update auf v{ver}! Klick mich zum Installieren ✨", 10000)
+            self._update_tray_menu()
+        elif status == "up_to_date" and manual:
+            self._say("Du hast die neueste Version 😺", 5000)
+        elif status == "error" and manual:
+            self._say("Konnte nicht nach Updates suchen 😿", 5000)
+
+    def _start_update_download(self) -> None:
+        if not getattr(self, "_pending_update", None):
+            return
+        self._say("Lade Update herunter... ⏳", 8000)
+        self._download_worker = DownloadUpdateWorker(
+            self._pending_update["setup_url"],
+            self._pending_update["sha_url"],
+            self._pending_update["version"],
+        )
+        self._download_worker.download_completed.connect(self._on_update_downloaded)
+        self._download_worker.start()
+
+    def _on_update_downloaded(self, ok: bool, path_or_err: str) -> None:
+        if ok:
+            self._say("Update wird installiert... Bis gleich! 🐾", 3000)
+            QTimer.singleShot(1500, lambda: self._apply_update(path_or_err))
+        else:
+            self._say(f"Update-Fehler: {path_or_err} 😿", 8000)
+
+    def _apply_update(self, setup_exe: str) -> None:
+        launch_installer(setup_exe)
+        self.quit()
 
     # -- Sprechblase / Eingabe ---------------------------------------------------------
     def _follow(self) -> None:
@@ -373,7 +436,10 @@ class Buddy(QObject):
         self.input.popup(self.pet.head_anchor(), placeholder)
 
     def _on_bubble_clicked(self) -> None:
-        """Klick auf die Sprechblase oeffnet direkt die Eingabe, um Mochi zu antworten."""
+        """Klick auf die Sprechblase: laedt Update herunter falls anstehend, sonst Eingabe oeffnen."""
+        if getattr(self, "_pending_update", None):
+            self._start_update_download()
+            return
         if not self.brain.busy:
             self.open_input(reply_mode=True)
 

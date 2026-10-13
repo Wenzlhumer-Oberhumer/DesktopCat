@@ -1,0 +1,228 @@
+"""Auto-Update-Logik ueber GitHub Releases."""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import re
+import subprocess
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+from PyQt6.QtCore import QThread, pyqtSignal
+
+from version import UPDATE_REPO, __version__
+
+logger = logging.getLogger("mochi.updater")
+
+TRUSTED_PREFIXES = (
+    "https://github.com/",
+    "https://objects.githubusercontent.com/",
+)
+
+
+def parse_version(v: str) -> tuple[int, ...]:
+    """Wandelt z. B. 'v2.0.1' oder '2.0.0-rc1' in ein vergleichbares Integer-Tupel um."""
+    clean = v.strip().lstrip("vV")
+    clean = clean.split("-")[0].split("+")[0]
+    parts: list[int] = []
+    for piece in clean.split("."):
+        digits = "".join(ch for ch in piece if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def is_newer(remote_v: str, current_v: str = __version__) -> bool:
+    """Prueft, ob remote_v strikt neuer als current_v ist."""
+    return parse_version(remote_v) > parse_version(current_v)
+
+
+def is_trusted_url(url: str) -> bool:
+    """Verhindert Downloads von unbefugten Fremd-Domains."""
+    return any(url.startswith(prefix) for prefix in TRUSTED_PREFIXES)
+
+
+class CheckUpdateWorker(QThread):
+    """Prueft im Hintergrund, ob ein neues GitHub Release vorliegt."""
+
+    check_completed = pyqtSignal(dict)
+
+    def __init__(self, manual: bool = False, repo: str = UPDATE_REPO):
+        super().__init__()
+        self.manual = manual
+        self.repo = repo
+
+    def run(self) -> None:
+        url = f"https://api.github.com/repos/{self.repo}/releases/latest"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": f"Mochi/{__version__}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            tag = data.get("tag_name", "")
+            if not tag:
+                self.check_completed.emit({
+                    "status": "error",
+                    "manual": self.manual,
+                    "error": "Kein tag_name im Release gefunden.",
+                })
+                return
+
+            newer = is_newer(tag, __version__)
+            if not newer:
+                self.check_completed.emit({
+                    "status": "up_to_date",
+                    "manual": self.manual,
+                    "version": tag,
+                })
+                return
+
+            # Assets suchen
+            setup_url = ""
+            sha_url = ""
+            for asset in data.get("assets", []):
+                name = asset.get("name", "")
+                download_url = asset.get("browser_download_url", "")
+                if name.endswith(".exe") and "Setup" in name:
+                    setup_url = download_url
+                elif name.endswith(".sha256"):
+                    sha_url = download_url
+
+            if not setup_url:
+                self.check_completed.emit({
+                    "status": "error",
+                    "manual": self.manual,
+                    "error": "Keine Setup.exe im Release gefunden.",
+                })
+                return
+
+            self.check_completed.emit({
+                "status": "update_available",
+                "manual": self.manual,
+                "version": tag.lstrip("vV"),
+                "notes": data.get("body", ""),
+                "setup_url": setup_url,
+                "sha_url": sha_url,
+            })
+
+        except Exception as exc:
+            logger.warning("Update-Check fehlgeschlagen: %s", exc)
+            self.check_completed.emit({
+                "status": "error",
+                "manual": self.manual,
+                "error": str(exc),
+            })
+
+
+class DownloadUpdateWorker(QThread):
+    """Laedt das Update-Setup streamend herunter und validiert den SHA256-Hash."""
+
+    progress = pyqtSignal(int)
+    download_completed = pyqtSignal(bool, str)
+
+    def __init__(self, setup_url: str, sha_url: str, version: str):
+        super().__init__()
+        self.setup_url = setup_url
+        self.sha_url = sha_url
+        self.version = version
+
+    def run(self) -> None:
+        if not is_trusted_url(self.setup_url):
+            self.download_completed.emit(False, "Setup-URL ist nicht vertrauenswuerdig.")
+            return
+
+        expected_hash = ""
+        if self.sha_url:
+            if not is_trusted_url(self.sha_url):
+                self.download_completed.emit(False, "SHA256-URL ist nicht vertrauenswuerdig.")
+                return
+            try:
+                req_sha = urllib.request.Request(
+                    self.sha_url,
+                    headers={"User-Agent": f"Mochi/{__version__}"},
+                )
+                with urllib.request.urlopen(req_sha, timeout=10.0) as resp:
+                    sha_content = resp.read().decode("utf-8").strip()
+                    parts = sha_content.split()
+                    if parts:
+                        expected_hash = parts[0].strip().lower()
+            except Exception as exc:
+                self.download_completed.emit(False, f"Konnte SHA256-Datei nicht laden: {exc}")
+                return
+
+        dest_dir = Path(tempfile.gettempdir())
+        dest_file = dest_dir / f"Mochi-Setup-{self.version}.exe"
+        temp_dest = dest_file.with_suffix(".exe.part")
+
+        try:
+            req_setup = urllib.request.Request(
+                self.setup_url,
+                headers={"User-Agent": f"Mochi/{__version__}"},
+            )
+            hasher = hashlib.sha256()
+
+            with urllib.request.urlopen(req_setup, timeout=30.0) as resp, open(temp_dest, "wb") as out:
+                total_len = resp.headers.get("Content-Length")
+                total_size = int(total_len) if total_len and total_len.isdigit() else 0
+                downloaded = 0
+
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    hasher.update(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        pct = int(downloaded * 100 / total_size)
+                        self.progress.emit(min(100, pct))
+
+            actual_hash = hasher.hexdigest().lower()
+            if expected_hash and actual_hash != expected_hash:
+                try:
+                    temp_dest.unlink()
+                except OSError:
+                    pass
+                self.download_completed.emit(
+                    False,
+                    f"SHA256-Abweichung! Erwartet: {expected_hash}, Erhalten: {actual_hash}",
+                )
+                return
+
+            if dest_file.exists():
+                try:
+                    dest_file.unlink()
+                except OSError:
+                    pass
+            temp_dest.rename(dest_file)
+            self.download_completed.emit(True, str(dest_file))
+
+        except Exception as exc:
+            try:
+                if temp_dest.exists():
+                    temp_dest.unlink()
+            except OSError:
+                pass
+            self.download_completed.emit(False, f"Download fehlgeschlagen: {exc}")
+
+
+def launch_installer(setup_exe: str | Path) -> None:
+    """Startet das Setup silent und uebergibt Steuerungsflags."""
+    cmd = [
+        str(setup_exe),
+        "/SILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/CLOSEAPPLICATIONS",
+    ]
+    subprocess.Popen(cmd)
