@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+buddy.log*
+config.json
+*.json.tmp
+desktop_organize_log.json
+build/
+dist/
+vendor/
+*.spec.bak
+*.egg-info/
+.pytest_cache/

@@ -1,0 +1,650 @@
+"""Das Pet-Fenster: transparentes Always-on-Top-Overlay mit Zustandsmaschine, Physik und Animation."""
+from __future__ import annotations
+
+import math
+import random
+import time
+from collections import deque
+from dataclasses import replace
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QCursor, QGuiApplication, QPainter
+from PyQt6.QtWidgets import QApplication, QMenu, QWidget
+
+from pet_sprites import (
+    BASE, FLOOR, PoseContext, SpriteLibrary, _draw_effects, compute_pose, draw_cat,
+)
+
+
+class PetState(Enum):
+    IDLE = "idle"
+    WALK_LEFT = "walk_left"
+    WALK_RIGHT = "walk_right"
+    DRAGGED = "dragged"
+    FALLING = "falling"
+    WORKING = "working"
+    SUCCESS = "success"
+    SLEEP = "sleep"
+    SAD = "sad"
+    DANCE = "dance"
+    COOL = "cool"
+
+
+WALKING = (PetState.WALK_LEFT, PetState.WALK_RIGHT)
+
+# Timer-Intervall pro Zustand (ms). Ruhige Zustaende laufen mit wenig FPS -> kaum CPU-Last.
+INTERVALS = {
+    PetState.IDLE: 80,
+    PetState.SLEEP: 125,
+    PetState.WORKING: 33,
+    PetState.SAD: 40,
+    PetState.SUCCESS: 16,
+    PetState.DANCE: 16,
+    PetState.COOL: 33,
+    PetState.WALK_LEFT: 16,
+    PetState.WALK_RIGHT: 16,
+    PetState.DRAGGED: 16,
+    PetState.FALLING: 16,
+}
+
+MENU_STYLE = """
+QMenu { background: #2B2D31; color: #F2F3F5; border: 1px solid #44464D; border-radius: 12px;
+        padding: 6px; font: 10pt "Segoe UI"; }
+QMenu::item { padding: 8px 24px 8px 14px; border-radius: 8px; }
+QMenu::item:selected { background: #FF8FB1; color: #26282C; }
+QMenu::separator { height: 1px; background: #44464D; margin: 5px 8px; }
+"""
+
+
+def style_menu(menu: QMenu) -> QMenu:
+    menu.setWindowFlags(menu.windowFlags() | Qt.WindowType.FramelessWindowHint | Qt.WindowType.NoDropShadowWindowHint)
+    menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    menu.setStyleSheet(MENU_STYLE)
+    return menu
+
+
+class PetWindow(QWidget):
+    input_requested = pyqtSignal()
+    command_requested = pyqtSignal(str)
+    settings_requested = pyqtSignal()
+    quit_requested = pyqtSignal()
+    petted = pyqtSignal()        # einfacher Klick
+    moved = pyqtSignal()         # Position hat sich geaendert (Sprechblase folgt)
+
+
+    GRAVITY = 2300.0
+
+    def __init__(self, cfg, base_dir: Path):
+        flags = (
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool                         # kein Eintrag in Taskleiste / Alt-Tab
+        )
+        super().__init__(None, flags)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setWindowTitle("Mochi")
+
+        self.cfg = cfg
+        self.sprites = SpriteLibrary(base_dir, cfg.get("animations", {}) or {})
+
+        self.state = PetState.IDLE
+        self._state_since = time.monotonic()
+        self._state_until: Optional[float] = None
+        self._t0 = time.monotonic()
+        self._last = self._t0
+        self.facing = 1                      # 1 = rechts, -1 = links
+        self.frozen = False                  # z. B. waehrend die Eingabeleiste offen ist
+        self._px = 0.0
+        self._py = 0.0
+        self._vx = 0.0
+        self._vy = 0.0
+        self._walk_target = 0.0
+        self._look = (0.0, 0.0)
+        self._land_squash = 0.0
+        self._hop_t: Optional[float] = None
+        self._hearts_t: Optional[float] = None
+        self._happy_until = 0.0
+        self._bounced = False
+        self._pose = None
+        self._last_sig = None
+
+        self._pressed = False
+        self._dragging = False
+        self._suppress_click = False
+        self._press_global = QPoint()
+        self._grab_off = QPoint()
+        self._samples: deque = deque(maxlen=6)
+
+        self._click_timer = QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.timeout.connect(self._on_single_click)
+
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._anim_timer.timeout.connect(self._tick)
+
+        self._wander_timer = QTimer(self)
+        self._wander_timer.setSingleShot(True)
+        self._wander_timer.timeout.connect(self._on_wander)
+
+        self.apply_config()
+
+    # ==================================================================================
+    #  Konfiguration / Geometrie
+    # ==================================================================================
+    def apply_config(self) -> None:
+        self.speed = float(self.cfg.get("pet.speed", 90))
+        scale = max(0.5, min(2.5, float(self.cfg.get("pet.scale", 1.0))))
+        if not hasattr(self, "scale") or abs(scale - self.scale) > 1e-6:
+            old_bottom = self._py + self.height()
+            self.scale = scale
+            self.setFixedSize(int(BASE * scale), int(BASE * scale))
+            if hasattr(self, "_placed"):
+                self._py = old_bottom - self.height()
+                self._apply_pos()
+        self.wander_enabled = bool(self.cfg.get("pet.wander", True))
+        if self.isVisible():
+            self._schedule_wander()
+
+    def _screen_for_x(self, cx: float):
+        screens = QGuiApplication.screens()
+        for s in screens:
+            g = s.geometry()
+            if g.left() <= cx <= g.right():
+                return s
+        return QGuiApplication.primaryScreen()
+
+    def _avail(self) -> "QRect":
+        return self._screen_for_x(self._px + self.width() / 2).availableGeometry()
+
+    def _ground_y(self) -> float:
+        """y des Fensters, wenn das Pet direkt auf der Oberkante der Taskleiste steht."""
+        return self._avail().bottom() + 1 - FLOOR * self.scale
+
+    def _x_bounds(self) -> tuple[float, float]:
+        g = self._avail()
+        return float(g.left()), float(g.right() + 1 - self.width())
+
+    def _virtual_rect(self):
+        return QGuiApplication.primaryScreen().virtualGeometry()
+
+    def _apply_pos(self) -> None:
+        self.move(round(self._px), round(self._py))
+
+    def moveEvent(self, event) -> None:
+        super().moveEvent(event)
+        self.moved.emit()
+
+    def head_anchor(self) -> QPoint:
+        """Punkt knapp ueber dem Kopf (globale Koordinaten) - dorthin zeigt der Pfeil der Sprechblase."""
+        return QPoint(int(self.x() + self.width() / 2), int(self.y() + 24 * self.scale))
+
+    # ==================================================================================
+    #  Lebenszyklus
+    # ==================================================================================
+    def drop_in(self) -> None:
+        """Setzt das Pet sichtbar direkt auf die Taskleiste."""
+        geo = QGuiApplication.primaryScreen().availableGeometry()
+        self._px = float(geo.right() - self.width() * 2.2 - 60)
+        self._py = float(self._ground_y())
+        self._vx = self._vy = 0.0
+        self._placed = True
+        self._apply_pos()
+        self.set_state(PetState.IDLE)
+        self.show()
+        self.raise_()
+        self.react_happy()
+
+    def reset_to_taskbar(self) -> None:
+        geo = QGuiApplication.primaryScreen().availableGeometry()
+        self._px = float(geo.center().x() - self.width() / 2)
+        self._py = float(self._ground_y())
+        self._vx = self._vy = 0.0
+        self._dragging = False
+        self.frozen = False
+        self._apply_pos()
+        self.set_state(PetState.IDLE)
+        self.show()
+        self.raise_()
+        self.react_happy()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._last = time.monotonic()
+        self._restart_timer()
+        self._schedule_wander()
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self._anim_timer.stop()
+        self._wander_timer.stop()
+
+    # ==================================================================================
+    #  Zustandsmaschine
+    # ==================================================================================
+    def set_state(self, state: PetState, duration: Optional[float] = None) -> None:
+        if state != self.state:
+            self.state = state
+            self._state_since = time.monotonic()
+        self._state_until = (time.monotonic() + duration) if duration else None
+        if state in (PetState.WALK_LEFT, PetState.WALK_RIGHT):
+            self.facing = -1 if state == PetState.WALK_LEFT else 1
+        self.setCursor(Qt.CursorShape.ClosedHandCursor if state == PetState.DRAGGED else Qt.CursorShape.PointingHandCursor)
+        self._restart_timer()
+        self.update()
+
+    def _restart_timer(self) -> None:
+        if self.isVisible():
+            self._anim_timer.start(INTERVALS.get(self.state, 33))
+
+    def wake(self) -> None:
+        if self.state == PetState.SLEEP:
+            self.set_state(PetState.IDLE)
+
+    # -- oeffentliche API fuer den Controller ---------------------------------------------
+    def set_working(self) -> None:
+        self._click_timer.stop()
+        self.set_state(PetState.WORKING)
+
+    def celebrate(self, seconds: float = 2.6) -> None:
+        self.set_state(PetState.SUCCESS, seconds)
+
+    def dance(self, seconds: float = 6.0) -> None:
+        self.wake()
+        self.set_state(PetState.DANCE, seconds)
+
+    def be_cool(self, seconds: float = 6.0) -> None:
+        self.wake()
+        self.set_state(PetState.COOL, seconds)
+
+    def sad(self, seconds: float = 3.0) -> None:
+        self.set_state(PetState.SAD, seconds)
+
+
+    def calm(self) -> None:
+        self.set_state(PetState.IDLE)
+
+    def freeze(self, on: bool) -> None:
+        self.frozen = on
+        if on:
+            if self.state in WALKING or self.state == PetState.SLEEP:
+                self.set_state(PetState.IDLE)
+        else:
+            self._schedule_wander()
+
+    def react_happy(self) -> None:
+        """Klick-Reaktion: Huepfer + Herzchen."""
+        self.wake()
+        now = time.monotonic()
+        self._hop_t = now
+        self._hearts_t = now
+        self._happy_until = now + 1.5
+        self._restart_timer()
+        if self.state == PetState.IDLE:
+            self._anim_timer.start(16)      # fuer den Huepfer kurz mit voller Frame-Rate
+
+    # ==================================================================================
+    #  Autonomes Wandern
+    # ==================================================================================
+    def _schedule_wander(self, delay_s: Optional[float] = None) -> None:
+        if not self.isVisible():
+            return
+        lo = float(self.cfg.get("pet.wander_min_s", 5))
+        hi = max(lo, float(self.cfg.get("pet.wander_max_s", 10)))
+        self._wander_timer.start(int((delay_s if delay_s is not None else random.uniform(lo, hi)) * 1000))
+
+    def _on_wander(self) -> None:
+        busy = self.state not in (PetState.IDLE, PetState.SLEEP) or self.frozen or self._dragging
+        if busy or not self.wander_enabled:
+            self._schedule_wander()
+            return
+        r = random.random()
+        if r < 0.22:                              # einfach stehen bleiben
+            self.wake()
+            self._schedule_wander()
+        elif r < 0.42:                            # schlafen
+            self.set_state(PetState.SLEEP)
+            self._schedule_wander(random.uniform(10, 20))
+        else:                                     # ein paar Schritte
+            self._start_walk()
+            self._schedule_wander()
+
+    def _start_walk(self) -> None:
+        lo, hi = self._x_bounds()
+        direction = random.choice((-1, 1))
+        if self._px - lo < 80:
+            direction = 1
+        elif hi - self._px < 80:
+            direction = -1
+        target = self._px + direction * random.uniform(70, 280)
+        self._walk_target = max(lo, min(hi, target))
+        if abs(self._walk_target - self._px) < 20:
+            self.set_state(PetState.IDLE)
+            return
+        self.set_state(PetState.WALK_RIGHT if self._walk_target > self._px else PetState.WALK_LEFT)
+
+    # ==================================================================================
+    #  Tick: Physik + Animation
+    # ==================================================================================
+    def _tick(self) -> None:
+        now = time.monotonic()
+        dt = min(now - self._last, 0.08)
+        self._last = now
+
+        if self._state_until is not None and now >= self._state_until:
+            self._state_until = None
+            if self.state in (PetState.SUCCESS, PetState.SAD):
+                self.set_state(PetState.IDLE)
+
+        s = self.state
+        if s in WALKING:
+            self._walk(dt)
+        elif s == PetState.FALLING:
+            self._fall(dt)
+        elif s != PetState.DRAGGED and self._py < self._ground_y() - 1.5 and not self._dragging:
+            self._vx = self._vy = 0.0       # z. B. Taskleiste hat sich bewegt -> nachfallen
+            self.set_state(PetState.FALLING)
+
+        # Effekt-Timer abklingen lassen
+        if self._land_squash > 0:
+            self._land_squash = max(0.0, self._land_squash - dt * 5.5)
+        if self._hop_t is not None and now - self._hop_t > 0.5:
+            self._hop_t = None
+        if self._hearts_t is not None and now - self._hearts_t > 1.5:
+            self._hearts_t = None
+
+        # Blickrichtung zur Maus (guenstig: nur lesen, kein Event-Handler noetig)
+        if s in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
+            c = QCursor.pos()
+            hx = self._px + self.width() / 2
+            hy = self._py + 76 * self.scale
+            self._look = (max(-1.0, min(1.0, (c.x() - hx) / 260.0)), max(-1.0, min(1.0, (c.y() - hy) / 260.0)))
+        else:
+            self._look = (0.0, 0.0)
+
+        # Ruhige Zustaende: nach dem Huepfer wieder auf niedrige FPS zurueck
+        if s == PetState.IDLE and self._hop_t is None and self._hearts_t is None and self._land_squash == 0:
+            if self._anim_timer.interval() != INTERVALS[PetState.IDLE]:
+                self._anim_timer.setInterval(INTERVALS[PetState.IDLE])
+                self._anim_timer.setTimerType(Qt.TimerType.CoarseTimer)
+
+        if self.sprites.usable:
+            self.update()
+            return
+        pose = self._build_pose(now)
+        sig = self._signature(pose)
+        self._pose = pose
+        if sig != self._last_sig:             # nur neu zeichnen, wenn man wirklich etwas sieht
+            self._last_sig = sig
+            self.update()
+
+    @staticmethod
+    def _signature(p) -> tuple:
+        """Grob quantisierte Pose: gleiche Signatur = fuers Auge identisches Bild."""
+        def q(v, step):
+            return round(v / step)
+        if p.zzz is not None or p.dots is not None or p.sparkles is not None or p.hearts is not None \
+                or p.tear is not None:
+            return (object(),)               # laufende Effekte -> immer zeichnen
+        return (
+            q(p.dx, .35), q(p.dy, .35), q(p.rot, .4), q(p.sx, .006), q(p.sy, .006), q(p.head_dx, .35),
+            q(p.head_dy, .35), q(p.head_rot, .4), p.eyes, p.mouth, q(p.look[0], .2), q(p.look[1], .2),
+            q(p.tail, .1), q(p.paw_l, .4), q(p.paw_r, .4), q(p.ear_l, 1.0), q(p.ear_r, 1.0), q(p.bell, .4),
+            q(p.typing, .3), q(p.blush, .05), q(p.shadow, .05), p.laptop, p.tail_curl,
+        )
+
+    def _walk(self, dt: float) -> None:
+        lo, hi = self._x_bounds()
+        step = self.speed * dt
+        diff = self._walk_target - self._px
+        if abs(diff) <= step:
+            self._px = self._walk_target
+            self._apply_pos()
+            self.set_state(PetState.IDLE)
+            return
+        self._px += math.copysign(step, diff)
+        self._px = max(lo, min(hi, self._px))
+        self._py = self._ground_y()
+        self._apply_pos()
+
+    def _fall(self, dt: float) -> None:
+        lo, hi = self._x_bounds()
+        self._vy += self.GRAVITY * dt
+        self._px += self._vx * dt
+        self._py += self._vy * dt
+        self._vx *= (1.0 - min(1.0, 1.8 * dt))
+        if self._px < lo or self._px > hi:
+            self._px = max(lo, min(hi, self._px))
+            self._vx = -self._vx * 0.45
+        ground = self._ground_y()
+        if self._py >= ground:
+            self._py = ground
+            if self._vy > 380 and not self._bounced:
+                self._vy = -self._vy * 0.27          # kleiner, suesser Huepfer
+                self._bounced = True
+                self._land_squash = 1.0
+            else:
+                self._vy = self._vx = 0.0
+                self._bounced = False
+                self._land_squash = 1.0
+                self.set_state(PetState.IDLE)
+        self._apply_pos()
+
+    # ==================================================================================
+    #  Zeichnen
+    # ==================================================================================
+    def _build_pose(self, now: float):
+        hop = 0.0
+        if self._hop_t is not None:
+            u = (now - self._hop_t) / 0.5
+            hop = 4 * u * (1 - u) * 22 if 0 <= u <= 1 else 0.0
+        hearts_age = None
+        if self._hearts_t is not None:
+            hearts_age = (now - self._hearts_t) / 1.5
+        look = self._look
+        if self.facing < 0:
+            look = (-look[0], look[1])
+        ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
+                          squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until)
+        return compute_pose(ctx)
+
+    def paintEvent(self, _event) -> None:
+        now = time.monotonic()
+        p = QPainter(self)
+        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
+                         | QPainter.RenderHint.TextAntialiasing)
+        p.scale(self.scale, self.scale)
+        flip = self.facing < 0
+
+        if self.sprites.usable:
+            hop = 0.0
+            if self._hop_t is not None:
+                u = (now - self._hop_t) / 0.5
+                hop = 4 * u * (1 - u) * 22 if 0 <= u <= 1 else 0.0
+            self._paint_sprite(p, self.state.value, now - self._t0, now - self._state_since, hop, flip)
+        else:
+            pose = replace(self._pose) if self._pose is not None else self._build_pose(now)
+            p.save()
+            if flip:
+                p.translate(BASE, 0)
+                p.scale(-1, 1)
+            # Effekte (Text, Herzen ...) duerfen nicht gespiegelt werden -> separat zeichnen
+            effects = (pose.zzz, pose.dots, pose.sparkles, pose.hearts)
+            if flip:
+                pose.zzz = pose.dots = pose.sparkles = pose.hearts = None
+            draw_cat(p, pose)
+            p.restore()
+            if flip:
+                pose.zzz, pose.dots, pose.sparkles, pose.hearts = effects
+                _draw_effects(p, pose)
+        p.end()
+
+    def _paint_sprite(self, p: QPainter, key: str, t: float, age: float, hop: float, flip: bool) -> None:
+        anim, mirrored, exact = self.sprites.get(key)
+        if anim is None:
+            return
+        pix = anim.frame_at(((time.monotonic() - self._t0) * 1000))
+        dx = dy = rot = 0.0
+        sy = 1.0
+        if not exact:      # kein eigenes Sprite fuer diesen Zustand -> Idle-Bild mit Bewegung aufpeppen
+            if key in ("walk_left", "walk_right"):
+                dy = -abs(math.sin(t * 8)) * 4
+                rot = math.sin(t * 8) * 3
+            elif key in ("dragged", "falling"):
+                rot = math.sin(t * 13) * 9
+            elif key == "success":
+                u = (age % 0.62) / 0.62
+                dy = -4 * u * (1 - u) * 28
+            elif key == "working":
+                sy = 1 + 0.02 * math.sin(t * 9)
+            elif key == "sad":
+                dy = 3
+            elif key == "sleep":
+                sy = 0.94
+        dy -= hop
+        sy *= 1 - 0.14 * self._land_squash
+        # Zielrechteck: einpassen, unten buendig am Boden
+        avail_w, avail_h = BASE - 16, FLOOR - 4
+        sc = min(avail_w / pix.width(), avail_h / pix.height())
+        w, h = pix.width() * sc, pix.height() * sc
+        mirror = flip != mirrored
+        p.save()
+        p.translate(BASE / 2 + dx, FLOOR + dy)
+        p.rotate(rot)
+        p.scale(-1 if mirror else 1, sy)
+        p.drawPixmap(QRectF(-w / 2, -h, w, h), pix, QRectF(pix.rect()))
+        p.restore()
+
+    # ==================================================================================
+    #  Maus: Klick, Doppelklick, Drag & Drop, Kontextmenue
+    # ==================================================================================
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._pressed = True
+            self._dragging = False
+            self._press_global = e.globalPosition().toPoint()
+            self._grab_off = self._press_global - self.pos()
+            self._samples.clear()
+            e.accept()
+
+    def mouseMoveEvent(self, e) -> None:
+        if not self._pressed:
+            return
+        gp = e.globalPosition().toPoint()
+        if not self._dragging:
+            if (gp - self._press_global).manhattanLength() < 6:
+                return
+            self._dragging = True
+            self._click_timer.stop()
+            self.wake()
+            self._vx = self._vy = 0.0
+            self.set_state(PetState.DRAGGED)
+        target = gp - self._grab_off
+        vr = self._virtual_rect()
+        self._px = float(max(vr.left(), min(target.x(), vr.right() + 1 - self.width())))
+        self._py = float(max(vr.top(), min(target.y(), vr.bottom() + 1 - self.height())))
+        self._apply_pos()
+        self._samples.append((time.monotonic(), gp))
+
+    def mouseReleaseEvent(self, e) -> None:
+        if e.button() != Qt.MouseButton.LeftButton or not self._pressed:
+            return
+        self._pressed = False
+        if self._dragging:
+            self._dragging = False
+            vx = vy = 0.0
+            if len(self._samples) >= 2:
+                t0, p0 = self._samples[0]
+                t1, p1 = self._samples[-1]
+                if t1 - t0 > 0.01 and time.monotonic() - t1 < 0.08:
+                    vx = (p1.x() - p0.x()) / (t1 - t0)
+                    vy = (p1.y() - p0.y()) / (t1 - t0)
+            self._vx = max(-900.0, min(900.0, vx * 0.55))
+            self._vy = max(-700.0, min(500.0, vy * 0.4))
+            self._bounced = False
+            self.set_state(PetState.FALLING)
+            self._schedule_wander()
+        elif self._suppress_click:
+            self._suppress_click = False
+        else:
+            self._click_timer.start(QApplication.doubleClickInterval())
+
+    def mouseDoubleClickEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._click_timer.stop()
+            self._suppress_click = True
+            self._pressed = False
+            self.wake()
+            self.input_requested.emit()
+
+    def _on_single_click(self) -> None:
+        self.react_happy()
+        self.petted.emit()
+
+    def wheelEvent(self, e) -> None:
+        # Ctrl + Mausrad oder Shift + Mausrad skaliert die Katze stufenlos
+        mods = e.modifiers()
+        if bool(mods & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)):
+            delta = 0.05 if e.angleDelta().y() > 0 else -0.05
+            new_scale = round(max(0.6, min(2.5, self.scale + delta)), 2)
+            if abs(new_scale - self.scale) > 1e-4:
+                old_bottom = self._py + self.height()
+                self.scale = new_scale
+                self.setFixedSize(int(BASE * new_scale), int(BASE * new_scale))
+                self._py = old_bottom - self.height()
+                self._apply_pos()
+                self.cfg.set("pet.scale", new_scale)
+                self.cfg.save()
+                self.moved.emit()
+            e.accept()
+            return
+        super().wheelEvent(e)
+
+    def contextMenuEvent(self, e) -> None:
+        self._click_timer.stop()
+        menu = style_menu(QMenu(self))
+        menu.addAction("\U0001F4AC  Befehl eingeben").triggered.connect(self.input_requested.emit)
+        menu.addSeparator()
+
+        # Coole Tricks & Animationen
+        tricks = menu.addMenu("\u2728  Tricks & Spa\u00df")
+        style_menu(tricks)
+        tricks.addAction("\U0001F483  Mochi, tanz f\u00fcr mich!").triggered.connect(lambda: self.dance(6.0))
+        tricks.addAction("\U0001F576\uFE0F  Coole Katze (Sonnenbrille)").triggered.connect(lambda: self.be_cool(6.0))
+        tricks.addAction("\U0001F4A4  Schlafen legen").triggered.connect(lambda: self.set_state(PetState.SLEEP))
+        tricks.addAction("\U0001F43E  Aufwecken").triggered.connect(self.wake)
+
+        # Schnelle Tools
+        tools_menu = menu.addMenu("\u26A1  Schnell-Tools")
+        style_menu(tools_menu)
+        tools_menu.addAction("\U0001F441\uFE0F  Bildschirm beobachten (Vision)").triggered.connect(lambda: self.command_requested.emit("was mache ich gerade"))
+        tools_menu.addAction("\U0001F4C4  Word am Desktop erstellen").triggered.connect(lambda: self.command_requested.emit("erstelle ein word dokument am desktop"))
+        tools_menu.addAction("\U0001F4CA  PowerPoint am Desktop erstellen").triggered.connect(lambda: self.command_requested.emit("erstelle eine powerpoint am desktop"))
+        tools_menu.addAction("\U0001F4F8  Desktop Screenshot").triggered.connect(lambda: self.command_requested.emit("screenshot"))
+        tools_menu.addAction("\U0001F9F9  Desktop aufr\u00e4umen").triggered.connect(lambda: self.command_requested.emit("desktop aufraeumen"))
+        tools_menu.addAction("\U0001F552  Datum & Uhrzeit").triggered.connect(lambda: self.command_requested.emit("wie spaet ist es"))
+        tools_menu.addAction("\U0001F4BB  System-Status").triggered.connect(lambda: self.command_requested.emit("systeminfo"))
+        tools_menu.addAction("\U0001F50A  Lauter (+10%)").triggered.connect(lambda: self.command_requested.emit("lauter"))
+        tools_menu.addAction("\U0001F509  Leiser (-10%)").triggered.connect(lambda: self.command_requested.emit("leiser"))
+        tools_menu.addAction("\U0001F507  Stumm / Mute").triggered.connect(lambda: self.command_requested.emit("stumm"))
+        tools_menu.addAction("\u25B6\uFE0F  Musik Play/Pause").triggered.connect(lambda: self.command_requested.emit("pause"))
+
+        # Ordner
+        folders_menu = menu.addMenu("\U0001F4C2  Ordner \u00f6ffnen")
+        style_menu(folders_menu)
+        folders_menu.addAction("\U0001F4E5  Downloads").triggered.connect(lambda: self.command_requested.emit("oeffne downloads"))
+        folders_menu.addAction("\U0001F4C4  Dokumente").triggered.connect(lambda: self.command_requested.emit("oeffne dokumente"))
+        folders_menu.addAction("\U0001F5A5\uFE0F  Desktop").triggered.connect(lambda: self.command_requested.emit("oeffne desktop"))
+        folders_menu.addAction("\U0001F5D1\uFE0F  Papierkorb").triggered.connect(lambda: self.command_requested.emit("oeffne papierkorb"))
+
+        menu.addSeparator()
+        menu.addAction("\U0001F3E0  Zur Taskleiste zur\u00fccksetzen").triggered.connect(self.reset_to_taskbar)
+        menu.addAction("\u2699\uFE0F  Einstellungen").triggered.connect(self.settings_requested.emit)
+        menu.addSeparator()
+        menu.addAction("\U0001F44B  Beenden").triggered.connect(self.quit_requested.emit)
+        menu.exec(e.globalPos())
+

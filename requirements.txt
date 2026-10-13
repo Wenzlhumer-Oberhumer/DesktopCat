@@ -1,0 +1,12 @@
+PyQt6>=6.5
+docx2pdf>=0.1.8
+requests>=2.31
+pywin32>=306
+Pillow>=10.0
+python-docx>=1.1
+python-pptx>=1.0
+
+# Optionale Cloud-LLM-SDKs. Der Buddy spricht die APIs per `requests` direkt an
+# und braucht diese Pakete nicht zwingend - sie sind nur der Vollstaendigkeit halber gelistet.
+google-genai>=1.0
+openai>=1.30
