@@ -1,4 +1,4 @@
-; Inno Setup 6 Script fuer Mochi Desktop Pet
+﻿; Inno Setup 6 Script fuer Mochi Desktop Pet
 #ifndef AppVersion
 #define AppVersion "2.0.0"
 #endif
@@ -53,6 +53,7 @@ Filename: "taskkill"; Parameters: "/IM Mochi.exe /F"; Flags: runhidden; RunOnceI
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   AppDataDir: String;
+  ResultCode: Integer;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
@@ -62,6 +63,7 @@ begin
       if MsgBox('Möchten Sie auch die persönlichen Einstellungen und Chat-Protokolle von Mochi (' + AppDataDir + ') löschen?', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
       begin
         DelTree(AppDataDir, True, True, True);
+        Exec('cmdkey.exe', '/delete:Mochi/GeminiApiKey', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
       end;
     end;
   end;

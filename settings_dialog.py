@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import os
-import time
+import webbrowser
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QSlider,
+    QApplication, QCheckBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider,
     QVBoxLayout, QWidget,
 )
 
-import gemini_cli
+import gemini
 from paths import set_autostart
 
 STYLE = """
@@ -43,8 +43,6 @@ class SettingsDialog(QDialog):
     def __init__(self, cfg, parent=None):
         super().__init__(parent)
         self.cfg = cfg
-        self._login_proc = None
-        self._login_start_time = 0.0
 
         self.setWindowTitle("Einstellungen")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
@@ -60,7 +58,7 @@ class SettingsDialog(QDialog):
         root.addWidget(title)
 
         # -- Gemini-Konto -------------------------------------------------------------
-        sec_ai = QLabel("Gemini-Konto")
+        sec_ai = QLabel("Gemini-KI")
         sec_ai.setObjectName("section")
         root.addWidget(sec_ai)
 
@@ -74,15 +72,32 @@ class SettingsDialog(QDialog):
         self.status_lbl.setObjectName("status")
         ai_lay.addWidget(self.status_lbl)
 
-        # Buttons (Login & Logout)
+        steps = QLabel("1. „Gratis-Key holen“ klicken und mit Google anmelden\n"
+                       "2. „Create API key“ → Key kopieren\n"
+                       "3. Hier einfügen → „Prüfen & speichern“")
+        steps.setObjectName("hint")
+        ai_lay.addWidget(steps)
+
+        self.key_edit = QLineEdit()
+        self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.key_edit.setPlaceholderText("Gemini-Key einfügen (beginnt mit AIza…)")
+        self.key_edit.textChanged.connect(lambda t: self.save_key_btn.setEnabled(bool(t.strip())))
+        ai_lay.addWidget(self.key_edit)
+
         btn_box = QHBoxLayout()
         btn_box.setSpacing(10)
-        self.login_btn = QPushButton("Mit Google anmelden")
-        self.login_btn.setObjectName("google")
-        self.login_btn.clicked.connect(self._on_login_click)
-        btn_box.addWidget(self.login_btn, 1)
+        get_key_btn = QPushButton("Gratis-Key holen")
+        get_key_btn.setObjectName("google")
+        get_key_btn.clicked.connect(lambda: webbrowser.open(gemini.KEY_URL))
+        btn_box.addWidget(get_key_btn, 1)
 
-        self.logout_btn = QPushButton("Abmelden")
+        self.save_key_btn = QPushButton("Prüfen & speichern")
+        self.save_key_btn.setObjectName("primary")
+        self.save_key_btn.setEnabled(False)
+        self.save_key_btn.clicked.connect(self._on_save_key)
+        btn_box.addWidget(self.save_key_btn)
+
+        self.logout_btn = QPushButton("Key entfernen")
         self.logout_btn.setObjectName("danger")
         self.logout_btn.clicked.connect(self._on_logout_click)
         btn_box.addWidget(self.logout_btn)
@@ -95,8 +110,8 @@ class SettingsDialog(QDialog):
 
         root.addWidget(ai_box)
 
-        hint = QLabel("Mochi nutzt die offizielle Gemini CLI \u00fcber dein Google-Konto. "
-                      "Ohne Anmeldung arbeitet er im Offline-Modus.")
+        hint = QLabel("Der Key ist kostenlos und bleibt sicher in der Windows-Anmeldeinformationsverwaltung. "
+                      "Ohne Key arbeitet Mochi im Offline-Modus.")
         hint.setObjectName("hint")
         hint.setWordWrap(True)
         root.addWidget(hint)
@@ -159,95 +174,41 @@ class SettingsDialog(QDialog):
         btns.addWidget(save)
         root.addLayout(btns)
 
-        # Timer fuer Login-Polling
-        self._login_timer = QTimer(self)
-        self._login_timer.setInterval(1000)
-        self._login_timer.timeout.connect(self._poll_login)
-
         self._refresh_auth_ui()
 
-    def _refresh_auth_ui(self) -> None:
-        cmd = gemini_cli.cli_command()
-        if not cmd:
-            self.status_lbl.setText("\u26a0\ufe0f  Gemini-Komponente fehlt (Node/CLI nicht gefunden)")
-            self.status_lbl.setStyleSheet("color: #FFB347;")
-            self.login_btn.setEnabled(False)
-            self.logout_btn.setVisible(False)
-            return
+    def _set_status(self, text: str, color: str) -> None:
+        self.status_lbl.setText(text)
+        self.status_lbl.setStyleSheet(f"color: {color};")
 
-        if gemini_cli.is_logged_in():
-            email = gemini_cli.get_logged_in_email()
-            account_text = f" ({email})" if email else ""
-            self.status_lbl.setText(f"\u2705  Angemeldet{account_text}")
-            self.status_lbl.setStyleSheet("color: #79D279;")
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Konto wechseln")
+    def _refresh_auth_ui(self) -> None:
+        if gemini.has_key():
+            self._set_status("\u2705  Gemini-Key hinterlegt", "#79D279")
             self.logout_btn.setVisible(True)
         else:
-            self.status_lbl.setText("\u274c  Nicht angemeldet")
-            self.status_lbl.setStyleSheet("color: #FF8F8F;")
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Mit Google anmelden")
+            self._set_status("\u274c  Noch kein Gemini-Key", "#FF8F8F")
             self.logout_btn.setVisible(False)
 
-    def _on_login_click(self) -> None:
+    def _on_save_key(self) -> None:
+        key = self.key_edit.text().strip()
+        self._set_status("\U0001f504  Pr\u00fcfe Key\u2026", "#8D919B")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
         try:
-            self._login_proc = gemini_cli.start_login()
-            self._login_start_time = time.time()
-            self.login_btn.setEnabled(False)
-            self.login_btn.setText("Warte auf Browser-Login\u2026")
-            self.status_lbl.setText("\U0001f504  Bitte im ge\u00f6ffneten Browser anmelden\u2026")
-            self.status_lbl.setStyleSheet("color: #8D919B;")
-            self._login_timer.start()
-        except Exception as exc:
-            self.status_lbl.setText(f"\u274c  Login-Fehler: {exc}")
-            self.status_lbl.setStyleSheet("color: #FF8F8F;")
-
-    def _poll_login(self) -> None:
-        if gemini_cli.is_logged_in():
-            self._login_timer.stop()
-            if self._login_proc:
-                try:
-                    self._login_proc.terminate()
-                except Exception:
-                    pass
-                self._login_proc = None
-            self._refresh_auth_ui()
-            # Wenn das Hauptfenster verfuegbar ist, Mochi sprechen lassen
-            parent = self.parent()
-            if parent and hasattr(parent, "celebrate"):
-                try:
-                    parent.celebrate()
-                except Exception:
-                    pass
+            gemini.ask("Antworte nur mit OK", timeout_s=20, key=key)
+            gemini.save_key(key)
+        except Exception as exc:  # noqa: BLE001 - LLMError oder Credential-Fehler anzeigen
+            self._set_status(f"\u274c  {exc}", "#FF8F8F")
             return
-
-        # Pruefen, ob der Konsolenprozess vorzeitig geschlossen wurde
-        if self._login_proc and self._login_proc.poll() is not None:
-            self._login_timer.stop()
-            self._login_proc = None
-            self.status_lbl.setText("\u274c  Anmeldung abgebrochen")
-            self.status_lbl.setStyleSheet("color: #FF8F8F;")
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Mit Google anmelden")
-            return
-
-        # 5 Minuten Timeout
-        if time.time() - self._login_start_time > 300:
-            self._login_timer.stop()
-            if self._login_proc:
-                try:
-                    self._login_proc.terminate()
-                except Exception:
-                    pass
-                self._login_proc = None
-            self.status_lbl.setText("\u274c  Zeit\u00fcberschreitung beim Login")
-            self.status_lbl.setStyleSheet("color: #FF8F8F;")
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Mit Google anmelden")
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.key_edit.clear()
+        self._refresh_auth_ui()
+        parent = self.parent()
+        if parent and hasattr(parent, "celebrate"):
+            parent.celebrate()
 
     def _on_logout_click(self) -> None:
-        gemini_cli.logout()
+        gemini.clear_key()
         self._refresh_auth_ui()
 
     @staticmethod

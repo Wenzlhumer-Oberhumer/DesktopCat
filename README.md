@@ -38,12 +38,13 @@
   - Schlanke Eingabeleiste ("Was soll ich tun, Boss? 🐾"): Öffnet sich per **Doppelklick**, per globalem Hotkey (**`Strg + Alt + P`**), über das Tray-Icon oder Rechtsklick-Menü.
   - Klick auf die Sprechblase öffnet direkt den Antwort-Modus oder installiert anstehende Updates.
 
-- **🤖 Nahtlose Gemini-KI-Anmeldung (Google-Login statt API-Keys):**
-  - Keine komplizierten API-Keys oder Kontingent-Abos nötig.
-  - Offizielle Gemini CLI (`@google/gemini-cli`) mit sicherem OAuth-Login (`oauth-personal`).
-  - Ein Klick auf "Mit Google anmelden" öffnet den Browser, autorisiert einmalig und Mochi ist startklar.
-  - Sicheres JSON-Tool-Protokoll ohne Shell-Zugriff für die KI.
-  - Bei fehlender Anmeldung oder Verbindungsverlust arbeitet Mochi automatisch im **100 % Offline-Modus**.
+- **🤖 Gemini-KI mit kostenlosem Key in 3 Klicks:**
+  - Einstellungen ➜ *Gratis-Key holen* öffnet Google AI Studio, dort mit Google anmelden und *Create API key* klicken.
+  - Key einfügen ➜ *Prüfen & speichern*. Der Key liegt sicher in der Windows-Anmeldeinformationsverwaltung, nicht in `config.json`.
+  - Jeder Nutzer verwendet sein eigenes Gratis-Kontingent; keine Kosten für den Entwickler.
+  - Sicheres JSON-Tool-Protokoll: die KI kann nur Mochis eigene Werkzeuge auslösen.
+  - Ohne Key oder ohne Internet arbeitet Mochi automatisch im **100 % Offline-Modus**.
+  - Hinweis: Der frühere „Mit Google anmelden“-Weg über die Gemini CLI funktioniert seit dem 18.06.2026 für private Google-Konten nicht mehr (Google hat ihn abgeschaltet).
 
 - **⚡ 20 Echte Windows-Aktionen (`tools.py`):**
   1. **Word-Dokumente erstellen (`create_file`):** Erstellt formatiertes `.docx` direkt am Desktop.
@@ -82,7 +83,7 @@
 | **Größe ändern (Zoom)** | **`Strg + Mausrad`** oder **`Shift + Mausrad`** direkt über dem Pet |
 | **Hochheben / Werfen** | Mit linker Maustaste ziehen und loslassen |
 | **Schnell-Aktionen** | Rechtsklick ➜ *✨ Tricks & Spaß* oder *⚡ Schnell-Tools* |
-| **Einstellungen** | Rechtsklick ➜ *Einstellungen* (Google-Login, Verhalten, Autostart) |
+| **Einstellungen** | Rechtsklick ➜ *Einstellungen* (Gemini-Key, Verhalten, Autostart) |
 | **Beenden** | Rechtsklick ➜ *Beenden* |
 
 ---
@@ -91,7 +92,6 @@
 
 ### Voraussetzungen
 - Python 3.10+ (auf Windows)
-- Node.js (für Entwicklung mit Gemini CLI)
 
 ### Starten im Dev-Modus
 ```powershell
@@ -110,16 +110,14 @@ Nutzerdaten und Logs werden automatisch unter `%APPDATA%\Mochi\` abgelegt:
 Mochi bringt ein vollständiges Build-System mit:
 
 ```powershell
-# Baut die portable Runtime, PyInstaller-Bundle und das Inno Setup Setup:
+# Baut PyInstaller-Bundle und das Inno Setup Setup:
 .\build.ps1
 ```
 
 Das Skript:
-1. Lädt eine portable Node.js-Laufzeit herunter und prüft die SHA256-Prüfsumme.
-2. Installiert die gepinnte Gemini CLI (`@google/gemini-cli@0.63.0`) in `vendor/gemini-cli`.
-3. Baut das Multi-Size-Icon (`assets/mochi.ico`).
-4. Erzeugt das PyInstaller-Bundle (`dist\Mochi\`).
-5. Kompiliert das Inno-Setup-Installationsprogramm (`dist\Mochi-Setup-<version>.exe`) inklusive `.sha256`-Prüfsumme.
+1. Baut das Multi-Size-Icon (`assets/mochi.ico`).
+2. Erzeugt das PyInstaller-Bundle (`dist\Mochi\`).
+3. Kompiliert das Inno-Setup-Installationsprogramm (`dist\Mochi-Setup-<version>.exe`) inklusive `.sha256`-Prüfsumme.
 
 ### Release auf GitHub veröffentlichen
 1. Version in `version.py` erhöhen (z. B. `"2.0.1"`).
@@ -134,4 +132,4 @@ Das Skript:
 ## 📄 Lizenz & Third-Party
 
 Mochi steht unter der **GNU General Public License v3.0 (GPLv3)**, da es die PyQt6-Bibliothek nutzt.
-Detaillierte Lizenzhinweise zu allen Drittanbieter-Komponenten (Node.js, Gemini CLI, Pillow, pywin32, docx, pptx) finden sich in `THIRD_PARTY_LICENSES.txt`.
+Detaillierte Lizenzhinweise zu allen Drittanbieter-Komponenten (PyQt6, Pillow, pywin32, docx, pptx) finden sich in `THIRD_PARTY_LICENSES.txt`.

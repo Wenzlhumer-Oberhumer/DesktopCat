@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 FROZEN = getattr(sys, "frozen", False)
-APP_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))   # assets/, vendor/
+APP_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))   # assets/
 DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / "Mochi"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 

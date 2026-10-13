@@ -1,5 +1,10 @@
 # Phase 2 – "Mit Google anmelden" über die Gemini CLI
 
+> **ÜBERHOLT (13.10.2026):** Google hat die Gemini CLI für private Google-Konten am 18.06.2026 abgeschaltet
+> (`IneligibleTierError: This client is no longer supported …`). Ersetzt durch einen geführten Gratis-API-Key:
+> `gemini.py` (REST, Key in der Windows-Anmeldeinformationsverwaltung) + Einstellungsdialog mit
+> „Gratis-Key holen“ / „Prüfen & speichern“. Siehe `07_FIXES.md`, Abschnitt F8.
+
 ## Idee
 
 Kein API-Key. Mochi bringt Node.js + die offizielle **Gemini CLI** (`@google/gemini-cli`) mit.

@@ -70,7 +70,7 @@ try:
 except Exception:
     pass
 
-import gemini_cli
+import gemini
 from PyQt6.QtCore import (
     QAbstractNativeEventFilter, QBuffer, QObject, QThread, QTimer, pyqtSignal, pyqtSlot,
 )
@@ -114,14 +114,9 @@ class AmbientVisionWorker(QObject):
         top_low = top.lower()
         apps_str = ", ".join(self.open_apps[:6])
 
-        # Schritt 1: Cloud-Vision ueber Gemini CLI falls angemeldet
-        if gemini_cli.is_logged_in() and self.b64_img:
-            screen_file = gemini_cli.WORKSPACE / "screen.png"
+        # Schritt 1: Cloud-Vision ueber die Gemini API, falls ein Key hinterlegt ist
+        if gemini.has_key() and self.b64_img:
             try:
-                raw_bytes = base64.b64decode(self.b64_img)
-                with open(screen_file, "wb") as f:
-                    f.write(raw_bytes)
-
                 prompt = (
                     f"Du bist Mochi, ein extrem neugieriger, süßer Katzen-Buddy auf dem Windows-Desktop des Nutzers ('Boss'). "
                     f"Aktives Fenster des Bosses: '{top}'. Offene Programme: {apps_str}.\n"
@@ -135,17 +130,11 @@ class AmbientVisionWorker(QObject):
                     "- Nenne den Nutzer gern 'Boss'.\n"
                     "- Sei niemals belehrend, sondern sympathisch und neugierig."
                 )
-                comment = gemini_cli.ask(f"@screen.png {prompt}", timeout_s=45)
-                if comment and comment.strip():
-                    return comment.strip()
+                comment = gemini.ask(prompt, timeout_s=45, image_b64=self.b64_img)
+                if comment:
+                    return comment
             except Exception:
                 pass
-            finally:
-                try:
-                    if screen_file.exists():
-                        screen_file.unlink()
-                except Exception:
-                    pass
 
         # Schritt 2: Intelligenter heuristischer Kontext (falls Offline oder API Rate-Limit)
         if "angular" in top_low:
@@ -301,8 +290,8 @@ class Buddy(QObject):
 
     def _update_tray_menu(self) -> None:
         self.tray_menu.clear()
-        if not gemini_cli.is_logged_in():
-            self._act(self.tray_menu, "\U0001F511  Mit Google anmelden", self.open_settings)
+        if not gemini.has_key():
+            self._act(self.tray_menu, "\U0001F511  Gemini-Key eintragen", self.open_settings)
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, "\U0001F4AC  Befehl eingeben", self.open_input)
         self._act(self.tray_menu, "\U0001F441\uFE0F  Bildschirm beobachten (Vision)", lambda: self._on_submit("was mache ich gerade"))
@@ -332,8 +321,8 @@ class Buddy(QObject):
         if first_run:
             self.cfg.set("first_run_done", True)
             self.cfg.save()
-            if not gemini_cli.is_logged_in():
-                hint = "Hi! Klick mich rechts \u2192 Mit Google anmelden, dann werde ich schlau \U0001f9e0"
+            if not gemini.has_key():
+                hint = "Hi! Klick mich rechts \u2192 Gemini-Key eintragen, dann werde ich schlau \U0001f9e0"
             else:
                 hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
                 hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"

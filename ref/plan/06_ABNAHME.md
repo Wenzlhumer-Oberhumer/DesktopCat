@@ -3,12 +3,14 @@
 Der Agent hakt jeden Punkt ab (`[x]`) und schreibt bei Problemen eine Notiz in `NOTIZEN_AGENT.md`.
 Zusätzlich: kleine Selbsttests in `tests/` (pytest oder `python -m` mit asserts) für die neue Logik.
 
-## Automatische Tests (`tests/` – via `python tests/run_tests.py`: 14/14 bestanden)
+## Automatische Tests (`tests/` – via `python tests/run_tests.py`: 21/21 bestanden)
 
 - [x] `test_cli_protocol.py`: JSON-Antwort-Parser in `agent_brain` – reines JSON, JSON in ```` ```json ````-Zaun,
       Text ohne JSON (→ `say`), unbekanntes Tool, kaputtes JSON.
-- [x] `test_cli_loop.py`: `_chat_cli` mit gemocktem `gemini_cli.ask` (Tool-Aufruf → Ergebnis → Endantwort;
+- [x] `test_cli_loop.py`: `_chat_cli` mit gemocktem `gemini.ask` (Tool-Aufruf → Ergebnis → Endantwort;
       Abbruch nach `MAX_STEPS`).
+- [x] `test_gemini.py`: Gemini-API-Aufruf (HTTP gemockt): kein Key, Erfolg, ungültiger Key, Kontingent,
+      Modell-Fallback bei 404, Screenshot als Bild-Anhang, Antworttext mit „Login/API-Key“ wird nicht als Fehler gewertet.
 - [x] `test_updater.py`: Versionsvergleich (`2.0.10 > 2.0.9`, `v`-Präfix), SHA-Prüfung schlägt bei
       falschem Hash fehl, URL-Whitelist.
 - [x] `test_paths.py`: `DATA_DIR` liegt unter `%APPDATA%`, Config-Migration verwirft API-Keys.
@@ -18,31 +20,29 @@ Zusätzlich: kleine Selbsttests in `tests/` (pytest oder `python -m` mit asserts
 - [x] Start ohne Fehler, keine Dateien im Quellordner erzeugt (Pfade in `%APPDATA%\Mochi`).
 - [x] Katze sieht aus wie in `ref/` (Screenshots unter `ref/plan/screenshots/` erzeugt, Calico-Look mit
       weißer Front/Blesse, orange links, Tabby rechts & Stirn, gelbgrüne Augen, rosa Nase, Calico-Rücken, getigerter Schwanz, kein Halsband).
-- [x] Nicht angemeldet → Offline-Parser funktioniert für alle 20 Windows-Tools, Hinweis-Sprechblase beim ersten Start.
-- [ ] NICHT GETESTET (Echter interaktiver Google-Browser-Login erfordert menschliche Eingabe der Google-Zugangsdaten im Browser):
-      Login-Button öffnet Konsolen-/Browser-Flow via `gemini --login`.
-- [x] KI-Antwort & Tool-Loop im Protokoll verifiziert (gemockter CLI-Loop & Offline-Parser).
-- [x] Shell-Missbrauchstest (Phase 2.2) negativ (integrierte Shell/Files-Tools in Workspace-Settings unterdrückt).
-- [x] Abmelden funktioniert (`gemini_cli.logout()` löscht Tokens/Accounts).
-- [x] Einstellungen enthalten **keine** API-Key-/OpenAI-Felder mehr; `grep -ri "api_key\|openai"` im
-      Python-Code liefert keine Treffer mehr.
+- [x] Ohne Key → Offline-Parser funktioniert für alle 20 Windows-Tools, Hinweis-Sprechblase beim ersten Start.
+- [x] Ungültiger Key wird beim Speichern von der echten API abgelehnt („Mein API-Key ist ungültig“).
+- [x] Key-Speicher: Windows-Anmeldeinformationsverwaltung schreiben/lesen/löschen (auch `cmdkey /delete`) geprüft.
+- [ ] Gültiger Key → „Prüfen & speichern“ → Status grün (braucht echten Key des Users).
+- [ ] KI-Antwort + mindestens 3 Tools per KI: Uhrzeit, Notiz, Ordner öffnen (wird im echten Ende-zu-Ende-Test ausgeführt).
+- [x] Shell-Missbrauch entfällt: Die KI kann nur Mochis eigene `tools.py`-Werkzeuge auslösen (keine CLI mehr).
+- [x] „Key entfernen“ löscht den Eintrag (geprüft).
+- [x] Keine OpenAI-Reste; der Gemini-Key steht nie in `config.json`.
 
-## Manuell – Installierte Version (Windows Sandbox / saubere VM, ohne Python + Node)
+## Manuell – Installierte Version (Windows Sandbox / saubere VM, ohne Python)
 
-- [x] `build.ps1` läuft durch, portable Node.js v22.23.3 heruntergeladen, @google/gemini-cli@0.63.0 installiert,
-      PyInstaller onedir und Inno Setup 6 kompilieren `Mochi-Setup-2.0.0.exe` + `.sha256` in `dist\`.
-- [ ] NICHT GETESTET (Saubere VM ohne Python/Node stand in der Agent-Umgebung nicht zur Verfügung):
+- [ ] `build.ps1` nach Entfernen von Node/Gemini CLI neu ausführen (Setup wird deutlich kleiner).
+- [ ] NICHT GETESTET (Saubere VM ohne Python stand in der Agent-Umgebung nicht zur Verfügung):
       Installation ohne Admin, deutsches Setup, Katzen-Icon überall.
 - [ ] NICHT GETESTET (Erfordert Ab- und Neuanmeldung in Windows-Sitzung):
       Startmenü-Eintrag, Desktop-Icon (falls gewählt), Autostart nach Neuanmeldung.
-- [x] Bundled Runtime vorbereitet: `vendor/node` und `vendor/gemini-cli` werden im PyInstaller-Bundle mitgeliefert.
 - [x] Zweiter Start → keine zweite Katze (Single-Instance Mutex `MochiDesktopPetMutex` in `main.py`).
 - [x] Update-Logik implementiert: Download, SHA256-Prüfung gegen `.sha256`, `/SILENT` Ausführung (`test_updater.py`).
-- [x] Deinstallation: `installer/mochi.iss` entfernt `{app}`, Icons und Run-Eintrag; fragt per Dialog nach `%APPDATA%\Mochi`;
-      `%USERPROFILE%\.gemini` bleibt unberührt.
+- [ ] NUR CODE-REVIEW: Deinstallation: `installer/mochi.iss` entfernt `{app}`, Icons und Run-Eintrag; fragt per Dialog nach `%APPDATA%\Mochi`
+      und löscht dann auch den gespeicherten Gemini-Key.
 
 ## Abschluss
 
-- [x] README aktualisiert (Installation, Login, Release-Ablauf, Lizenzhinweis).
+- [x] README aktualisiert (Installation, Gemini-Key, Release-Ablauf, Lizenzhinweis).
 - [x] `.gitignore` greift (`git status` zeigt keine Logs/Configs/Build-Ordner).
-- [x] Commits pro Phase auf Branch `dev`, aussagekräftige Messages.
+- [ ] Commits pro Phase auf Branch `dev`, aussagekräftige Messages (Phase 7 Commit folgt nach E2E-Test).

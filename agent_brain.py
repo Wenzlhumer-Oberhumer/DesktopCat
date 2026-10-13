@@ -1,6 +1,6 @@
-"""Gehirn des Buddys: Gemini CLI mit Tool-Calling plus regelbasierter Offline-Parser.
+"""Gehirn des Buddys: Gemini API mit Tool-Calling plus regelbasierter Offline-Parser.
 
-Alles Blockierende (CLI, Dateioperationen, Dialoge) laeuft in einem QThread-Worker; der UI-Thread
+Alles Blockierende (HTTP, Dateioperationen, Dialoge) laeuft in einem QThread-Worker; der UI-Thread
 bekommt nur Signale (started / finished).
 """
 from __future__ import annotations
@@ -14,8 +14,8 @@ from typing import Optional
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
-import gemini_cli
-from gemini_cli import LLMError
+import gemini
+from gemini import LLMError
 import tools
 from tools import ToolResult
 
@@ -312,10 +312,10 @@ def parse_offline(text: str) -> Plan:
 
 
 # ======================================================================================
-#  Gemini CLI Integration & Tool-Calling-Protokoll
+#  Gemini Integration & Tool-Calling-Protokoll
 # ======================================================================================
 def parse_cli_response(raw_response: str) -> tuple[str, dict | None]:
-    """Extrahiert (say, tool_dict) aus der Rueckgabe der Gemini CLI.
+    """Extrahiert (say, tool_dict) aus der Antwort von Gemini.
 
     Unterstuetzt reines JSON, in ```json```-Zaeunen verpacktes JSON
     sowie Fallback auf reinen Freitext.
@@ -343,7 +343,7 @@ def parse_cli_response(raw_response: str) -> tuple[str, dict | None]:
 
 
 class AgentWorker(QObject):
-    """Laeuft im QThread: Gemini-CLI (falls angemeldet) -> Fallback regelbasiert -> Tools ausfuehren."""
+    """Laeuft im QThread: Gemini (falls Key hinterlegt) -> Fallback regelbasiert -> Tools ausfuehren."""
 
     finished = pyqtSignal(bool, str, str)     # ok, Nachricht, Benachrichtigungstitel ("" = keine)
 
@@ -369,7 +369,7 @@ class AgentWorker(QObject):
         ai = self.cfg.get("ai", {})
         if not ai.get("enabled", True):
             return None
-        if gemini_cli.cli_command() and gemini_cli.is_logged_in():
+        if gemini.has_key():
             return "gemini"
         return None
 
@@ -386,6 +386,8 @@ class AgentWorker(QObject):
             except LLMError as exc:
                 llm_error = str(exc)
                 self.results.clear()
+                if "api-key" in llm_error.lower():
+                    return False, llm_error, ""
 
         # Offline / Fallback
         plan = parse_offline(self.text)
@@ -408,7 +410,7 @@ class AgentWorker(QObject):
         self.results.append(res)
         return {"ok": res.ok, "result": res.message}
 
-    # -- Gemini CLI (JSON Tool-Calling Protokoll) ---------------------------------------
+    # -- Gemini API (JSON Tool-Calling Protokoll) ---------------------------------------
     def _chat_cli(self) -> str:
         ai = self.cfg.get("ai", {})
         timeout = float(ai.get("timeout_s", 60))
@@ -454,7 +456,7 @@ class AgentWorker(QObject):
             )
 
             full_prompt = "\n".join(prompt_parts)
-            raw_response = gemini_cli.ask(full_prompt, timeout_s=timeout, model=model)
+            raw_response = gemini.ask(full_prompt, timeout_s=timeout, model=model)
 
             say_text, tool_call = parse_cli_response(raw_response)
 

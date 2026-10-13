@@ -9,12 +9,6 @@ datas = [
     ('THIRD_PARTY_LICENSES.txt', '.'),
 ]
 
-if os.path.exists('vendor/node'):
-    datas.append(('vendor/node', 'vendor/node'))
-
-if os.path.exists('vendor/gemini-cli'):
-    datas.append(('vendor/gemini-cli', 'vendor/gemini-cli'))
-
 a = Analysis(
     ['main.py'],
     pathex=[],

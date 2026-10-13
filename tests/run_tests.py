@@ -28,6 +28,7 @@ def main():
         "test_paths",
         "test_cli_protocol",
         "test_cli_loop",
+        "test_gemini",
         "test_updater",
     ]
 
