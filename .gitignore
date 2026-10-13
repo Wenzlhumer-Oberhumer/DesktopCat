@@ -11,3 +11,4 @@ vendor/
 *.egg-info/
 .pytest_cache/
 .venv-build/
+ref/*.jpg
