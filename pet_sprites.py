@@ -18,7 +18,7 @@ from paths import DATA_DIR
 BASE = 160.0    # logische Zeichenflaeche (wird mit Fenster-Skalierung gestreckt)
 FLOOR = 148.0   # y-Position des Bodens in der Zeichenflaeche
 
-STATE_KEYS = ["idle", "walk_right", "walk_left", "dragged", "falling", "working", "success", "sleep", "sad", "dance", "cool", "push"]
+STATE_KEYS = ["idle", "walk_right", "walk_left", "dragged", "falling", "working", "success", "sleep", "sad", "dance", "cool", "push", "fly"]
 SPRITE_EXTS = (".gif", ".png", ".webp", ".apng")
 
 
@@ -192,6 +192,7 @@ class Pose:
     tear: Optional[float] = None
     push_power: float = 0.0
     t: float = 0.0
+    accessories: tuple[str, ...] = ()
 
 
 
@@ -388,6 +389,22 @@ def compute_pose(c: PoseContext) -> Pose:
         p.tail = math.sin(t * 14) * 0.4
         p.look = (1.0, 0.0)                  # Blick nach vorn auf das Fenster
         p.push_power = 1.0
+
+    elif k == "fly":
+        bob = math.sin(t * 3.5) * 4.0
+        p.dy = bob
+        p.sy = 1.02 + 0.02 * math.sin(t * 2.8)
+        p.sx = 0.98
+        p.paws_up = True
+        p.paw_l = 2.0
+        p.paw_r = 2.0
+        p.head_dy = -1.0 + 0.5 * math.sin(t * 2.5)
+        p.head_rot = math.sin(t * 1.8) * 2.0
+        p.eyes = "happy" if (t % 5.0) > 3.5 else "open"
+        p.mouth = "smile"
+        p.tail = math.sin(t * 4.0) * 0.6
+        p.shadow = 0.4
+        p.blush = 0.5
 
     p.t = t
 
@@ -2358,6 +2375,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Glückskatze (Calico)",
         "emoji": "🐱",
         "desc": "Calico-Glückskatze Kylie: weiße Front, oranger Fleck, Tabby-Streifen, grüngelbe Augen, ohne Halsband",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 80.0), "eye_dx": 19.0, "neck": (80.0, 114.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_cat,
         "sound": "Miau~",
         "pet_sounds": [
@@ -2383,6 +2401,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Midnight Katze",
         "emoji": "🐈‍⬛",
         "desc": "Edle schwarze Katze mit Mond-Halsband & leuchtend grünen Augen",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 80.0), "eye_dx": 19.0, "neck": (80.0, 114.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_cat_luna,
         "sound": "Nyaa~",
         "pet_sounds": [
@@ -2407,6 +2426,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Shiba Inu",
         "emoji": "🐕",
         "desc": "Japanischer Shiba Inu mit rotem Bandana & Ringelschwanz",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 80.0), "eye_dx": 19.0, "neck": (80.0, 114.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_dog_shiba,
         "sound": "Wuff!",
         "pet_sounds": [
@@ -2431,6 +2451,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Golden Welpe",
         "emoji": "🐶",
         "desc": "Verspielter Welpe mit federnden Schlappohren & blauem Halsband",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 80.0), "eye_dx": 19.0, "neck": (80.0, 114.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_dog_balu,
         "sound": "Wau wau!",
         "pet_sounds": [
@@ -2455,6 +2476,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Baby-Drache",
         "emoji": "🐲",
         "desc": "Süßer Fantasie-Drache mit Flügelchen, goldenen Hörnern & Pfeilschwanz",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 80.0), "eye_dx": 19.0, "neck": (80.0, 114.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_fantasy_drago,
         "sound": "Rawr~!",
         "pet_sounds": [
@@ -2479,6 +2501,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Cyber-Bot",
         "emoji": "🤖",
         "desc": "Futuristischer Roboter mit animiertem LED-Visier & Antenne",
+        "anchors": {"head_top": (80.0, 40.0), "eyes": (80.0, 76.0), "eye_dx": 18.0, "neck": (80.0, 110.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_fantasy_byte,
         "sound": "Biep boop!",
         "pet_sounds": [
@@ -2504,6 +2527,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Geist-Slime",
         "emoji": "👻",
         "desc": "Magischer schwebender Geist mit umkreisenden Irrlichtern",
+        "anchors": {"head_top": (80.0, 44.0), "eyes": (80.0, 82.0), "eye_dx": 18.0, "neck": (80.0, 112.0), "paw_r": (110.0, 120.0)},
         "drawer": draw_fantasy_spooky,
         "sound": "Huuu~",
         "pet_sounds": [
@@ -2528,6 +2552,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Rosa Axolotl",
         "emoji": "🌸",
         "desc": "Pastell-rosa Baby-Axolotl mit federnden Kiemen & sanftem Lächeln",
+        "anchors": {"head_top": (80.0, 44.0), "eyes": (80.0, 78.0), "eye_dx": 21.0, "neck": (80.0, 114.0), "paw_r": (98.0, 140.0)},
         "drawer": draw_fantasy_axolotl,
         "sound": "Blubb~",
         "pet_sounds": [
@@ -2552,6 +2577,7 @@ CHARACTERS: dict[str, dict] = {
         "species": "Kaiser-Pinguin",
         "emoji": "🐧",
         "desc": "Putziger Pinguin mit rotem Kuschelschal, Watschelflossen & orangefarbenen Füßchen",
+        "anchors": {"head_top": (80.0, 42.0), "eyes": (80.0, 80.0), "eye_dx": 16.0, "neck": (80.0, 108.0), "paw_r": (106.0, 128.0)},
         "drawer": draw_animal_penguin,
         "sound": "Noot noot!",
         "pet_sounds": [
@@ -2574,14 +2600,672 @@ CHARACTERS: dict[str, dict] = {
 
 
 
+# ======================================================================================
+#  Zubehör-System (Accessoires)
+# ======================================================================================
+DEFAULT_ANCHORS = {
+    "head_top": (80.0, 48.0),
+    "eyes": (80.0, 80.0),
+    "eye_dx": 19.0,
+    "neck": (80.0, 114.0),
+    "paw_r": (98.0, 140.0),
+}
+
+HEAD_SLOT_PRIORITY = (
+    "hacker_glasses",
+    "nightcap",
+    "party_hat",
+    "sunglasses",
+    "beanie",
+    "pumpkin_hat",
+    "santa_hat",
+    "new_year",
+    "crown",
+)
+
+NECK_SLOT_PRIORITY = (
+    "scarf",
+    "bandana",
+    "bow",
+)
+
+HAND_SLOT_PRIORITY = (
+    "fan",
+    "umbrella",
+)
+
+
+def _draw_acc_cloud(p: QPainter, pose: Pose, char_id: str):
+    """Fluffige weiße Wolke unter der Figur mit Lakitu-Lächeln."""
+    t = getattr(pose, "t", 0.0)
+    bob = math.sin(t * 3.5) * 3.0
+    cy = 144.0 + bob
+    cx = 80.0 + pose.dx * 0.3
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Dezente Schatten-Unterseite
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#D0D8E6"))
+    p.drawEllipse(QRectF(cx - 48, cy - 6, 96, 26))
+
+    # Fluffige Wolken-Kugeln
+    p.setBrush(QColor("#FFFFFF"))
+    p.drawEllipse(QRectF(cx - 46, cy - 14, 34, 28))
+    p.drawEllipse(QRectF(cx + 12, cy - 14, 34, 28))
+    p.drawEllipse(QRectF(cx - 24, cy - 22, 48, 34))
+    p.drawEllipse(QRectF(cx - 38, cy - 8, 76, 22))
+
+    # Zarte Kontur
+    p.setPen(_pen(QColor("#B8C6DC"), 1.8))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    cloud_path = QPainterPath()
+    cloud_path.addEllipse(QRectF(cx - 46, cy - 14, 34, 28))
+    cloud_path.addEllipse(QRectF(cx + 12, cy - 14, 34, 28))
+    cloud_path.addEllipse(QRectF(cx - 24, cy - 22, 48, 34))
+    cloud_path.addEllipse(QRectF(cx - 38, cy - 8, 76, 22))
+    p.drawPath(cloud_path.simplified())
+
+    # Niedliches Lakitu-Gesichtchen
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#2C3440"))
+    p.drawEllipse(QPointF(cx - 7, cy - 5), 1.8, 2.2)
+    p.drawEllipse(QPointF(cx + 7, cy - 5), 1.8, 2.2)
+    # Wangenrot
+    p.setBrush(QColor("#FF9BB2"))
+    p.drawEllipse(QPointF(cx - 13, cy - 2), 3.2, 2.0)
+    p.drawEllipse(QPointF(cx + 13, cy - 2), 3.2, 2.0)
+    # Lächeln
+    p.setPen(_pen(QColor("#2C3440"), 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawArc(QRectF(cx - 5, cy - 7, 10, 7), 180 * 16, 180 * 16)
+
+    p.restore()
+
+
+def _draw_acc_hacker_glasses(p: QPainter, pose: Pose, anchors: dict):
+    """Schmale, eckige Brille mit grün leuchtenden Gläsern (#39FF14) und schwebenden Code-Partikeln."""
+    ex, ey = anchors.get("eyes", (80.0, 80.0))
+    dx = anchors.get("eye_dx", 19.0)
+    t = getattr(pose, "t", 0.0)
+
+    gw, gh = 24.0, 14.0
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Gläser & Rahmen
+    for s in (-1, 1):
+        gx = ex + s * dx
+        rect = QRectF(gx - gw / 2, ey - gh / 2, gw, gh)
+        # Glow
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(57, 255, 20, 60))
+        p.drawRoundedRect(rect.adjusted(-2, -2, 2, 2), 3, 3)
+        # Dunkler Rahmen
+        p.setPen(_pen(QColor("#0D1A10"), 2.2))
+        p.setBrush(QColor("#071209"))
+        p.drawRoundedRect(rect, 2, 2)
+        # Grün leuchtendes Glas
+        grad = QLinearGradient(gx, ey - gh / 2, gx, ey + gh / 2)
+        grad.setColorAt(0, QColor("#145A18"))
+        grad.setColorAt(1, QColor("#39FF14"))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(grad))
+        p.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 1.5, 1.5)
+        # Scanline Glanz
+        p.setPen(_pen(QColor(255, 255, 255, 180), 1.2))
+        p.drawLine(QPointF(gx - gw / 2 + 4, ey - gh / 2 + 3), QPointF(gx + gw / 2 - 4, ey - gh / 2 + 3))
+
+    # Steg & Bügel
+    p.setPen(_pen(QColor("#0D1A10"), 2.2))
+    p.drawLine(QPointF(ex - dx + gw / 2, ey - 2), QPointF(ex + dx - gw / 2, ey - 2))
+    p.drawLine(QPointF(ex - dx - gw / 2, ey - 2), QPointF(ex - dx - gw / 2 - 12, ey - 5))
+    p.drawLine(QPointF(ex + dx + gw / 2, ey - 2), QPointF(ex + dx + gw / 2 + 12, ey - 5))
+
+    # Schwebende Code-Partikel (</> und 01)
+    f = QFont("Segoe UI", 8, QFont.Weight.Bold)
+    p.setFont(f)
+    symbols = ["01", "</>", "10", "{ }", "0"]
+    for i, sym in enumerate(symbols):
+        age = (t * 0.7 + i * 0.22) % 1.0
+        px = ex + (i - 2) * 16 + math.sin(t * 3.0 + i) * 3
+        py = ey - 10 - age * 30
+        alpha = int(240 * math.sin(math.pi * age))
+        p.setPen(QColor(57, 255, 20, alpha))
+        p.drawText(QPointF(px - 8, py), sym)
+
+    p.restore()
+
+
+def _draw_acc_sunglasses(p: QPainter, pose: Pose, anchors: dict):
+    """Coole schwarze Sonnenbrille mit Goldsteg."""
+    ex, ey = anchors.get("eyes", (80.0, 80.0))
+    dx = anchors.get("eye_dx", 19.0)
+    gw, gh = 26.0, 17.0
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Dunkler Gläserrand
+    for s in (-1, 1):
+        gx = ex + s * dx
+        glass = QPolygonF([
+            QPointF(gx - gw / 2, ey - gh / 2),
+            QPointF(gx + gw / 2, ey - gh / 2),
+            QPointF(gx + gw / 2 - 2, ey + gh / 2),
+            QPointF(gx - gw / 2 + 2, ey + gh / 2),
+        ])
+        grad = QLinearGradient(gx, ey - gh / 2, gx, ey + gh / 2)
+        grad.setColorAt(0, QColor("#1A1C23"))
+        grad.setColorAt(1, QColor("#363B48"))
+        p.setPen(_pen(QColor("#0F1014"), 2.4))
+        p.setBrush(QBrush(grad))
+        p.drawPolygon(glass)
+        # Reflexionsstreifen
+        p.setPen(_pen(QColor(255, 255, 255, 140), 1.6))
+        p.drawLine(QPointF(gx - gw / 2 + 5, ey - 2), QPointF(gx + gw / 2 - 5, ey - 2))
+
+    # Goldsteg & Bügel
+    p.setPen(_pen(QColor("#FFD24D"), 2.4))
+    p.drawLine(QPointF(ex - dx + gw / 2, ey - gh / 2 + 2), QPointF(ex + dx - gw / 2, ey - gh / 2 + 2))
+    p.drawLine(QPointF(ex - dx - gw / 2, ey - gh / 2 + 2), QPointF(ex - dx - gw / 2 - 12, ey - gh / 2 - 1))
+    p.drawLine(QPointF(ex + dx + gw / 2, ey - gh / 2 + 2), QPointF(ex + dx + gw / 2 + 12, ey - gh / 2 - 1))
+    p.restore()
+
+
+def _draw_acc_new_year(p: QPainter, pose: Pose, anchors: dict):
+    """Goldene 20xx Glitzer-Brille mit Glanzsternchen."""
+    ex, ey = anchors.get("eyes", (80.0, 80.0))
+    dx = anchors.get("eye_dx", 19.0)
+    t = getattr(pose, "t", 0.0)
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    f = QFont("Segoe UI", 11, QFont.Weight.Black)
+    p.setFont(f)
+
+    # 2026 Brille in Gold
+    p.setPen(_pen(QColor("#9A6E00"), 2.0))
+    p.setBrush(QColor("#FFD700"))
+    p.drawText(QRectF(ex - dx - 16, ey - 12, 32, 24), Qt.AlignmentFlag.AlignCenter, "20")
+    p.drawText(QRectF(ex + dx - 16, ey - 12, 32, 24), Qt.AlignmentFlag.AlignCenter, "26")
+
+    # Steg
+    p.setPen(_pen(QColor("#FFD700"), 3.0))
+    p.drawLine(QPointF(ex - dx + 14, ey - 2), QPointF(ex + dx - 14, ey - 2))
+
+    # Glitzer-Sternchen
+    glint_ph = (t * 2.0) % 1.0
+    p.setPen(_pen(QColor("white"), 1.0))
+    p.setBrush(QColor("#FFF4A3"))
+    p.drawPath(_star_path(ex - dx - 12, ey - 10, 4.0 * math.sin(glint_ph * math.pi)))
+    p.drawPath(_star_path(ex + dx + 12, ey - 10, 4.0 * math.cos(glint_ph * math.pi)))
+    p.restore()
+
+
+def _draw_acc_party_hat(p: QPainter, pose: Pose, anchors: dict):
+    """Spitzer bunter Partyhut mit Bommel."""
+    hx, hy = anchors.get("head_top", (80.0, 48.0))
+    w, h = 26.0, 36.0
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    cone = QPolygonF([
+        QPointF(hx - w / 2, hy),
+        QPointF(hx, hy - h),
+        QPointF(hx + w / 2, hy),
+    ])
+    cone_path = QPainterPath()
+    cone_path.addPolygon(cone)
+
+    p.setPen(_pen(QColor("#8E1A34"), 2.2))
+    p.setBrush(QColor("#FF5252"))
+    p.drawPath(cone_path)
+
+    # Streifen clippen
+    p.save()
+    p.setClipPath(cone_path)
+    colors = [QColor("#FFD93D"), QColor("#4D96FF"), QColor("#6BCB77"), QColor("#FF6B6B")]
+    for i, col in enumerate(colors):
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(col)
+        sy = hy - 6 - i * 8
+        p.drawRect(QRectF(hx - w, sy, w * 2, 4.5))
+    p.restore()
+    p.setPen(_pen(QColor("#8E1A34"), 2.0))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPath(cone_path)
+
+    # Pom-Pom oben
+    p.setPen(_pen(QColor("#C79500"), 1.6))
+    p.setBrush(QColor("#FFEAA7"))
+    p.drawEllipse(QPointF(hx, hy - h), 5.0, 5.0)
+    p.restore()
+
+
+def _draw_acc_nightcap(p: QPainter, pose: Pose, anchors: dict):
+    """Blaue Schlafmütze mit Bommel, hängt gemütlich zur Seite."""
+    hx, hy = anchors.get("head_top", (80.0, 48.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Mützenkörper schwingt nach rechts
+    cap = QPainterPath(QPointF(hx - 14, hy))
+    cap.cubicTo(QPointF(hx - 12, hy - 26), QPointF(hx + 8, hy - 32), QPointF(hx + 28, hy - 16))
+    cap.cubicTo(QPointF(hx + 36, hy - 6), QPointF(hx + 30, hy + 4), QPointF(hx + 26, hy + 8))
+    cap.cubicTo(QPointF(hx + 18, hy - 6), QPointF(hx + 6, hy - 18), QPointF(hx + 14, hy))
+    cap.closeSubpath()
+
+    p.setPen(_pen(QColor("#1B2A4A"), 2.2))
+    p.setBrush(QColor("#3A539B"))
+    p.drawPath(cap)
+
+    # Kleine Sternchen auf der Mütze
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#FFD32A"))
+    p.drawEllipse(QPointF(hx + 2, hy - 16), 2.2, 2.2)
+    p.drawEllipse(QPointF(hx + 16, hy - 18), 1.8, 1.8)
+
+    # Bommel am Zipfel
+    p.setPen(_pen(QColor("#B8C6DC"), 1.6))
+    p.setBrush(QColor("#FFFFFF"))
+    p.drawEllipse(QPointF(hx + 26, hy + 8), 5.5, 5.5)
+
+    # Flauschiger weißer Bund
+    p.setPen(_pen(QColor("#9BA8BA"), 2.0))
+    p.setBrush(QColor("#FFFFFF"))
+    p.drawRoundedRect(QRectF(hx - 16, hy - 4, 32, 8), 4, 4)
+    p.restore()
+
+
+def _draw_acc_pumpkin_hat(p: QPainter, pose: Pose, anchors: dict):
+    """Kleiner Halloween-Kürbis als Mütze mit Strunk und Gesicht."""
+    hx, hy = anchors.get("head_top", (80.0, 48.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Kürbis-Rippen
+    p.setPen(_pen(QColor("#6E2C00"), 2.0))
+    p.setBrush(QColor("#E67E22"))
+    p.drawEllipse(QRectF(hx - 15, hy - 18, 30, 20))
+    p.setBrush(QColor("#D35400"))
+    p.drawEllipse(QRectF(hx - 11, hy - 18, 22, 20))
+    p.setBrush(QColor("#E67E22"))
+    p.drawEllipse(QRectF(hx - 6, hy - 18, 12, 20))
+
+    # Strunk & Blatt
+    p.setPen(_pen(QColor("#1E8449"), 1.8))
+    p.setBrush(QColor("#27AE60"))
+    p.drawRect(QRectF(hx - 2, hy - 23, 4, 6))
+    p.drawEllipse(QRectF(hx + 2, hy - 23, 5, 3))
+
+    # Süßes kleines Gesicht
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#3E1F07"))
+    p.drawPolygon(QPolygonF([QPointF(hx - 6, hy - 10), QPointF(hx - 3, hy - 10), QPointF(hx - 4.5, hy - 13)]))
+    p.drawPolygon(QPolygonF([QPointF(hx + 3, hy - 10), QPointF(hx + 6, hy - 10), QPointF(hx + 4.5, hy - 13)]))
+    p.drawPolygon(QPolygonF([QPointF(hx - 4, hy - 6), QPointF(hx + 4, hy - 6), QPointF(hx, hy - 3)]))
+    p.restore()
+
+
+def _draw_acc_santa_hat(p: QPainter, pose: Pose, anchors: dict):
+    """Klassische rote Weihnachtsmütze mit weißem Plüsch."""
+    hx, hy = anchors.get("head_top", (80.0, 48.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Mützenkörper
+    hat = QPainterPath(QPointF(hx - 14, hy))
+    hat.cubicTo(QPointF(hx - 10, hy - 28), QPointF(hx + 10, hy - 30), QPointF(hx + 26, hy - 14))
+    hat.cubicTo(QPointF(hx + 32, hy - 6), QPointF(hx + 28, hy + 2), QPointF(hx + 24, hy + 6))
+    hat.cubicTo(QPointF(hx + 16, hy - 8), QPointF(hx + 6, hy - 16), QPointF(hx + 14, hy))
+    hat.closeSubpath()
+
+    p.setPen(_pen(QColor("#781E1E"), 2.2))
+    p.setBrush(QColor("#C0392B"))
+    p.drawPath(hat)
+
+    # Weißer Bommel
+    p.setPen(_pen(QColor("#BDC3C7"), 1.8))
+    p.setBrush(QColor("#FFFFFF"))
+    p.drawEllipse(QPointF(hx + 24, hy + 6), 5.5, 5.5)
+
+    # Weißer Plüschrand
+    p.setPen(_pen(QColor("#BDC3C7"), 2.0))
+    p.setBrush(QColor("#FFFFFF"))
+    p.drawRoundedRect(QRectF(hx - 16, hy - 4, 32, 9), 4.5, 4.5)
+    p.restore()
+
+
+def _draw_acc_beanie(p: QPainter, pose: Pose, anchors: dict):
+    """Gemütliche Wollmütze mit Umschlag und Bommel."""
+    hx, hy = anchors.get("head_top", (80.0, 48.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Mützenhaube
+    cap = QPainterPath()
+    cap.addEllipse(QRectF(hx - 15, hy - 20, 30, 24))
+    p.setPen(_pen(QColor("#166557"), 2.2))
+    p.setBrush(QColor("#1ABC9C"))
+    p.drawPath(cap)
+
+    # Bommel
+    p.setPen(_pen(QColor("#0E6251"), 1.8))
+    p.setBrush(QColor("#A3E4D7"))
+    p.drawEllipse(QPointF(hx, hy - 20), 5.2, 5.2)
+
+    # Umschlag mit Rillen
+    p.setPen(_pen(QColor("#166557"), 2.0))
+    p.setBrush(QColor("#16A085"))
+    p.drawRoundedRect(QRectF(hx - 17, hy - 6, 34, 10), 3.5, 3.5)
+    for ox in (-10, -5, 0, 5, 10):
+        p.drawLine(QPointF(hx + ox, hy - 5), QPointF(hx + ox, hy + 3))
+    p.restore()
+
+
+def _draw_acc_crown(p: QPainter, pose: Pose, anchors: dict):
+    """Goldene Königskrone mit funkelnden Edelsteinen."""
+    hx, hy = anchors.get("head_top", (80.0, 48.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    crown = QPolygonF([
+        QPointF(hx - 15, hy),
+        QPointF(hx - 17, hy - 16),
+        QPointF(hx - 8, hy - 8),
+        QPointF(hx, hy - 20),
+        QPointF(hx + 8, hy - 8),
+        QPointF(hx + 17, hy - 16),
+        QPointF(hx + 15, hy),
+    ])
+    grad = QLinearGradient(hx, hy - 20, hx, hy)
+    grad.setColorAt(0, QColor("#FFE066"))
+    grad.setColorAt(1, QColor("#F39C12"))
+    p.setPen(_pen(QColor("#8E5A00"), 2.0))
+    p.setBrush(QBrush(grad))
+    p.drawPolygon(crown)
+
+    # Edelsteine
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#E74C3C")) # Rubin in der Mitte
+    p.drawEllipse(QPointF(hx, hy - 9), 2.8, 2.8)
+    p.setBrush(QColor("#2ECC71")) # Smaragde an den Seiten
+    p.drawEllipse(QPointF(hx - 10, hy - 5), 2.2, 2.2)
+    p.drawEllipse(QPointF(hx + 10, hy - 5), 2.2, 2.2)
+    p.restore()
+
+
+def _draw_acc_scarf(p: QPainter, pose: Pose, anchors: dict):
+    """Kuscheliger roter Winterschal mit Fransen."""
+    nx, ny = anchors.get("neck", (80.0, 114.0))
+    t = getattr(pose, "t", 0.0)
+    sway = math.sin(t * 3.5) * 3.0
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Um den Hals gewickelt
+    p.setPen(_pen(QColor("#781E1E"), 2.2))
+    p.setBrush(QColor("#C0392B"))
+    scarf_band = QPainterPath(QPointF(nx - 22, ny - 6))
+    scarf_band.quadTo(QPointF(nx, ny + 8), QPointF(nx + 22, ny - 6))
+    scarf_band.quadTo(QPointF(nx, ny + 16), QPointF(nx - 22, ny - 6))
+    p.drawPath(scarf_band)
+
+    # Wehendes Ende nach rechts
+    tail = QPainterPath(QPointF(nx + 8, ny + 4))
+    tail.quadTo(QPointF(nx + 16, ny + 14), QPointF(nx + 14 + sway, ny + 26))
+    tail.lineTo(QPointF(nx + 22 + sway, ny + 25))
+    tail.quadTo(QPointF(nx + 22, ny + 12), QPointF(nx + 14, ny + 2))
+    tail.closeSubpath()
+    p.drawPath(tail)
+
+    # Fransen
+    p.setPen(_pen(QColor("#E74C3C"), 1.8))
+    for fx in (-2, 2, 6):
+        p.drawLine(QPointF(nx + 16 + fx + sway, ny + 25), QPointF(nx + 17 + fx + sway, ny + 29))
+    p.restore()
+
+
+def _draw_acc_bandana(p: QPainter, pose: Pose, anchors: dict):
+    """Cooles rotes Bandana / Dreieckstuch."""
+    nx, ny = anchors.get("neck", (80.0, 114.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    tri = QPolygonF([
+        QPointF(nx - 20, ny - 4),
+        QPointF(nx + 20, ny - 4),
+        QPointF(nx, ny + 14),
+    ])
+    p.setPen(_pen(QColor("#801515"), 2.0))
+    p.setBrush(QColor("#E74C3C"))
+    p.drawPolygon(tri)
+
+    # Kleine weiße Pünktchen / Muster
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("white"))
+    p.drawEllipse(QPointF(nx, ny + 2), 1.6, 1.6)
+    p.drawEllipse(QPointF(nx - 8, ny + 1), 1.4, 1.4)
+    p.drawEllipse(QPointF(nx + 8, ny + 1), 1.4, 1.4)
+    p.drawEllipse(QPointF(nx, ny + 7), 1.4, 1.4)
+    p.restore()
+
+
+def _draw_acc_bow(p: QPainter, pose: Pose, anchors: dict):
+    """Süße rosa Schleife."""
+    nx, ny = anchors.get("neck", (80.0, 114.0))
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Schleifenschlaufen
+    p.setPen(_pen(QColor("#9E2A5B"), 2.0))
+    p.setBrush(QColor("#FF6B8B"))
+    for s in (-1, 1):
+        loop = QPainterPath(QPointF(nx, ny))
+        loop.cubicTo(QPointF(nx + s * 14, ny - 10), QPointF(nx + s * 18, ny + 6), QPointF(nx, ny))
+        p.drawPath(loop)
+    # Bänder nach unten
+    p.drawLine(QPointF(nx - 1, ny + 2), QPointF(nx - 6, ny + 12))
+    p.drawLine(QPointF(nx + 1, ny + 2), QPointF(nx + 6, ny + 12))
+    # Knoten
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#FF477E"))
+    p.drawEllipse(QPointF(nx, ny), 3.4, 3.4)
+    p.restore()
+
+
+def _draw_acc_umbrella(p: QPainter, pose: Pose, anchors: dict):
+    """Kleiner aufgespannter Regenschirm in der Pfote mit Wassertropfen."""
+    px, py = anchors.get("paw_r", (98.0, 140.0))
+    t = getattr(pose, "t", 0.0)
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    # Schirmstock & Griff
+    p.setPen(_pen(QColor("#57606F"), 2.2))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # J-Griff in der Pfote
+    p.drawArc(QRectF(px - 3, py - 2, 6, 8), 0, 180 * 16)
+    # Stock schräg nach oben
+    top_x, top_y = px + 6, py - 46
+    p.drawLine(QPointF(px, py), QPointF(top_x, top_y))
+    # Schirmspitze oben
+    p.drawLine(QPointF(top_x, top_y), QPointF(top_x + 1, top_y - 6))
+
+    # Schirmkuppel
+    canopy = QPainterPath(QPointF(top_x - 22, top_y + 12))
+    canopy.cubicTo(QPointF(top_x - 18, top_y - 12), QPointF(top_x + 18, top_y - 12), QPointF(top_x + 22, top_y + 12))
+    # Wellenbögen unten
+    canopy.quadTo(QPointF(top_x + 11, top_y + 8), QPointF(top_x, top_y + 11))
+    canopy.quadTo(QPointF(top_x - 11, top_y + 8), QPointF(top_x - 22, top_y + 12))
+    canopy.closeSubpath()
+
+    p.setPen(_pen(QColor("#D98000"), 2.2))
+    p.setBrush(QColor("#FFDA79"))
+    p.drawPath(canopy)
+
+    # Regentropfen fallen
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#70A1FF"))
+    for i in range(3):
+        drop_age = (t * 2.2 + i * 0.35) % 1.0
+        dx = top_x - 24 + i * 18
+        dy = top_y - 20 + drop_age * 55
+        p.drawEllipse(QRectF(dx, dy, 2.0, 3.5))
+    p.restore()
+
+
+def _draw_acc_fan(p: QPainter, pose: Pose, anchors: dict):
+    """Japanischer Fächer gegen Sommerhitze / PC-Fieber mit Schweißperlen."""
+    px, py = anchors.get("paw_r", (98.0, 140.0))
+    t = getattr(pose, "t", 0.0)
+    flap = math.sin(t * 8.0) * 6.0
+
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    p.translate(px, py)
+    p.rotate(15 + flap)
+
+    # Fächerblatt (Sensu)
+    fan_path = QPainterPath(QPointF(0, 0))
+    fan_path.lineTo(-18, -26)
+    fan_path.arcTo(QRectF(-28, -48, 56, 36), 140, -100)
+    fan_path.closeSubpath()
+
+    p.setPen(_pen(QColor("#B33939"), 2.0))
+    p.setBrush(QColor("#FFB8B8"))
+    p.drawPath(fan_path)
+
+    # Rippen
+    p.setPen(_pen(QColor("#803030"), 1.4))
+    for ang_deg in (-35, -15, 5, 25):
+        rad = math.radians(ang_deg - 90)
+        p.drawLine(QPointF(0, 0), QPointF(math.cos(rad) * 26, math.sin(rad) * 26))
+
+    p.restore()
+
+
+def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer: str = "over"):
+    """Zeichnet Zubehör für die Figur."""
+    accs = set(getattr(pose, "accessories", ()))
+    if not accs:
+        return
+
+    info = get_character_info(char_id)
+    anchors = info.get("anchors", DEFAULT_ANCHORS)
+
+    if layer in ("under", "all"):
+        if "cloud" in accs:
+            _draw_acc_cloud(p, pose, char_id)
+
+    if layer in ("over", "all"):
+        # 1. Kopf-Slot filtern (höchste Priorität gewinnt)
+        active_head = None
+        for item in HEAD_SLOT_PRIORITY:
+            if item in accs:
+                active_head = item
+                break
+
+        # 2. Hals-Slot filtern
+        active_neck = None
+        for item in NECK_SLOT_PRIORITY:
+            if item in accs:
+                active_neck = item
+                break
+
+        # 3. Pfoten-Slot filtern
+        active_hand = None
+        for item in HAND_SLOT_PRIORITY:
+            if item in accs:
+                active_hand = item
+                break
+
+        # A) Kopf-Accessoires zeichnen mit Kopf-Transformation
+        if active_head:
+            p.save()
+            p.translate(pose.dx, pose.dy)
+            px, py = pose.pivot
+            p.translate(px, py)
+            p.rotate(pose.rot)
+            p.scale(pose.sx, pose.sy)
+            p.translate(-px, -py)
+
+            if char_id == "fantasy_spooky":
+                p.translate(pose.head_dx, pose.head_dy)
+            else:
+                p.translate(80.0 + pose.head_dx, 76.0 + pose.head_dy + 37.0)
+                p.rotate(pose.head_rot)
+                p.translate(-80.0, -113.0)
+
+            if active_head == "hacker_glasses":
+                _draw_acc_hacker_glasses(p, pose, anchors)
+            elif active_head == "sunglasses":
+                _draw_acc_sunglasses(p, pose, anchors)
+            elif active_head == "new_year":
+                _draw_acc_new_year(p, pose, anchors)
+            elif active_head == "party_hat":
+                _draw_acc_party_hat(p, pose, anchors)
+            elif active_head == "nightcap":
+                _draw_acc_nightcap(p, pose, anchors)
+            elif active_head == "pumpkin_hat":
+                _draw_acc_pumpkin_hat(p, pose, anchors)
+            elif active_head == "santa_hat":
+                _draw_acc_santa_hat(p, pose, anchors)
+            elif active_head == "beanie":
+                _draw_acc_beanie(p, pose, anchors)
+            elif active_head == "crown":
+                _draw_acc_crown(p, pose, anchors)
+
+            p.restore()
+
+        # B) Körper-/Hals-/Pfoten-Accessoires mit Körper-Transformation
+        if active_neck or active_hand:
+            p.save()
+            p.translate(pose.dx, pose.dy)
+            px, py = pose.pivot
+            p.translate(px, py)
+            p.rotate(pose.rot)
+            p.scale(pose.sx, pose.sy)
+            p.translate(-px, -py)
+
+            if active_neck == "scarf":
+                _draw_acc_scarf(p, pose, anchors)
+            elif active_neck == "bandana":
+                _draw_acc_bandana(p, pose, anchors)
+            elif active_neck == "bow":
+                _draw_acc_bow(p, pose, anchors)
+
+            if active_hand == "umbrella":
+                _draw_acc_umbrella(p, pose, anchors)
+            elif active_hand == "fan":
+                _draw_acc_fan(p, pose, anchors)
+
+            p.restore()
+
+
 def get_character_info(char_id: str) -> dict:
     """Metadaten, Sprueche und KI-Persona einer Figur (unbekannte ID -> cat_mochi)."""
     return CHARACTERS.get(char_id) or CHARACTERS["cat_mochi"]
 
 
 def draw_character(p: QPainter, pose: Pose, char_id: str = "cat_mochi"):
-    """Malt die gewaehlte Figur."""
+    """Malt die gewaehlte Figur samt Accessoires."""
+    draw_accessories(p, pose, char_id, layer="under")
     get_character_info(char_id)["drawer"](p, pose)
+    draw_accessories(p, pose, char_id, layer="over")
 
 
 def render_icon(size: int = 64, char_id: str = "cat_mochi") -> QPixmap:

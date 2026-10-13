@@ -210,6 +210,15 @@ class SettingsDialog(QDialog):
         self.bedtime_edit.setPlaceholderText("z. B. 23:00 (leer = aus)")
         form2.addRow("Schlafenszeit", self.bedtime_edit)
 
+        fun = cfg.get("fun", {}) if isinstance(cfg.get("fun"), dict) else {}
+        self.weather_outfits_chk = QCheckBox("Wetter-Outfits (Regenschirm, Sonnenbrille etc.)")
+        self.weather_outfits_chk.setChecked(bool(fun.get("weather_outfits", True)))
+        form2.addRow("", self.weather_outfits_chk)
+
+        self.pc_fever_chk = QCheckBox("PC-Fieber-Reaktion bei hoher CPU-/RAM-Last")
+        self.pc_fever_chk.setChecked(bool(fun.get("pc_fever", True)))
+        form2.addRow("", self.pc_fever_chk)
+
         self.hotkey_edit = QLineEdit(str(cfg.get("hotkey", "ctrl+alt+p")))
         self.hotkey_edit.setPlaceholderText("z. B. ctrl+alt+p")
         form2.addRow("Tastenk\u00fcrzel", self.hotkey_edit)
@@ -320,6 +329,8 @@ class SettingsDialog(QDialog):
         c.set("daily.briefing", self.briefing_chk.isChecked())
         c.set("daily.curious", self.curious_chk.isChecked())
         c.set("daily.bedtime", self.bedtime_edit.text().strip())
+        c.set("fun.weather_outfits", self.weather_outfits_chk.isChecked())
+        c.set("fun.pc_fever", self.pc_fever_chk.isChecked())
         c.set("ai.enabled", self.ai_enabled.isChecked())
         c.set("pet.speed", self.speed.value())
         c.set("pet.scale", self.scale.value() / 100.0)

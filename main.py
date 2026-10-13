@@ -91,6 +91,23 @@ from pet_window import PetState, PetWindow, is_night, style_menu
 from settings_dialog import SettingsDialog
 from speech_bubble import BriefingCard, InputBar, SpeechBubble
 import tools
+from accessories import (
+    calculate_cpu_percent,
+    get_ram_load_percent,
+    get_system_times,
+    seasonal_accessory,
+    weather_accessories,
+)
+
+class WeatherWorker(QThread):
+    finished_with_result = pyqtSignal(object)
+
+    def run(self) -> None:
+        try:
+            res = tools.get_weather()
+            self.finished_with_result.emit(res)
+        except Exception:
+            pass
 
 APP_ID = "MochiDesktopBuddy"
 HOTKEY_ID = 0xB0B0
@@ -363,6 +380,16 @@ class Buddy(QObject):
         self._bedtime_timer = QTimer(self)
         self._bedtime_timer.timeout.connect(self._on_bedtime_check)
 
+        # Phase 4: Zubehoer, Wetter-Outfits und PC-Fieber
+        self._active_workers: list[QThread] = []
+        self._last_system_times = get_system_times()
+        self._high_cpu_count = 0
+        self._last_fever_alert = 0.0
+        self._weather_timer = QTimer(self)
+        self._weather_timer.timeout.connect(self._check_weather_outfit)
+        self._pc_fever_timer = QTimer(self)
+        self._pc_fever_timer.timeout.connect(self._check_pc_fever)
+
     def user_name(self) -> str:
         return str(self.cfg.get("pet.user_name", "Boss")).strip() or "Boss"
 
@@ -444,8 +471,12 @@ class Buddy(QObject):
         self._curious_timer.start(1800000)
         self._reminder_timer.start(900000)
         self._bedtime_timer.start(300000)
+        self._weather_timer.start(3600000)
+        self._pc_fever_timer.start(15000)
         QTimer.singleShot(4000, self._check_birthday_and_briefing)
+        QTimer.singleShot(5000, self._check_seasonal_accessory)
         QTimer.singleShot(15000, self._on_reminders_check)
+        QTimer.singleShot(20000, self._check_weather_outfit)
         QTimer.singleShot(30000, lambda: self._check_update(manual=False))
 
     def _about(self) -> None:
@@ -780,10 +811,72 @@ class Buddy(QObject):
             if due and not self.brain.busy and not self.input.isVisible():
                 store.set_stat("bedtime_last_ts", str(now.timestamp()))
                 self.pet.wake_with_stretch(4.0)
+                self.pet.set_accessory("nightcap", True, until=time.monotonic() + 1800.0)
                 if is_second:
                     self._say(f"Immer noch fleißig, {self.user_name()}? Schlaf gut und erhol dich schön! 😴💤", 9000)
                 else:
                     self._say(f"Es ist schon spät, {self.user_name()} – Zeit fürs Bett? 😴", 9000)
+        except Exception:
+            pass
+
+    # -- Phase 4: Zubehoer, Wetter & PC-Fieber -----------------------------------------
+    def _reap_worker(self) -> None:
+        self._active_workers = [w for w in self._active_workers if not w.isFinished()]
+
+    def _check_seasonal_accessory(self) -> None:
+        try:
+            acc = seasonal_accessory(datetime.date.today())
+            if acc:
+                self.pet.set_accessory(acc, True)
+        except Exception:
+            pass
+
+    def _check_weather_outfit(self) -> None:
+        if not self.cfg.get("fun.weather_outfits", True):
+            return
+        worker = WeatherWorker(self.pet)
+        worker.finished_with_result.connect(self._on_weather_outfit_result)
+        worker.finished.connect(self._reap_worker)
+        self._active_workers.append(worker)
+        worker.start()
+
+    def _on_weather_outfit_result(self, res) -> None:
+        if getattr(res, "ok", False) and getattr(res, "data", None):
+            outfits = weather_accessories(res.data.get("temp_c"), res.data.get("desc", ""))
+            for w_acc in ("umbrella", "sunglasses", "scarf", "beanie"):
+                self.pet.set_accessory(w_acc, False)
+            for o in outfits:
+                self.pet.set_accessory(o, True)
+
+    def _check_pc_fever(self) -> None:
+        try:
+            cur_times = get_system_times()
+            cpu = 0.0
+            if self._last_system_times and cur_times:
+                cpu = calculate_cpu_percent(self._last_system_times, cur_times)
+            self._last_system_times = cur_times
+            ram = get_ram_load_percent()
+
+            if cpu > 90.0:
+                self._high_cpu_count += 1
+            else:
+                self._high_cpu_count = 0
+
+            if not self.cfg.get("fun.pc_fever", True):
+                return
+
+            is_fever = (self._high_cpu_count >= 2) or (ram > 92.0)
+            now = time.monotonic()
+            if is_fever:
+                self.pet.set_accessory("fan", True, until=now + 180.0)
+                if now - self._last_fever_alert > 3600.0:
+                    self._last_fever_alert = now
+                    self.brain.set_pending_action(
+                        "system_info",
+                        {},
+                        "Puh, dein PC kocht! \U0001F975 Soll ich nachsehen, was so viel frisst?",
+                    )
+                    self._say("Puh, dein PC kocht! \U0001F975 Soll ich nachsehen, was so viel frisst? (Antworte mit Ja oder Nein)", 8000)
         except Exception:
             pass
 

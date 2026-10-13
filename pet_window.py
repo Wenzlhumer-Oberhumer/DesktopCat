@@ -10,11 +10,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QPoint, QRect, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QGuiApplication, QPainter
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 import tools
+from accessories import fly_position
 from pet_sprites import (
     BASE, FLOOR, PoseContext, SpriteLibrary, _draw_effects, compute_pose, draw_cat,
 )
@@ -45,6 +46,7 @@ class PetState(Enum):
     DANCE = "dance"
     COOL = "cool"
     PUSH = "push"
+    FLY = "fly"
 
 
 WALKING = (PetState.WALK_LEFT, PetState.WALK_RIGHT)
@@ -63,6 +65,7 @@ INTERVALS = {
     PetState.DRAGGED: 16,
     PetState.FALLING: 16,
     PetState.PUSH: 16,
+    PetState.FLY: 16,
 }
 
 MENU_STYLE = """
@@ -92,6 +95,7 @@ class PetWindow(QWidget):
     moved = pyqtSignal()         # Position hat sich geaendert (Sprechblase folgt)
     character_changed = pyqtSignal(str)
     treat_given = pyqtSignal()
+    arrived = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -135,6 +139,12 @@ class PetWindow(QWidget):
         self._bounced = False
         self._pose = None
         self._last_sig = None
+
+        # Zubehoer & Fliegen (Phase 4)
+        self._accessories: set[str] = set()
+        self._accessory_until: dict[str, float] = {}
+        self._fly_target: Optional[QPointF] = None
+        self._arrived_emitted: bool = False
 
         self._pressed = False
         self._dragging = False
@@ -206,6 +216,81 @@ class PetWindow(QWidget):
         self.cfg.save()
         self.react_happy()
         self.treat_given.emit()
+
+    # -- Zubehoer & Fliegen (Phase 4) --------------------------------------------------
+    def set_accessory(self, name: str, on: bool, until: Optional[float] = None) -> None:
+        """Aktiviert oder deaktiviert ein Accessoire (optional mit Ablaufzeit)."""
+        if on:
+            self._accessories.add(name)
+            if until is not None:
+                self._accessory_until[name] = until
+            else:
+                self._accessory_until.pop(name, None)
+        else:
+            self._accessories.discard(name)
+            self._accessory_until.pop(name, None)
+        self.update()
+
+    def fly_to(self, x: float, y: float) -> None:
+        """Fliegt auf der Wolke sanft zu den Desktop-Koordinaten (x, y) und stoppt daneben."""
+        self.wake()
+        screen_rect = self._avail()
+        fx, fy = fly_position((x, y), (self.width(), self.height()), screen_rect)
+        self._fly_target = QPointF(fx, fy)
+        self._arrived_emitted = False
+        self.set_accessory("cloud", True)
+        if fx > self._px + 10:
+            self.facing = 1
+        elif fx < self._px - 10:
+            self.facing = -1
+        self.set_state(PetState.FLY)
+
+    def land(self) -> None:
+        """Kehrt auf den Boden zurueck; die Wolke loest sich auf."""
+        self.set_accessory("cloud", False)
+        self._fly_target = None
+        self._arrived_emitted = False
+        self._vx = 0.0
+        self._vy = 0.0
+        if self._py < self._ground_y() - 2.0:
+            self.set_state(PetState.FALLING)
+        else:
+            self.set_state(PetState.IDLE)
+
+    def _fly(self, dt: float) -> None:
+        if self._fly_target is None:
+            return
+        tx, ty = self._fly_target.x(), self._fly_target.y()
+        dx = tx - self._px
+        dy = ty - self._py
+        dist = math.hypot(dx, dy)
+
+        if dist < 4.0:
+            self._px = tx
+            self._py = ty
+            self._apply_pos()
+            if not self._arrived_emitted:
+                self._arrived_emitted = True
+                self.arrived.emit()
+            return
+
+        speed = max(100.0, min(600.0, dist * 3.6))
+        step = speed * dt
+        if step >= dist:
+            self._px = tx
+            self._py = ty
+            self._apply_pos()
+            if not self._arrived_emitted:
+                self._arrived_emitted = True
+                self.arrived.emit()
+        else:
+            self._px += (dx / dist) * step
+            self._py += (dy / dist) * step
+            self._apply_pos()
+            if dx > 10:
+                self.facing = 1
+            elif dx < -10:
+                self.facing = -1
 
     def _screen_for_x(self, cx: float):
         screens = QGuiApplication.screens()
@@ -429,6 +514,8 @@ class PetWindow(QWidget):
             self._walk(dt)
         elif s == PetState.FALLING:
             self._fall(dt)
+        elif s == PetState.FLY:
+            self._fly(dt)
         elif s != PetState.DRAGGED and self._py < self._ground_y() - 1.5 and not self._dragging:
             self._vx = self._vy = 0.0       # z. B. Taskleiste hat sich bewegt -> nachfallen
             self.set_state(PetState.FALLING)
@@ -441,8 +528,12 @@ class PetWindow(QWidget):
         if self._hearts_t is not None and now - self._hearts_t > 1.5:
             self._hearts_t = None
 
-        # Blickrichtung zur Maus (guenstig: nur lesen, kein Event-Handler noetig)
-        if s in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
+        # Blickrichtung zur Maus oder Ziel
+        if s == PetState.FLY and self._fly_target is not None:
+            dx = self._fly_target.x() - self._px
+            dy = self._fly_target.y() - self._py
+            self._look = (max(-1.0, min(1.0, dx / 200.0)), max(-1.0, min(1.0, dy / 200.0)))
+        elif s in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
             c = QCursor.pos()
             hx = self._px + self.width() / 2
             hy = self._py + 76 * self.scale
@@ -522,6 +613,12 @@ class PetWindow(QWidget):
     #  Zeichnen
     # ==================================================================================
     def _build_pose(self, now: float):
+        # Abgelaufene temporaere Accessoires aufraeumen
+        expired = [name for name, u in self._accessory_until.items() if now >= u]
+        for name in expired:
+            self._accessories.discard(name)
+            self._accessory_until.pop(name, None)
+
         hop = 0.0
         if self._hop_t is not None:
             u = (now - self._hop_t) / 0.5
@@ -535,6 +632,11 @@ class PetWindow(QWidget):
         ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
                           squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until)
         pose = compute_pose(ctx)
+        pose.accessories = tuple(sorted(self._accessories))
+        if "fan" in self._accessories:
+            pose.sweat = True
+        if self.state == PetState.FLY:
+            pose.dy += math.sin((now - self._state_since) * 3.5) * 4.0
         if now < self._confetti_until and self._confetti_t is not None:
             pose.confetti = now - self._confetti_t
             pose.sparkles = now - self._confetti_t
@@ -634,6 +736,9 @@ class PetWindow(QWidget):
             self._click_timer.stop()
             self.wake()
             self._vx = self._vy = 0.0
+            if self.state == PetState.FLY:
+                self.set_accessory("cloud", False)
+                self._fly_target = None
             self.set_state(PetState.DRAGGED)
         target = gp - self._grab_off
         vr = self._virtual_rect()

@@ -37,6 +37,7 @@ def main():
         "test_name_kylie",
         "test_memory_store",
         "test_daily",
+        "test_accessories",
     ]
 
     total = 0

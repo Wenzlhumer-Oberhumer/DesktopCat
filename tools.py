@@ -36,6 +36,7 @@ class ToolResult:
     ok: bool
     message: str
     notify_title: Optional[str] = None   # gesetzt -> zusaetzlich Windows-Benachrichtigung zeigen
+    data: Optional[dict] = None
 
 
 class ToolError(Exception):
@@ -1295,11 +1296,22 @@ def get_weather(location: Optional[str] = None) -> ToolResult:
         icon, advice = "☀️", "Herrliches Wetter draussen!"
     elif any(k in d for k in ("wolk", "cloud", "bedeckt", "overcast")):
         icon, advice = "⛅", "Gemuetliches Wetter zum Coden!"
-    else:
-        icon, advice = "\U0001F324️", "Schau mal aus dem Fenster!"
     rain_s = f" (Regenrisiko: {rain}%)" if rain > 15 else ""
+    raw_temp = None
+    try:
+        raw_temp = float(temp)
+    except (ValueError, TypeError):
+        pass
+    weather_data = {
+        "temp_c": raw_temp,
+        "feels_c": float(feels) if str(feels).replace("-", "").isdigit() else None,
+        "desc": desc,
+        "city": city,
+        "chance_of_rain": rain,
+    }
     return ToolResult(True, f"In {city} hat es gerade {temp}°C (gefuehlt {feels}°C), {desc}{rain_s}! {icon} {advice} {emo}",
-                      notify_title=f"Wetter in {city}: {temp}°C {icon}")
+                      notify_title=f"Wetter in {city}: {temp}°C {icon}",
+                      data=weather_data)
 
 
 # ======================================================================================

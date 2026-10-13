@@ -57,6 +57,10 @@ DEFAULTS: dict[str, Any] = {
         "bedtime": "23:00",
         "curious": True,
     },
+    "fun": {
+        "weather_outfits": True,
+        "pc_fever": True,
+    },
 }
 
 

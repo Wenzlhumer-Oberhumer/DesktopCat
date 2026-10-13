@@ -8,8 +8,8 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter, QPixmap, QColor
+from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication
 
 from pet_sprites import CHARACTERS, PoseContext, compute_pose, draw_cat, draw_character
@@ -40,6 +40,96 @@ def save_character_sheet(out_dir: Path):
     p.end()
     sheet.save(str(out_dir / "characters.png"))
     print(f"Figuren-Sheet gespeichert: {out_dir / 'characters.png'}")
+
+
+def save_anchors_sheet(out_dir: Path):
+    """Zeichnet alle 9 Figuren mit ihren Ankerpunkten als kleine bunte Punkte."""
+    from pet_sprites import DEFAULT_ANCHORS
+    n = len(CHARACTERS)
+    sheet = QPixmap(160 * n, 200)
+    sheet.fill(QColor("#1E1F24"))
+    p = QPainter(sheet)
+    p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform | QPainter.RenderHint.TextAntialiasing)
+    p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+
+    for i, (cid, cdata) in enumerate(CHARACTERS.items()):
+        p.save()
+        p.translate(i * 160, 20)
+        pose = compute_pose(PoseContext(key="idle", t=0.0, age=0.0))
+        draw_character(p, pose, cid)
+
+        # Anker zeichnen
+        anchors = cdata.get("anchors", DEFAULT_ANCHORS)
+        hx, hy = anchors.get("head_top", (80.0, 48.0))
+        ex, ey = anchors.get("eyes", (80.0, 80.0))
+        edx = anchors.get("eye_dx", 19.0)
+        nx, ny = anchors.get("neck", (80.0, 114.0))
+        px, py = anchors.get("paw_r", (98.0, 140.0))
+
+        # Kopf-Top (Rot)
+        p.setPen(QColor("#FFFFFF"))
+        p.setBrush(QColor("#FF4757"))
+        p.drawEllipse(QPointF(hx, hy), 3.5, 3.5)
+
+        # Augen (Gruen)
+        p.setBrush(QColor("#2ED573"))
+        p.drawEllipse(QPointF(ex - edx, ey), 3.0, 3.0)
+        p.drawEllipse(QPointF(ex + edx, ey), 3.0, 3.0)
+
+        # Hals (Blau)
+        p.setBrush(QColor("#1E90FF"))
+        p.drawEllipse(QPointF(nx, ny), 3.5, 3.5)
+
+        # Pfote (Gelb/Orange)
+        p.setBrush(QColor("#FFA502"))
+        p.drawEllipse(QPointF(px, py), 3.5, 3.5)
+
+        # Beschriftung
+        p.setPen(QColor("#E4E7EB"))
+        p.drawText(QRectF(0, -16, 160, 16), Qt.AlignmentFlag.AlignCenter, cdata.get("name", cid))
+        p.restore()
+
+    p.end()
+    out_file = out_dir / "anchors.png"
+    sheet.save(str(out_file))
+    print(f"Anker-Sheet gespeichert: {out_file}")
+
+
+def save_accessories_sheet(out_dir: Path):
+    """Zeichnet alle 9 Figuren mit verschiedenen Accessoire-Sets zur visuellen Pruefung."""
+    n = len(CHARACTERS)
+    rows = [
+        ("Hacker + Wolke", ("hacker_glasses", "cloud")),
+        ("Party + Schal", ("party_hat", "scarf")),
+        ("Regenschirm + Sonne", ("umbrella", "sunglasses")),
+        ("Halloween + Bandana", ("pumpkin_hat", "bandana")),
+        ("Weihnachten", ("santa_hat", "scarf")),
+        ("Schlafmütze", ("nightcap",)),
+    ]
+    sheet = QPixmap(160 * n, 190 * len(rows))
+    sheet.fill(QColor("#1A1B20"))
+    p = QPainter(sheet)
+    p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform | QPainter.RenderHint.TextAntialiasing)
+    p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+
+    for r_idx, (label, accs) in enumerate(rows):
+        base_y = r_idx * 190
+        # Zeilen-Titel
+        p.setPen(QColor("#A0AEC0"))
+        p.drawText(QRectF(10, base_y + 6, 200, 20), Qt.AlignmentFlag.AlignLeft, label)
+
+        for c_idx, (cid, cdata) in enumerate(CHARACTERS.items()):
+            p.save()
+            p.translate(c_idx * 160, base_y + 20)
+            pose = compute_pose(PoseContext(key="idle", t=0.5, age=0.5))
+            pose.accessories = accs
+            draw_character(p, pose, cid)
+            p.restore()
+
+    p.end()
+    out_file = out_dir / "accessories.png"
+    sheet.save(str(out_file))
+    print(f"Accessoire-Sheet gespeichert: {out_file}")
 
 
 def main():
@@ -79,6 +169,8 @@ def main():
     overview.save(str(out_dir / "overview.png"))
     print(f"Uebersicht gespeichert: {out_dir / 'overview.png'}")
     save_character_sheet(out_dir)
+    save_anchors_sheet(out_dir)
+    save_accessories_sheet(out_dir)
 
 if __name__ == "__main__":
     main()
