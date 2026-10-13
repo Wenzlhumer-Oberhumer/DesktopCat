@@ -118,8 +118,8 @@
 | **Hochheben / Werfen** | Mit linker Maustaste ziehen und loslassen |
 | **Schnell-Aktionen** | Rechtsklick ➜ *✨ Tricks & Spaß* oder *⚡ Schnell-Tools* |
 | **Charakter wechseln** | Rechtsklick ➜ *Charakter* (oder in den Einstellungen) |
-| **Leckerli geben** | Rechtsklick ➜ *Leckerli geben* |
-| **Fang die Maus** | Rechtsklick ➜ *Spielmodus* (Figur läuft 15 s dem Mauszeiger nach) |
+| **Leckerli geben** | Rechtsklick ➜ *Tricks & Spaß* ➜ *Leckerli geben* |
+| **Fang die Maus** | Rechtsklick ➜ *Tricks & Spaß* ➜ *Fang die Maus!* (Figur läuft 15 s dem Mauszeiger nach) |
 | **Einstellungen** | Rechtsklick ➜ *Einstellungen* (Gemini-Key, Charakter, Name, Hotkey, Erinnerungen, Autostart) |
 | **Beenden** | Rechtsklick ➜ *Beenden* |
 
