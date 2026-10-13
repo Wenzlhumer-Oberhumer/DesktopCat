@@ -18,6 +18,13 @@ if ($versionPy -match '__version__\s*=\s*["'']([^"'']+)["'']') {
 }
 Write-Host "Baue Mochi Version: $Version" -ForegroundColor Green
 
+# exe-Versionsinfo (Eigenschaften > Details) an version.py angleichen
+$v = ($Version.Split('.') + @('0','0','0'))[0..2]
+$vi = Get-Content "$ScriptDir\version_info.txt" -Raw
+$vi = $vi -replace '(filevers|prodvers)=\(\d+, \d+, \d+, \d+\)', "`$1=($($v[0]), $($v[1]), $($v[2]), 0)"
+$vi = $vi -replace "(FileVersion|ProductVersion)', '[\d.]+'", "`$1', '$($v -join '.').0'"
+[IO.File]::WriteAllText("$ScriptDir\version_info.txt", $vi, (New-Object Text.UTF8Encoding $false))
+
 # 2. Eigenes Build-venv: sonst packt PyInstaller alles aus dem globalen Python mit (torch, cv2, ...)
 $venvDir = "$ScriptDir\.venv-build"
 $py = "$venvDir\Scripts\python.exe"
