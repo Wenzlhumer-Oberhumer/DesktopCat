@@ -83,6 +83,8 @@ def style_menu(menu: QMenu) -> QMenu:
 
 class PetWindow(QWidget):
     input_requested = pyqtSignal()
+    chats_requested = pyqtSignal()
+    data_requested = pyqtSignal()
     command_requested = pyqtSignal(str)
     settings_requested = pyqtSignal()
     quit_requested = pyqtSignal()
@@ -707,6 +709,8 @@ class PetWindow(QWidget):
             menu.addAction("🔑  Gemini-Key eintragen").triggered.connect(self.settings_requested.emit)
             menu.addSeparator()
         menu.addAction("💬  Befehl eingeben").triggered.connect(self.input_requested.emit)
+        menu.addAction("📚  Meine Chats").triggered.connect(self.chats_requested.emit)
+        menu.addAction("🔒  Meine Daten").triggered.connect(self.data_requested.emit)
         menu.addSeparator()
 
         # Charakter-Auswahl (Live-Wechsel)

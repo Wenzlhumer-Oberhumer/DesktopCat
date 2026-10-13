@@ -314,6 +314,8 @@ class Buddy(QObject):
         self.pet.petted.connect(self._on_petted)
         self.pet.command_requested.connect(self._on_submit)
         self.pet.input_requested.connect(self.open_input)
+        self.pet.chats_requested.connect(self.open_chat_history)
+        self.pet.data_requested.connect(self.open_my_data)
         self.pet.settings_requested.connect(self.open_settings)
         self.pet.quit_requested.connect(self.quit)
         self.bubble.clicked.connect(self._on_bubble_clicked)
@@ -362,7 +364,9 @@ class Buddy(QObject):
         if not gemini.has_key():
             self._act(self.tray_menu, "\U0001F511  Gemini-Key eintragen", self.open_settings)
             self.tray_menu.addSeparator()
-        self._act(self.tray_menu, "\U0001F4AC  Befehl eingeben", self.open_input)
+        self._act(self.tray_menu, "💬  Befehl eingeben", self.open_input)
+        self._act(self.tray_menu, "📚  Meine Chats", self.open_chat_history)
+        self._act(self.tray_menu, "🔒  Meine Daten", self.open_my_data)
         self._act(self.tray_menu, "\U0001F441\uFE0F  Bildschirm beobachten (Vision)", lambda: self._on_submit("was mache ich gerade"))
         self._act(self.tray_menu, "\U0001F4C4  Word-Dokument am Desktop erstellen", lambda: self._on_submit("erstelle ein word dokument am desktop"))
         self._act(self.tray_menu, "\U0001F3E0  Zur Taskleiste zur\u00fccksetzen", self.pet.reset_to_taskbar)
@@ -408,6 +412,21 @@ class Buddy(QObject):
                 hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Kylie')} \U0001F43E Doppelklick auf mich = Befehl"
 
         QTimer.singleShot(1500, lambda: self._say(hint, 7000 if rename_intro else 6000))
+
+        # Phase 2: Privacy-Hinweis beim ersten Start
+        priv = self.cfg.get("privacy", {}) or {}
+        if not priv.get("intro_shown", False):
+            def _show_privacy_intro():
+                self.cfg.set("privacy.intro_shown", True)
+                self.cfg.save()
+                p_msg = (
+                    "Kleiner Hinweis: Ich speichere unsere Chats und Dinge, die du mir erzählst, "
+                    "nur hier auf deinem PC 🔒 Rechtsklick → ‚Meine Daten‘ zeigt alles und löscht es mit einem Klick."
+                )
+                self._say(p_msg, 9000)
+            delay = 9000 if rename_intro else 8000
+            QTimer.singleShot(delay, _show_privacy_intro)
+
         self._schedule_chatter()
         self._schedule_vision(initial_delay_s=50)
         self._schedule_wellbeing()
@@ -576,6 +595,8 @@ class Buddy(QObject):
             self.tray.showMessage(notify, message, self.icon, 6000)
         if "?" in message:
             self._mochi_asked_question = True
+        if "ich öffne deine chats" in low or "meine chats für dich" in low:
+            QTimer.singleShot(600, self.open_chat_history)
 
 
     def _on_timer_expired(self, label: str, duration_s: int, u_name: str) -> None:
@@ -671,6 +692,24 @@ class Buddy(QObject):
                 self._say("Gespeichert! \U0001F43E", 2000)
         finally:
             self._settings_open = False
+
+    def open_chat_history(self) -> None:
+        from chat_history import ChatHistoryDialog
+        dlg = ChatHistoryDialog(self.cfg)
+        dlg.setWindowIcon(self.icon)
+        dlg.resume_requested.connect(self._on_resume_chat)
+        dlg.exec()
+
+    def _on_resume_chat(self, history: list) -> None:
+        self.brain.clear_history()
+        self.brain._history = list(history)
+        self.open_input()
+
+    def open_my_data(self) -> None:
+        from my_data_dialog import MyDataDialog
+        dlg = MyDataDialog(self.cfg)
+        dlg.setWindowIcon(self.icon)
+        dlg.exec()
 
     # -- Intelligente Umgebungs- und Code-Beobachtung (Screen & Coding Companion) ---
     def _smart_ambient_comment(self) -> Optional[str]:

@@ -28,7 +28,7 @@ from paths import DATA_DIR
 LOG_FILE = DATA_DIR / "desktop_organize_log.json"
 
 # Tools, die erst nach ausdruecklichem "ja" des Nutzers laufen duerfen (siehe agent_brain.AgentBrain.pending_action)
-DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell"}
+DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell", "forget_facts", "wipe_my_data"}
 
 
 @dataclass
@@ -1368,6 +1368,38 @@ def network_info() -> ToolResult:
 
 
 # ======================================================================================
+#  25) Fakten & Datenverwaltung (Phase 2)
+# ======================================================================================
+def list_facts() -> ToolResult:
+    """Listet gemerkte Fakten ueber den Nutzer auf."""
+    from memory_store import get_memory_store
+    store = get_memory_store()
+    facts = store.facts()
+    if facts:
+        items = "\n• " + "\n• ".join(f["text"] for f in facts[:10])
+        return ToolResult(True, f"Das weiß ich über dich, {_user_name()}:{items} 📝")
+    return ToolResult(True, f"Noch nichts, {_user_name()} – erzähl mir was! 🐾")
+
+
+def forget_facts(query: str = "") -> ToolResult:
+    """Loescht Fakten, die zur Suchanfrage passen."""
+    from memory_store import get_memory_store
+    store = get_memory_store()
+    cnt = store.forget_matching(query)
+    if cnt > 0:
+        return ToolResult(True, f"Ich habe {cnt} Fakt{'en' if cnt != 1 else ''} dazu vergessen! 🧹✨")
+    return ToolResult(True, f"Dazu hatte ich mir gar nichts gemerkt, {_user_name()}! 🐾")
+
+
+def wipe_my_data() -> ToolResult:
+    """Loescht alle gemerkten Fakten, Chatverlaeufe und Statistiken unwiderruflich."""
+    from memory_store import get_memory_store
+    store = get_memory_store()
+    store.wipe_everything()
+    return ToolResult(True, f"Alles vergessen, {_user_name()}! Deine Chats und Fakten wurden komplett gelöscht. 🧹✨")
+
+
+# ======================================================================================
 #  Registry (fuer KI-Tool-Calling) + sicherer Aufruf
 # ======================================================================================
 TOOLS: dict[str, Callable[..., ToolResult]] = {
@@ -1397,6 +1429,9 @@ TOOLS: dict[str, Callable[..., ToolResult]] = {
     "get_weather": get_weather,
     "clean_pc": clean_pc,
     "network_info": network_info,
+    "list_facts": list_facts,
+    "forget_facts": forget_facts,
+    "wipe_my_data": wipe_my_data,
 }
 
 TOOL_SPECS: list[dict] = [
@@ -1589,6 +1624,22 @@ TOOL_SPECS: list[dict] = [
     {
         "name": "show_time_and_date",
         "description": "Gibt die aktuelle Uhrzeit, Datum und den Wochentag aus.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "list_facts",
+        "description": "Zeigt alle Fakten, die sich der Buddy ueber den Nutzer gemerkt hat.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "forget_facts",
+        "description": "Vergisst gemerkte Fakten zu einem bestimmten Thema oder Stichwort.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "Das Thema oder der Inhalt, der vergessen werden soll."}}},
+    },
+    {
+        "name": "wipe_my_data",
+        "description": "Loescht alle gemerkten Chats und persoenlichen Fakten restlos vom PC.",
         "parameters": {"type": "object", "properties": {}},
     },
 ]

@@ -211,6 +211,9 @@ class SettingsDialog(QDialog):
         open_cfg = QPushButton("config.json \u00f6ffnen")
         open_cfg.clicked.connect(self._open_cfg)
         btns.addWidget(open_cfg)
+        my_data_btn = QPushButton("🔒  Meine Daten")
+        my_data_btn.clicked.connect(self._open_my_data)
+        btns.addWidget(my_data_btn)
         btns.addStretch(1)
 
         cancel = QPushButton("Abbrechen")
@@ -278,6 +281,11 @@ class SettingsDialog(QDialog):
             os.startfile(str(self.cfg.path))  # type: ignore[attr-defined]
         except OSError:
             pass
+
+    def _open_my_data(self) -> None:
+        from my_data_dialog import MyDataDialog
+        dlg = MyDataDialog(self.cfg, parent=self)
+        dlg.exec()
 
     def _save(self) -> None:
         c = self.cfg

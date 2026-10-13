@@ -15,10 +15,14 @@ from tools import DANGEROUS_TOOLS, ToolResult
 
 class _FakeCfg:
     def snapshot(self):
-        return {"ai": {"enabled": False}, "pet": {"user_name": "Boss", "character": "cat_mochi"}}
+        return {
+            "ai": {"enabled": False},
+            "pet": {"user_name": "Boss", "character": "cat_mochi"},
+            "privacy": {"save_chats": False},
+        }
 
-    def get(self, *keys, default=None):
-        return default
+    def get(self, key, default=None):
+        return self.snapshot().get(key, default)
 
 
 def _safe_tools():

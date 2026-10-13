@@ -46,6 +46,12 @@ DEFAULTS: dict[str, Any] = {
         "auto": True,
         "last_check": 0.0,
     },
+    "privacy": {
+        "save_chats": True,
+        "remember": True,
+        "use_history": True,
+        "intro_shown": False,
+    },
 }
 
 

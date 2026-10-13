@@ -6,12 +6,15 @@ bekommt nur Signale (started / finished).
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+
+logger = logging.getLogger("mochi.brain")
 
 import gemini
 from gemini import LLMError
@@ -480,6 +483,22 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
     if re.search(r"\b(wach\s*auf|aufstehen|aufwachen)\b", n):
         return Plan(reply=f"Guten Morgen {user}! Ich bin hellwach und einsatzbereit! ✨", ok=True)
 
+    # 16b. Fakten & Datenverwaltung (Phase 2)
+    if re.search(r"\b(was\s*wei[sß]t\s*du\s*(?:alles\s*)?(?:[uü]ber|[vvon]+)\s*mich|welche\s*fakten\s*wei[sß]t\s*du|was\s*hast\s*du\s*dir\s*gemerkt)\b", n):
+        return Plan("list_facts", {})
+    if re.search(r"\b(vergiss\s*alles|l[oöa]sch\w*\s*(?:alle\s*)?(?:meine\s*)?daten|alle\s*daten\s*l[oöa]schen)\b", n):
+        return Plan("wipe_my_data", {})
+    m_vergiss = re.match(r"^vergiss\s*(?:,\s*)?(?:dass\s+|das\s+)?(.+)$", raw, re.IGNORECASE)
+    if m_vergiss:
+        v_target = m_vergiss.group(1).strip(" .!?\"'")
+        v_clean = v_target.lower().translate(_TR)
+        if v_clean in ("alles", "alle daten", "meine daten"):
+            return Plan("wipe_my_data", {})
+        if v_target:
+            return Plan("forget_facts", {"query": v_target})
+    if re.search(r"\b(zeig\s*(?:mir\s*)?(?:meine\s*)?chats|meine\s*chats|chatverlauf|zeige\s*chatverlauf)\b", n):
+        return Plan(reply="Ich öffne deine Chats für dich! 📚", ok=True)
+
     # 17. Konversation / Smalltalk
     if re.search(r"\b(hallo|hi|hey|moin|servus|huhu|guten (tag|morgen|abend))\b", n):
         return Plan(reply=_voice(character_id, "greet", user))
@@ -501,11 +520,33 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
 # ======================================================================================
 #  Gemini Integration & Tool-Calling-Protokoll
 # ======================================================================================
-def parse_cli_response(raw_response: str) -> tuple[str, dict | None]:
+class CliResponse(tuple):
+    """Rueckgabe von parse_cli_response: kompatibel mit (say, tool), enthaelt .remember/.remember_dates."""
+    say: str
+    tool: Optional[dict]
+    remember: list[str]
+    remember_dates: list[dict]
+
+    def __new__(
+        cls,
+        say: str,
+        tool: Optional[dict] = None,
+        remember: Optional[list[str]] = None,
+        remember_dates: Optional[list[dict]] = None,
+    ):
+        inst = super().__new__(cls, (say, tool))
+        inst.say = say
+        inst.tool = tool
+        inst.remember = list(remember or [])
+        inst.remember_dates = list(remember_dates or [])
+        return inst
+
+
+def parse_cli_response(raw_response: str) -> CliResponse:
     """Extrahiert (say, tool_dict) aus der Antwort von Gemini.
 
-    Unterstuetzt reines JSON, in ```json```-Zaeunen verpacktes JSON
-    sowie Fallback auf reinen Freitext.
+    Unterstuetzt reines JSON, in ```json```-Zaeunen verpacktes JSON,
+    optionale remember/remember_dates-Felder sowie Fallback auf reinen Freitext.
     """
     cleaned = raw_response.strip()
     if cleaned.startswith("```"):
@@ -522,11 +563,31 @@ def parse_cli_response(raw_response: str) -> tuple[str, dict | None]:
                 say = str(data.get("say") or "").strip()
                 tool = data.get("tool")
                 tool_dict = tool if isinstance(tool, dict) and tool.get("name") else None
-                return say, tool_dict
+
+                remember_list: list[str] = []
+                rem_raw = data.get("remember")
+                if isinstance(rem_raw, list):
+                    for item in rem_raw:
+                        if isinstance(item, str) and item.strip():
+                            remember_list.append(item.strip())
+                elif isinstance(rem_raw, str) and rem_raw.strip():
+                    remember_list.append(rem_raw.strip())
+
+                dates_list: list[dict] = []
+                dates_raw = data.get("remember_dates")
+                if isinstance(dates_raw, list):
+                    for item in dates_raw:
+                        if isinstance(item, dict) and item.get("text"):
+                            dates_list.append({
+                                "text": str(item["text"]).strip(),
+                                "date": str(item.get("date") or "").strip() or None,
+                            })
+
+                return CliResponse(say, tool_dict, remember=remember_list, remember_dates=dates_list)
         except ValueError:
             pass
 
-    return cleaned, None
+    return CliResponse(cleaned, None, remember=[], remember_dates=[])
 
 
 # ======================================================================================
@@ -568,6 +629,11 @@ def confirm_question(tool: str, args: dict, user_name: str = "Boss", character_i
         what = f"„{str(args.get('query') or 'die Datei')[:60]}“ löschen"
     elif tool == "execute_powershell":
         what = f"diesen PowerShell-Befehl ausführen: {str(args.get('command') or '')[:80]}"
+    elif tool == "forget_facts":
+        q = str(args.get("query") or "").strip()
+        what = f"die gemerkten Fakten zu „{q}“ löschen" if q else "diese gemerkten Fakten löschen"
+    elif tool == "wipe_my_data":
+        what = "wirklich alle gemerkten Fakten und Chat-Verläufe unwiderruflich löschen"
     else:
         what = f"„{tool}“ ausführen"
     return f"{sound} Soll ich wirklich {what}, {user}? Sag ja oder nein. {cinfo.get('emoji', '')}".strip()
@@ -699,12 +765,35 @@ class AgentWorker(QObject):
         ], ensure_ascii=False)
 
         tool_history: list[dict] = []
+        priv = self.cfg.get("privacy", {})
 
         for step in range(self.MAX_STEPS):
             prompt_parts = [
                 system_prompt(pet_name, user, self.character_id),
                 f"\nVERF\u00dcGBARE WERKZEUGE:\n{tool_specs_json}\n",
             ]
+
+            if priv.get("remember", True):
+                try:
+                    from memory_store import get_memory_store
+                    store = get_memory_store()
+                    facts = store.facts()[:30]
+                    if facts:
+                        f_lines = [f"- {f['text']}" for f in facts]
+                        prompt_parts.append(f"WAS DU \u00dcBER {user.upper()} WEISST:\n" + "\n".join(f_lines) + "\n")
+                except Exception:
+                    pass
+
+            if priv.get("use_history", True):
+                try:
+                    from memory_store import get_memory_store
+                    store = get_memory_store()
+                    snippets = store.relevant_snippets(self.text, limit=3)
+                    if snippets:
+                        s_lines = [f"- „{snip}“" for snip in snippets]
+                        prompt_parts.append("FR\u00dcHERE GESPR\u00c4CHE, DIE PASSEN K\u00d6NNTEN:\n" + "\n".join(s_lines) + "\n")
+                except Exception:
+                    pass
 
             if self.history:
                 prompt_parts.append("BISHERIGER GESPR\u00c4CHSVERLAUF:")
@@ -724,17 +813,35 @@ class AgentWorker(QObject):
             prompt_parts.append(
                 "ANTWORT-REGEL:\n"
                 "Antworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Markdown-Formatierung:\n"
-                "{\"say\": \"<kurze Antwort an den User oder leer>\", \"tool\": null}\n"
+                "{\"say\": \"<kurze Antwort an den User oder leer>\", \"tool\": null, \"remember\": [], \"remember_dates\": []}\n"
                 "oder\n"
-                "{\"say\": \"\", \"tool\": {\"name\": \"<tool_name>\", \"args\": {...}}}\n"
+                "{\"say\": \"\", \"tool\": {\"name\": \"<tool_name>\", \"args\": {...}}, \"remember\": [], \"remember_dates\": []}\n"
                 "W\u00e4hle ein Werkzeug nur dann, wenn es f\u00fcr die Anfrage des Nutzers wirklich erforderlich ist. "
+                "Wenn der Nutzer dauerhaft n\u00fctzliche Fakten \u00fcber sich erz\u00e4hlt (Vorlieben, Hobbys, Geburtstage, Termine), nutze 'remember': [\"Fakt\"] "
+                "bzw. 'remember_dates': [{\"text\": \"...\", \"date\": \"YYYY-MM-DD\"}]. "
+                "WICHTIG: Merke dir NIEMALS sensible Daten wie Passw\u00f6rter, Adressen, Gesundheit oder Bankdaten! "
                 "Wenn alle Aufgaben erledigt sind oder keine Werkzeuge n\u00f6tig sind, setze 'tool' auf null und formuliere eine nette Antwort in 'say'."
             )
 
             full_prompt = "\n".join(prompt_parts)
             raw_response = gemini.ask(full_prompt, timeout_s=timeout, model=model)
 
-            say_text, tool_call = parse_cli_response(raw_response)
+            cli_resp = parse_cli_response(raw_response)
+            say_text = cli_resp.say
+            tool_call = cli_resp.tool
+
+            if (cli_resp.remember or cli_resp.remember_dates) and priv.get("remember", True):
+                try:
+                    from memory_store import get_memory_store
+                    m_store = get_memory_store()
+                    for f_item in cli_resp.remember:
+                        m_store.add_fact(f_item, kind="fact")
+                    for d_item in cli_resp.remember_dates:
+                        m_store.add_fact(d_item["text"], due_date=d_item.get("date"), kind="date")
+                    if "gemerkt" not in say_text.lower():
+                        say_text = f"{say_text} 📝 Gemerkt!".strip()
+                except Exception as exc:
+                    logger.warning(f"Konnte Fakten nicht speichern: {exc}")
 
             if not tool_call:
                 return say_text or (self.results[-1].message if self.results else "Miau! Alles erledigt \U0001F43E")
@@ -832,6 +939,19 @@ class AgentBrain(QObject):
         self._history.append(("user", self._current_text))
         self._history.append(("assistant", message))
         self._history = self._history[-24:]
+
+        try:
+            priv = self._cfg.get("privacy", {}) if hasattr(self._cfg, "get") else {}
+            if isinstance(priv, dict) and priv.get("save_chats", True):
+                from memory_store import get_memory_store
+                store = get_memory_store()
+                pet_cfg = self._cfg.get("pet", {}) if hasattr(self._cfg, "get") else {}
+                char_id = pet_cfg.get("character", "cat_mochi") if isinstance(pet_cfg, dict) else "cat_mochi"
+                store.add_message("user", self._current_text, char_id)
+                store.add_message("assistant", message, char_id)
+        except Exception as exc:
+            logger.warning(f"Konnte Chat nicht speichern: {exc}")
+
         self.finished.emit(ok, message, notify)
 
     @pyqtSlot()
