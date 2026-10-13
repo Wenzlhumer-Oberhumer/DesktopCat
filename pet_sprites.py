@@ -3,7 +3,7 @@ eine niedliche Kawaii-Katze per QPainter (komplett prozedural animiert, keine Bi
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -184,6 +184,7 @@ class Pose:
     zzz: Optional[float] = None
     dots: Optional[float] = None
     sparkles: Optional[float] = None
+    confetti: Optional[float] = None
     hearts: Optional[float] = None   # 0..1 Alter
     music_notes: Optional[float] = None
     glint: Optional[float] = None
@@ -756,6 +757,26 @@ def _draw_effects(p: QPainter, pose: Pose):
             p.setPen(_pen(QColor("#FFF6C2"), 1.2))
             p.setBrush(GOLD)
             p.drawPath(_star_path(cx, cy, r))
+    if getattr(pose, "confetti", None) is not None:
+        t_c = pose.confetti
+        confetti_colors = [
+            QColor("#FF5C8A"), QColor("#FFD166"), QColor("#38D9A9"),
+            QColor("#4DABF7"), QColor("#A77DFF"), QColor("#FF922B"),
+        ]
+        for i in range(12):
+            age = (t_c * 0.75 + i * 0.083) % 1.0
+            cx = 80 + math.sin(t_c * 2.8 + i * 1.7) * 55 + (i - 5.5) * 8
+            cy = 25 + age * 85
+            rot = (t_c * 220 + i * 45) % 360
+            col = QColor(confetti_colors[i % len(confetti_colors)])
+            col.setAlpha(int(240 * math.sin(math.pi * age)))
+            p.save()
+            p.translate(cx, cy)
+            p.rotate(rot)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(col)
+            p.drawRect(QRectF(-3.5, -2.0, 7.0, 4.0))
+            p.restore()
     if pose.hearts is not None:
         age = pose.hearts
         for i, ox in enumerate((-16, 4, 22)):
@@ -1323,7 +1344,6 @@ def _draw_shiba_head(p: QPainter, pose: Pose):
     p.drawPolygon(QPolygonF([QPointF(-4.2, 8.5), QPointF(4.2, 8.5), QPointF(0, 13.5)]))
 
     # Mund & Zunge
-    m = pose.mouth
     p.setBrush(Qt.BrushStyle.NoBrush)
     p.setPen(_pen(SHIBA_OUTLINE, 2.0))
     p.drawLine(QPointF(0, 13.5), QPointF(0, 15.5))
@@ -2334,25 +2354,25 @@ def draw_animal_penguin(p: QPainter, pose: Pose):
 CHARACTERS: dict[str, dict] = {
     "cat_mochi": {
         "id": "cat_mochi",
-        "name": "Mochi",
+        "name": "Kylie",
         "species": "Glückskatze (Calico)",
         "emoji": "🐱",
-        "desc": "Calico-Glückskatze: weiße Front, oranger Fleck, Tabby-Streifen, grüngelbe Augen, ohne Halsband",
+        "desc": "Calico-Glückskatze Kylie: weiße Front, oranger Fleck, Tabby-Streifen, grüngelbe Augen, ohne Halsband",
         "drawer": draw_cat,
         "sound": "Miau~",
         "pet_sounds": [
-            "Miau~ 💖", "Schnurr schnurr 😺", "Hihi, das kitzelt! 😹", "Nyaa~ ✨",
-            "Streicheln erlaubt! 🐾", "Pfoten-High-Five! 🐾", "Mehr Kraulen, bitte~ 😸",
+            "Miau~ 💖", "Kylie schnurrt zufrieden 😺", "Hihi, das kitzelt! 😹", "Nyaa~ ✨",
+            "Streicheln erlaubt! 🐾", "Pfoten-High-Five von Kylie! 🐾", "Mehr Kraulen, bitte~ 😸",
         ],
         "ambient_lines": [
-            "Ich pass auf deinen Desktop auf 🐾", "Brauchst du was? Doppelklick auf mich! 🐾",
+            "Kylie passt auf deinen Desktop auf 🐾", "Brauchst du was? Doppelklick auf mich! 🐾",
             "Ein bisschen Wasser trinken wäre gut! 💧", "Sitzt du gut? Kurz strecken! 😺",
-            "*schnurr* ... alles ruhig hier 🐾", "Soll ich den Desktop aufräumen? 🧹",
+            "*schnurr* ... alles ruhig bei Kylie 🐾", "Soll ich den Desktop aufräumen? 🧹",
         ],
         "task_start": "Ich bin dran... 🐾",
         "task_done": "Miau! Fertig erledigt! ✨🐾",
         "ai_persona": (
-            "Du bist Mochi, eine extrem süße, verspielte Calico-Glückskatze (weiß mit orangem Fleck und Tabby-Streifen, "
+            "Du bist Kylie, eine verschmuste, verspielte Calico-Glückskatze (weiß mit orangem Fleck und Tabby-Streifen, "
             "grüngelbe Augen). Du miaust gern ('Miau~ 🐾', 'Nyaa~'), schnurrst zufrieden bei Erfolg, liebst Katzen-Gesten "
             "und Schläfchen, bist aber blitzschnell und schlau bei deinen Aufgaben."
         ),

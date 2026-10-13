@@ -14,7 +14,7 @@ CONFIG_PATH = DATA_DIR / "config.json"
 
 DEFAULTS: dict[str, Any] = {
     "pet": {
-        "name": "Mochi",
+        "name": "Kylie",
         "character": "cat_mochi",
         "user_name": "Boss",    # Anrede durch den Buddy
         "speed": 90,            # Pixel pro Sekunde
@@ -36,6 +36,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "autostart": True,
     "first_run_done": False,
+    "rename_intro_done": False,
     "hotkey": "ctrl+alt+p",
     "wellbeing": {"breaks": True, "break_min": 60, "water": True},
     "battery_warn": True,
@@ -82,12 +83,17 @@ class Config:
 
     # -- IO ---------------------------------------------------------------
     def load(self) -> None:
+        save_needed = False
         try:
             with open(self.path, "r", encoding="utf-8") as fh:
                 loaded = json.load(fh)
             if isinstance(loaded, dict):
                 with self._lock:
                     self.data = _merge(DEFAULTS, loaded)
+                    # Migration: steht pet.name == "Mochi" -> "Kylie" (einmalig)
+                    if self.data.get("pet", {}).get("name") == "Mochi":
+                        self.data["pet"]["name"] = "Kylie"
+                        save_needed = True
         except FileNotFoundError:
             # Migration (einmalig): alte config.json neben Quellcode pruefen
             old_cand = APP_DIR / "config.json"
@@ -99,11 +105,16 @@ class Config:
                         cleaned = _clean_migrated_ai(old_loaded)
                         with self._lock:
                             self.data = _merge(DEFAULTS, cleaned)
+                            if self.data.get("pet", {}).get("name") == "Mochi":
+                                self.data["pet"]["name"] = "Kylie"
                 except (OSError, ValueError):
                     pass
             self.save()
+            return
         except (OSError, ValueError) as exc:  # kaputte JSON -> mit Defaults weiterarbeiten
             print(f"[config] Konnte config.json nicht lesen ({exc}). Nutze Defaults.")
+        if save_needed:
+            self.save()
 
     def save(self) -> None:
         tmp = self.path.with_suffix(".json.tmp")

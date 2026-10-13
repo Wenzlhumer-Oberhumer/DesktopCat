@@ -9,7 +9,6 @@ import random
 import sys
 import time
 import traceback
-from pathlib import Path
 from typing import Optional
 
 from paths import APP_DIR, DATA_DIR, FROZEN, set_autostart
@@ -79,7 +78,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QAction, QGuiApplication, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from agent_brain import AgentBrain
+from agent_brain import AgentBrain, name_reaction
 from config import Config
 from pet_sprites import render_icon
 try:
@@ -124,7 +123,7 @@ class AmbientVisionWorker(QObject):
         apps_str = ", ".join(self.open_apps[:6])
         user = str(self.cfg.get("pet", {}).get("user_name", "Boss")).strip() or "Boss"
         cinfo = get_character_info(self.cfg.get("pet", {}).get("character", "cat_mochi"))
-        who = cinfo.get("ai_persona") or "Du bist Mochi, ein extrem neugieriger, süßer Katzen-Buddy."
+        who = cinfo.get("ai_persona") or "Du bist Kylie, ein extrem neugieriger, süßer Katzen-Buddy."
 
         # Schritt 1: Cloud-Vision ueber die Gemini API, falls ein Key hinterlegt ist
         if gemini.has_key() and self.b64_img:
@@ -295,7 +294,7 @@ class Buddy(QObject):
         # Tray-Icon (auch Quelle fuer Windows-Benachrichtigungen)
         self.icon = QIcon(render_icon(64))
         self.tray = QSystemTrayIcon(self.icon, self)
-        self.tray.setToolTip("Mochi - dein Desktop-Buddy")
+        self.tray.setToolTip("Desktop Cat - dein Desktop-Buddy")
         self.tray_menu = style_menu(QMenu())
         self.tray_menu.aboutToShow.connect(self._update_tray_menu)
         self._update_tray_menu()
@@ -373,7 +372,7 @@ class Buddy(QObject):
             self._act(self.tray_menu, f"✨ Update auf v{ver} installieren", self._start_update_download)
         self._act(self.tray_menu, "🔄 Nach Updates suchen", lambda: self._check_update(manual=True))
         self._act(self.tray_menu, "\u2699\uFE0F  Einstellungen", self.open_settings)
-        self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Mochi (v{__version__})", self._about)
+        self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Desktop Cat (v{__version__})", self._about)
         self._act(self.tray_menu, "\U0001F44B  Beenden", self.quit)
 
     @staticmethod
@@ -388,21 +387,27 @@ class Buddy(QObject):
         self.pet.drop_in()
 
         first_run = not self.cfg.get("first_run_done", False)
-        if first_run:
+        rename_intro = not self.cfg.get("rename_intro_done", False)
+        if rename_intro:
+            self.cfg.set("rename_intro_done", True)
+            self.cfg.save()
+            self.pet.celebrate_confetti(5.0)
+            hint = f"Hi {self.user_name()}! Ich heiße jetzt Kylie – und wohne in Desktop Cat 🎉"
+        elif first_run:
             self.cfg.set("first_run_done", True)
             self.cfg.save()
             if not gemini.has_key():
                 hint = "Hi! Klick mich rechts \u2192 Gemini-Key eintragen, dann werde ich schlau \U0001f9e0"
             else:
                 hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
-                hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
+                hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Kylie')} \U0001F43E Doppelklick oder {hk} = Befehl"
         else:
             hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
-            hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
+            hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Kylie')} \U0001F43E Doppelklick oder {hk} = Befehl"
             if not self._hotkey_ok:
-                hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Mochi')} \U0001F43E Doppelklick auf mich = Befehl"
+                hint = f"Hallo {self.user_name()}! Ich bin {self.char_info().get('name', 'Kylie')} \U0001F43E Doppelklick auf mich = Befehl"
 
-        QTimer.singleShot(1500, lambda: self._say(hint, 6000))
+        QTimer.singleShot(1500, lambda: self._say(hint, 7000 if rename_intro else 6000))
         self._schedule_chatter()
         self._schedule_vision(initial_delay_s=50)
         self._schedule_wellbeing()
@@ -410,7 +415,7 @@ class Buddy(QObject):
         QTimer.singleShot(30000, lambda: self._check_update(manual=False))
 
     def _about(self) -> None:
-        self._say(f"Mochi v{__version__} \U0001F43E\nDein KI-Desktop-Buddy!", 6000)
+        self._say(f"Desktop Cat v{__version__} \U0001F43E\nDein KI-Desktop-Buddy!", 6000)
 
     def quit(self) -> None:
         self.hotkey.unregister()
@@ -517,6 +522,32 @@ class Buddy(QObject):
     def _on_submit(self, text: str) -> None:
         self._mochi_asked_question = False
         self.input.hide_now()       # sofort weg, damit die "Ich bin dran"-Blase erscheinen darf
+
+        char_name = str(self.char_info().get("name", "Kylie"))
+        nr = name_reaction(text, char_name, self.user_name())
+        if nr:
+            if self.pet.state == PetState.SLEEP:
+                self.pet.wake_with_stretch()
+                msg = "Mrrrp… ich bin wach! 😽"
+                self._say(msg, 4000)
+                self.brain.record_assistant_message(msg)
+                if nr.kind == "call":
+                    return
+            else:
+                self.pet.react_happy()
+            if nr.kind == "call":
+                self._say(nr.reply or f"Ja? 😺 Was gibt's, {self.user_name()}?", 4000)
+                self.brain.record_assistant_message(nr.reply or f"Ja? 😺 Was gibt's, {self.user_name()}?")
+                return
+            elif nr.kind == "who":
+                self._say(nr.reply or f"Ich bin {char_name}! 🐾", 5000)
+                self.brain.record_assistant_message(nr.reply or f"Ich bin {char_name}! 🐾")
+                return
+            elif nr.kind == "prefix" and nr.rest:
+                text = nr.rest
+            elif nr.hearts:
+                self.pet.react_happy()
+
         if not self.brain.submit(text):
             self._say("Moment, ich bin noch dran... \U0001F6E0\uFE0F", 2500)
 
@@ -818,11 +849,11 @@ def main() -> int:
 
     lock = _single_instance()
     if lock is None:
-        print("Mochi laeuft bereits.")
+        print("Desktop Cat laeuft bereits.")
         return 0
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Mochi")
+    app.setApplicationName("Desktop Cat")
     app.setQuitOnLastWindowClosed(False)      # Pet lebt weiter, auch wenn Dialoge schliessen
     cfg = Config()
 

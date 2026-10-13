@@ -8,7 +8,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPixmap, QColor
 from PyQt6.QtWidgets import QApplication
 
@@ -44,6 +44,7 @@ def save_character_sheet(out_dir: Path):
 
 def main():
     app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
     out_dir = _ROOT / "ref" / "plan" / "screenshots"
     out_dir.mkdir(parents=True, exist_ok=True)
 

@@ -81,6 +81,14 @@ def _emoji() -> str:
         return "🐾"
 
 
+def _pet_name() -> str:
+    try:
+        from pet_sprites import get_character_info
+        return get_character_info(_ctx["char"]).get("name", "Kylie")
+    except Exception:
+        return "Kylie"
+
+
 def desktop_dir() -> Path:
     try:
         from win32com.shell import shell, shellcon
@@ -534,7 +542,7 @@ def web_search(query: str) -> ToolResult:
     try:
         clean_q = re.sub(r"^(wer|was|wo|wie|wann)\s+(ist|war|sind|liegt|bedeutet)\s+", "", q, flags=re.IGNORECASE).strip(" ?.")
         wiki_url = f"https://de.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(clean_q)}"
-        w_resp = requests.get(wiki_url, timeout=5, headers={"User-Agent": "MochiDesktopBuddy/2.0"})
+        w_resp = requests.get(wiki_url, timeout=5, headers={"User-Agent": "DesktopCat/2.2"})
         if w_resp.status_code == 200:
             w_data = w_resp.json()
             extract = (w_data.get("extract") or "").strip()
@@ -867,7 +875,7 @@ def create_file(filename: str, content: str = "", file_type: str = "auto", locat
                 title_shape = slide.shapes.title
                 subtitle_shape = slide.placeholders[1]
                 title_shape.text = target_path.stem.replace("_", " ")
-                subtitle_shape.text = text or "Erstellt von Mochi 🐾"
+                subtitle_shape.text = text or f"Erstellt von {_pet_name()} 🐾"
                 prs.save(str(target_path))
                 return ToolResult(True, f"PowerPoint-Präsentation „{target_path.name}“ liegt fertig auf deinem Desktop! 📊✨", "PowerPoint erstellt")
             except Exception as exc:
@@ -1023,7 +1031,7 @@ def get_active_window_context() -> dict:
                     r = RECT()
                     user32.GetWindowRect(hwnd, ctypes.byref(r))
                     w, h = r.right - r.left, r.bottom - r.top
-                    ignore = ["Program Manager", "Settings", "GDI+ Window", "ATKOSD2", "Mochi", "Programmumschaltung", "HardwareMonitorWindow"]
+                    ignore = ["Program Manager", "Settings", "GDI+ Window", "ATKOSD2", "Mochi", "DesktopCat", "Desktop Cat", "Programmumschaltung", "HardwareMonitorWindow"]
                     if w > 150 and h > 150 and t not in ignore:
                         windows.append(t)
             return True
@@ -1042,16 +1050,8 @@ def get_active_window_context() -> dict:
 
 def inspect_screen(question: str = "") -> ToolResult:
     """Schaut sich den Bildschirm per Gemini-Vision oder Fensterkontext an und erklaert, was der Nutzer macht."""
-    import base64
-    import requests
-    from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtGui import QGuiApplication
-    from PyQt6.QtCore import QBuffer
-    import config
-
     ctx = get_active_window_context()
     top = ctx.get("top_window", "")
-    apps_str = ", ".join(ctx.get("open_apps", []))
 
     # Heuristischer & Kontext-basierter Analysebericht anhand der Fenstertitel
     if top:
@@ -1059,7 +1059,7 @@ def inspect_screen(question: str = "") -> ToolResult:
         if "angular" in top_low:
             return ToolResult(True, f"Schön, was du da in Angular programmierst, {_user_name()}! 🐾 Soll ich dir bei Komponenten helfen?")
         elif "python" in top_low or ".py" in top_low:
-            return ToolResult(True, f"Du programmierst gerade fleißig in Python! 🐍🐾 Sag Bescheid, wenn ich was testen soll.")
+            return ToolResult(True, f"Du programmierst gerade fleißig in Python, {_user_name()}! 🐍🐾 Sag Bescheid, wenn ich was testen soll.")
         elif "code" in top_low or "ide" in top_low:
             return ToolResult(True, f"Ich sehe du bist im Code-Editor unterwegs: „{top[:40]}“! 💻🐾")
         elif "vivaldi" in top_low or "chrome" in top_low or "browser" in top_low or "edge" in top_low:
@@ -1094,7 +1094,7 @@ def _process_name(pid: int) -> str:
 
 
 _IGNORE_TITLES = {
-    "Program Manager", "Settings", "GDI+ Window", "ATKOSD2", "Mochi", "WindowsAgent", "Programmumschaltung",
+    "Program Manager", "Settings", "GDI+ Window", "ATKOSD2", "Mochi", "DesktopCat", "Desktop Cat", "WindowsAgent", "Programmumschaltung",
     "HardwareMonitorWindow", "Windows-Eingabeerfahrung", "Eingabeanzeige", "Task-Manager",
 }
 

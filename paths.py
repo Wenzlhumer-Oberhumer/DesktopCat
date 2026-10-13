@@ -19,12 +19,17 @@ def set_autostart(on: bool) -> None:
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+            # Alten Mochi-Eintrag immer entfernen falls vorhanden
+            try:
+                winreg.DeleteValue(key, "Mochi")
+            except FileNotFoundError:
+                pass
             if on:
                 exe = f'"{sys.executable}"'
-                winreg.SetValueEx(key, "Mochi", 0, winreg.REG_SZ, exe)
+                winreg.SetValueEx(key, "Desktop Cat", 0, winreg.REG_SZ, exe)
             else:
                 try:
-                    winreg.DeleteValue(key, "Mochi")
+                    winreg.DeleteValue(key, "Desktop Cat")
                 except FileNotFoundError:
                     pass
     except OSError as exc:

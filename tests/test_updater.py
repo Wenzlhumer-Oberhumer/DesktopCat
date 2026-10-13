@@ -1,8 +1,5 @@
 """Tests fuer Updater: Versionsvergleich, Whitelist, Hash-Validierung."""
-import hashlib
 import io
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 from updater import DownloadUpdateWorker, is_newer, is_trusted_url, parse_version

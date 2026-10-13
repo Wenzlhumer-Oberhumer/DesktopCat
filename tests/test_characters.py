@@ -35,7 +35,7 @@ def test_cat_mochi_drawer_is_draw_cat():
 def test_unknown_id_falls_back_to_cat_mochi():
     info = get_character_info("unknown")
     assert info["id"] == "cat_mochi"
-    assert info["name"] == "Mochi"
+    assert info["name"] == "Kylie"
 
 
 def test_known_id_returns_its_own_info():

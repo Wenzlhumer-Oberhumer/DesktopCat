@@ -1,5 +1,3 @@
-"""Tests fuer Pfade und Config-Migration."""
-import json
 import os
 import tempfile
 from pathlib import Path
@@ -43,7 +41,7 @@ def test_config_defaults_and_save():
     with tempfile.TemporaryDirectory() as td:
         cfg_file = Path(td) / "config.json"
         cfg = Config(cfg_file)
-        assert cfg.get("pet.name") == "Mochi"
+        assert cfg.get("pet.name") == "Kylie"
         assert cfg.get("update.auto") is True
         cfg.set("pet.name", "TestMochi")
         cfg.save()

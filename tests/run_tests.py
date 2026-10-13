@@ -23,6 +23,7 @@ def load_module_from_path(name: str, path: Path):
 def main():
     # Fuer Qt-Signale und Widgets wird eine Instanz benoetigt
     app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
 
     test_files = [
         "test_paths",
@@ -33,13 +34,14 @@ def main():
         "test_characters",
         "test_new_tools",
         "test_confirm",
+        "test_name_kylie",
     ]
 
     total = 0
     passed = 0
     failed = 0
 
-    print("=== Starte Mochi Test-Suite ===")
+    print("=== Starte Desktop Cat Test-Suite ===")
 
     tests_dir = _ROOT / "tests"
 

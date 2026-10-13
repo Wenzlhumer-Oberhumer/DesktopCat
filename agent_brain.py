@@ -6,7 +6,6 @@ bekommt nur Signale (started / finished).
 from __future__ import annotations
 
 import json
-import os
 import random
 import re
 from dataclasses import dataclass, field
@@ -23,7 +22,7 @@ try:
     from pet_sprites import get_character_info
 except ImportError:      # pet_sprites ohne Charakter-Registry (alter Stand)
     def get_character_info(char_id: str = "cat_mochi") -> dict:
-        return {"name": "Mochi", "species": "Glückskatze", "emoji": "\U0001F431", "sound": "Miau~", "ai_persona": ""}
+        return {"name": "Kylie", "species": "Glückskatze", "emoji": "\U0001F431", "sound": "Miau~", "ai_persona": ""}
 
 
 # ======================================================================================
@@ -32,7 +31,7 @@ except ImportError:      # pet_sprites ohne Charakter-Registry (alter Stand)
 def system_prompt(name: str, user_name: str = "Boss", character_id: str = "cat_mochi") -> str:
     user = (user_name or "").strip() or "Boss"
     cinfo = get_character_info(character_id)
-    char_name = cinfo.get("name") or name or "Mochi"
+    char_name = cinfo.get("name") or name or "Kylie"
     species = cinfo.get("species", "Desktop-Buddy")
     sound = cinfo.get("sound", "\U0001F43E")
     return (
@@ -181,6 +180,63 @@ def _voice(character_id: str, key: str, user: str) -> str:
     return (random.choice(v) if isinstance(v, list) else v).format(u=user)
 
 
+class NameReaction(str):
+    """Ergebnis einer Namenserkennung; verhaelt sich wie ein str fuer Abwaertskompatibilitaet."""
+
+    def __new__(cls, val: str, kind: str = "call", reply: Optional[str] = None,
+                rest: Optional[str] = None, hearts: bool = False):
+        obj = super().__new__(cls, val)
+        obj.kind = kind
+        obj.reply = reply
+        obj.rest = rest
+        obj.remainder = rest
+        obj.hearts = hearts
+        return obj
+
+
+def name_reaction(text: str, char_name: str, user_name: str = "Boss") -> Optional[NameReaction]:
+    """Prueft, ob und wie die Figur auf ihren Namen im Text reagiert. Rein & testbar."""
+    if not text or not char_name:
+        return None
+    user = (user_name or "").strip() or "Boss"
+    raw = text.strip()
+    n = raw.lower().translate(_TR)
+    cname = char_name.strip()
+    cname_norm = cname.lower().translate(_TR)
+
+    # Regex-Muster fuer den Namen mit optionalen Buchstabenwiederholungen (z. B. "kyliiie")
+    char_pat = "".join(f"{re.escape(ch)}+" for ch in cname_norm)
+
+    # 1. "Wer bist du?" / "Wie heißt du?"
+    if re.search(r"\b(wer\s*bist\s*du|wie\s*heiss?t\s*du|wie\s*ist\s*dein\s*name|dein\s*name)\b", n):
+        try:
+            cinfo = get_character_info()
+            species = cinfo.get("species", "Desktop-Buddy")
+            emoji = cinfo.get("emoji", "🐾")
+        except Exception:
+            species, emoji = "Glückskatze", "🐾"
+        intro = f"Ich bin {cname}, deine verschmuste {species} {emoji}! 🐾" if cname == "Kylie" else f"Ich bin {cname}, dein treuer {species} {emoji}! 🐾"
+        return NameReaction(intro, kind="who", reply=intro)
+
+    # 2. Text ist ausschliesslich der Name (z. B. "kylie", "KYLIE!", "kyliiie?", "Kylie.")
+    if re.fullmatch(rf"{char_pat}[\s!?.~]*", n):
+        rep = f"Ja? 😺 Was gibt's, {user}?"
+        return NameReaction(rep, kind="call", reply=rep)
+
+    # 3. Text beginnt mit dem Namen (z. B. "Kylie, wie spät ist es")
+    prefix_m = re.match(rf"^{char_pat}[\s,.:;!?~]+(.+)$", raw, re.IGNORECASE)
+    if prefix_m:
+        remainder = prefix_m.group(1).strip()
+        if remainder:
+            return NameReaction(remainder, kind="prefix", rest=remainder)
+
+    # 4. Name irgendwo in einer laengeren Nachricht (z. B. "ich mag kylie", "kylie ist toll")
+    if re.search(rf"\b{char_pat}\b", n):
+        return NameReaction("hearts", kind="hearts", hearts=True)
+
+    return None
+
+
 def _clean_name(s: str) -> str:
     s = re.sub(r"^(?:\s*(?:mir|bitte|mal|doch|den|die|das|dem|meinen|mein|meine|the|my)\b)+", "", s.strip(), flags=re.IGNORECASE)
     s = re.sub(r"(?:\s+(?:bitte|mal|auf|an|fuer mich|f\u00fcr mich|doch))+\s*[.!?]*$", "", s.strip(), flags=re.IGNORECASE)
@@ -243,7 +299,7 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
 
         return Plan("create_file", {
             "filename": filename,
-            "content": content or "Hallo vom Mochi Desktop Buddy! 🐾",
+            "content": content or "Hallo von Desktop Cat! 🐾",
             "file_type": ftype,
             "location": "desktop"
         })
@@ -432,7 +488,7 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
     if re.search(r"was kannst du|hilfe|\bhelp\b|was machst du|befehle", n):
         return Plan(reply=_HELP)
     if re.search(r"wer bist du|wie heisst du|dein name", n):
-        return Plan(reply=f"Ich bin {cinfo.get('name', 'Mochi')}, dein {cinfo.get('species', 'Desktop-Buddy')} {cinfo.get('emoji', '')} auf dem Desktop! 🐾")
+        return Plan(reply=f"Ich bin {cinfo.get('name', 'Kylie')}, dein {cinfo.get('species', 'Desktop-Buddy')} {cinfo.get('emoji', '')} auf dem Desktop! 🐾")
     if re.search(r"miau|meow|nyan|schnurr", n):
         return Plan(reply=_voice(character_id, "meow", user))
     if re.search(r"wie geht", n):
@@ -577,6 +633,17 @@ class AgentWorker(QObject):
                 cinfo = get_character_info(self.character_id)
                 return True, f"{cinfo.get('sound', '')} Okay, lasse ich bleiben, {self.user_name}! {cinfo.get('emoji', '')}".strip(), ""
 
+        # Namensreaktion pruefen (Offline / Schnell-Antwort)
+        char_name = str(self.cfg.get("pet", {}).get("name") or get_character_info(self.character_id).get("name", "Kylie"))
+        nr = name_reaction(self.text, char_name, self.user_name)
+        if nr:
+            if nr.kind == "call":
+                return True, nr.reply or f"Ja? 😺 Was gibt's, {self.user_name}?", ""
+            if nr.kind == "who":
+                return True, nr.reply or f"Ich bin {char_name}! 🐾", ""
+            if nr.kind == "prefix" and nr.rest:
+                self.text = nr.rest
+
         llm_error = ""
         provider = self._provider()
         if provider:
@@ -623,7 +690,7 @@ class AgentWorker(QObject):
         ai = self.cfg.get("ai", {})
         timeout = float(ai.get("timeout_s", 60))
         model = ai.get("model") or None
-        pet_name = self.cfg.get("pet", {}).get("name", "Mochi")
+        pet_name = self.cfg.get("pet", {}).get("name", "Kylie")
         user = self.user_name
 
         tool_specs_json = json.dumps([
@@ -719,7 +786,7 @@ class AgentBrain(QObject):
         self.pending_action: Optional[tuple[str, dict]] = None
 
     def record_assistant_message(self, message: str) -> None:
-        """Merkt sich eine autonome Äußerung oder Rückfrage von Mochi im Gesprächsverlauf."""
+        """Merkt sich eine autonome Äußerung oder Rückfrage des Buddys im Gesprächsverlauf."""
         msg = (message or "").strip()
         if msg:
             self._history.append(("assistant", msg))

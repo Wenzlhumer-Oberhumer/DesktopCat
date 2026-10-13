@@ -21,6 +21,7 @@ def generate_icon(out_path: Path | None = None) -> Path:
         out_path = APP_DIR / "assets" / "mochi.ico"
 
     app = QApplication.instance() or QApplication(sys.argv)
+    assert app is not None
     sizes = [16, 24, 32, 48, 64, 128, 256]
     images_by_size = {}
 

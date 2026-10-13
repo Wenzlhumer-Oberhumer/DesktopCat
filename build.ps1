@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
-Write-Host "=== Mochi Build gestartet ===" -ForegroundColor Cyan
+Write-Host "=== Desktop Cat Build gestartet ===" -ForegroundColor Cyan
 
 # 1. Version aus version.py auslesen
 $versionPy = Get-Content "$ScriptDir\version.py" -Raw
@@ -16,7 +16,7 @@ if ($versionPy -match '__version__\s*=\s*["'']([^"'']+)["'']') {
 } else {
     throw "Konnte __version__ in version.py nicht finden!"
 }
-Write-Host "Baue Mochi Version: $Version" -ForegroundColor Green
+Write-Host "Baue Desktop Cat Version: $Version" -ForegroundColor Green
 
 # exe-Versionsinfo (Eigenschaften > Details) an version.py angleichen
 $v = ($Version.Split('.') + @('0','0','0'))[0..2]
@@ -45,7 +45,7 @@ Write-Host "Erzeuge Multi-Size-Icon..." -ForegroundColor Yellow
 Write-Host "Fuehre PyInstaller aus (onedir)..." -ForegroundColor Yellow
 & $py -m PyInstaller "$ScriptDir\mochi.spec" --noconfirm --clean
 
-$distApp = "$ScriptDir\dist\Mochi\Mochi.exe"
+$distApp = "$ScriptDir\dist\DesktopCat\DesktopCat.exe"
 if (-not (Test-Path $distApp)) {
     throw "PyInstaller-Build fehlgeschlagen: $distApp wurde nicht erzeugt!"
 }
@@ -69,12 +69,12 @@ if (-not $SkipInstaller) {
     if (-not $iscc) {
         Write-Warning "Inno Setup 6 (ISCC.exe) wurde nicht gefunden!"
         Write-Warning "Bitte Inno Setup von https://jrsoftware.org/isdl.php installieren."
-        Write-Warning "Der onedir-Build unter dist\Mochi\ ist dennoch fertiggestellt."
+        Write-Warning "Der onedir-Build unter dist\DesktopCat\ ist dennoch fertiggestellt."
     } else {
         Write-Host "Erstelle Installer mit Inno Setup ($iscc)..." -ForegroundColor Yellow
         & $iscc "/DAppVersion=$Version" "$ScriptDir\installer\mochi.iss"
 
-        $setupExe = "$ScriptDir\dist\Mochi-Setup-$Version.exe"
+        $setupExe = "$ScriptDir\dist\DesktopCat-Setup-$Version.exe"
         if (-not (Test-Path $setupExe)) {
             throw "Inno Setup Build fehlgeschlagen: $setupExe wurde nicht gefunden!"
         }
@@ -82,15 +82,15 @@ if (-not $SkipInstaller) {
 
         # 8. SHA256-Pruefsumme fuer Auto-Update schreiben
         $setupHash = (Get-FileHash -Path $setupExe -Algorithm SHA256).Hash.ToLower()
-        $shaFile = "$ScriptDir\dist\Mochi-Setup-$Version.exe.sha256"
-        "$setupHash  Mochi-Setup-$Version.exe" | Set-Content -Path $shaFile -Encoding UTF8
+        $shaFile = "$ScriptDir\dist\DesktopCat-Setup-$Version.exe.sha256"
+        "$setupHash  DesktopCat-Setup-$Version.exe" | Set-Content -Path $shaFile -Encoding UTF8
         Write-Host "SHA256 fuer Setup geschrieben: $shaFile ($setupHash)" -ForegroundColor Green
 
         # 9. Optionales Code-Signing
         if ($Sign) {
             $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
             if ($signtool) {
-                Write-Host "Signiere Mochi.exe und Installer..." -ForegroundColor Yellow
+                Write-Host "Signiere DesktopCat.exe und Installer..." -ForegroundColor Yellow
                 & signtool.exe sign /a /fd SHA256 "$distApp"
                 & signtool.exe sign /a /fd SHA256 "$setupExe"
             } else {
@@ -100,4 +100,4 @@ if (-not $SkipInstaller) {
     }
 }
 
-Write-Host "=== Mochi Build erfolgreich abgeschlossen! ===" -ForegroundColor Cyan
+Write-Host "=== Desktop Cat Build erfolgreich abgeschlossen! ===" -ForegroundColor Cyan

@@ -4,14 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
-import re
 import subprocess
 import tempfile
-import time
 import urllib.request
 from pathlib import Path
-from typing import Any
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -62,7 +58,7 @@ class CheckUpdateWorker(QThread):
             url,
             headers={
                 "Accept": "application/vnd.github+json",
-                "User-Agent": f"Mochi/{__version__}",
+                "User-Agent": f"DesktopCat/{__version__}",
             },
         )
         try:
@@ -149,7 +145,7 @@ class DownloadUpdateWorker(QThread):
             try:
                 req_sha = urllib.request.Request(
                     self.sha_url,
-                    headers={"User-Agent": f"Mochi/{__version__}"},
+                    headers={"User-Agent": f"DesktopCat/{__version__}"},
                 )
                 with urllib.request.urlopen(req_sha, timeout=10.0) as resp:
                     sha_content = resp.read().decode("utf-8").strip()
@@ -161,13 +157,13 @@ class DownloadUpdateWorker(QThread):
                 return
 
         dest_dir = Path(tempfile.gettempdir())
-        dest_file = dest_dir / f"Mochi-Setup-{self.version}.exe"
+        dest_file = dest_dir / f"DesktopCat-Setup-{self.version}.exe"
         temp_dest = dest_file.with_suffix(".exe.part")
 
         try:
             req_setup = urllib.request.Request(
                 self.setup_url,
-                headers={"User-Agent": f"Mochi/{__version__}"},
+                headers={"User-Agent": f"DesktopCat/{__version__}"},
             )
             hasher = hashlib.sha256()
 

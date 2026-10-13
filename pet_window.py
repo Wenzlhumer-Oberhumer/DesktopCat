@@ -103,7 +103,7 @@ class PetWindow(QWidget):
         super().__init__(None, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setWindowTitle("Mochi")
+        self.setWindowTitle("Desktop Cat")
 
         self.cfg = cfg
         self.character = str(cfg.get("pet.character", "cat_mochi"))
@@ -126,6 +126,9 @@ class PetWindow(QWidget):
         self._land_squash = 0.0
         self._hop_t: Optional[float] = None
         self._hearts_t: Optional[float] = None
+        self._confetti_t: Optional[float] = None
+        self._confetti_until = 0.0
+        self._yawn_until = 0.0
         self._happy_until = 0.0
         self._bounced = False
         self._pose = None
@@ -304,6 +307,24 @@ class PetWindow(QWidget):
 
     def celebrate(self, seconds: float = 2.6) -> None:
         self.set_state(PetState.SUCCESS, seconds)
+
+    def celebrate_confetti(self, seconds: float = 4.0) -> None:
+        self.wake()
+        now = time.monotonic()
+        self._confetti_t = now
+        self._confetti_until = now + seconds
+        self._hop_t = now
+        self._anim_timer.start(16)
+        self.set_state(PetState.SUCCESS, seconds)
+
+    def wake_with_stretch(self, seconds: float = 2.0) -> None:
+        self.wake()
+        now = time.monotonic()
+        self._yawn_until = now + seconds
+        self._hop_t = now
+        self._happy_until = now + seconds
+        self._anim_timer.start(16)
+        self.set_state(PetState.IDLE)
 
     def dance(self, seconds: float = 6.0) -> None:
         self.wake()
@@ -511,7 +532,14 @@ class PetWindow(QWidget):
             look = (-look[0], look[1])
         ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
                           squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until)
-        return compute_pose(ctx)
+        pose = compute_pose(ctx)
+        if now < self._confetti_until and self._confetti_t is not None:
+            pose.confetti = now - self._confetti_t
+            pose.sparkles = now - self._confetti_t
+        if now < self._yawn_until:
+            pose.mouth = "o"
+            pose.eyes = "happy"
+        return pose
 
     def paintEvent(self, _event) -> None:
         now = time.monotonic()
@@ -534,13 +562,14 @@ class PetWindow(QWidget):
                 p.translate(BASE, 0)
                 p.scale(-1, 1)
             # Effekte (Text, Herzen ...) duerfen nicht gespiegelt werden -> separat zeichnen
-            effects = (pose.zzz, pose.dots, pose.sparkles, pose.hearts)
+            effects = (pose.zzz, pose.dots, pose.sparkles, pose.hearts, getattr(pose, "confetti", None))
             if flip:
                 pose.zzz = pose.dots = pose.sparkles = pose.hearts = None
+                pose.confetti = None
             draw_character(p, pose, self.character)
             p.restore()
             if flip:
-                pose.zzz, pose.dots, pose.sparkles, pose.hearts = effects
+                pose.zzz, pose.dots, pose.sparkles, pose.hearts, pose.confetti = effects
                 _draw_effects(p, pose)
         p.end()
 

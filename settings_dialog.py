@@ -122,7 +122,7 @@ class SettingsDialog(QDialog):
         root.addWidget(ai_box)
 
         hint = QLabel("Der Key ist kostenlos und bleibt sicher in der Windows-Anmeldeinformationsverwaltung. "
-                      "Ohne Key arbeitet Mochi im Offline-Modus.")
+                      "Ohne Key arbeitet Desktop Cat im Offline-Modus.")
         hint.setObjectName("hint")
         hint.setWordWrap(True)
         root.addWidget(hint)
