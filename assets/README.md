@@ -18,3 +18,20 @@ statt der eingebauten Kawaii-Katze. Fehlende Zustaende werden aus dem Idle-Bild 
 * **GIF**: alle Frames werden mit ihren Zeiten uebernommen.
 * **PNG-Sprite-Sheet**: Frames nebeneinander (quadratische Frames werden automatisch erkannt).
   Sonst in `config.json` angeben: `"walk_right": {"file": "assets/walk.png", "frames": 6, "fps": 10}`.
+
+## Calico-Sprites erzeugen
+
+Wer eigene Pixelart- oder handgezeichnete Sprites der echten Katze erstellen möchte:
+* **Referenzfotos**: Siehe `ref/*.jpg` (Glückskatze/Calico mit Tabby-Anteil: weiße Schnauze/Brust/Pfoten, oranger Fleck links, Tabby rechts und auf der Stirn mit M-Muster, kleiner oranger Stirntupfer, rosa Nase, gelbgrüne Augen, gefleckter Rücken, getigerter Schwanz, kein Halsband).
+* **Empfohlene Größe**: 256×256 Pixel pro Frame.
+* **Hintergrund**: Transparent (PNG/GIF).
+* **Zustände**:
+  - `idle`: Ruhiges Sitzen/Atmen, Blinzeln
+  - `walk_right`: Geh-Animation nach rechts (wird für links automatisch gespiegelt)
+  - `dragged`: Katze wird am Nackenfell / mit der Maus hochgehoben
+  - `falling`: Katze fällt nach unten
+  - `working`: Katze tippt am Laptop / arbeitet konzentriert
+  - `success`: Jubel / Tanz / Freude mit Sternchen
+  - `sleep`: Liegend eingerollt / schlafend (Zzz)
+  - `sad`: Traurig / erschöpft
+

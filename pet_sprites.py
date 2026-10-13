@@ -132,21 +132,24 @@ class SpriteLibrary:
 # ======================================================================================
 #  Fallback: Kawaii-Katze "Mochi"
 # ======================================================================================
-OUTLINE = QColor("#7A4A3A")
-FUR = QColor("#FFB877")
-FUR_LIGHT = QColor("#FFCFA0")
-FUR_DARK = QColor("#EE8E45")
-CREAM = QColor("#FFF1DE")
-PINK = QColor("#FFB3C4")
-NOSE = QColor("#FF8DA1")
-MOUTH = QColor("#D9506A")
-EYE_TOP = QColor("#2B2033")
-EYE_BOT = QColor("#664A78")
-COLLAR = QColor("#FF5C7F")
-BELL = QColor("#FFD24D")
+OUTLINE = QColor("#3B2A22")        # dunkles Braun statt Rotbraun
+WHITE_FUR = QColor("#FBF8F3")
+WHITE_SHADE = QColor("#E9E2D8")    # Schatten im weißen Fell
+ORANGE = QColor("#D9893F")
+ORANGE_LIGHT = QColor("#EDAA68")
+BLACK_FUR = QColor("#2A211C")
+TABBY = QColor("#7A6553")          # braun-grau
+TABBY_LIGHT = QColor("#9C8A76")
+STRIPE = QColor("#2B2119")
+PINK = QColor("#F2B8BC")           # Ohr innen
+NOSE = QColor("#E99AA3")
+MOUTH = QColor("#B5606C")
+EYE_IRIS = QColor("#C4C25A")       # gelbgruen
+EYE_IRIS_DK = QColor("#8FA046")
+EYE_PUPIL = QColor("#1E1A16")
+WHISKER = QColor(255, 255, 255, 210)
 GOLD = QColor("#FFD84D")
 HEART = QColor("#FF6B94")
-WHISKER = QColor(150, 105, 85, 170)
 
 
 @dataclass
@@ -419,7 +422,7 @@ def _paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
     p.translate(cx, cy)
     p.rotate(rot)
     p.setPen(_pen(OUTLINE, 2.2))
-    p.setBrush(CREAM)
+    p.setBrush(WHITE_FUR)
     p.drawEllipse(QRectF(-8.5, -6.5, 17, 13))
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(PINK)
@@ -438,31 +441,39 @@ def _draw_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: i
         elif mode == "work":
             ry = 8.6
         ex, ey = cx + lx * 2.6, cy + ly * 2.4
+        # Iris (gelbgruen mit leichtem Verlauf)
         grad = QLinearGradient(ex, ey - ry, ex, ey + ry)
-        grad.setColorAt(0, EYE_TOP)
-        grad.setColorAt(1, EYE_BOT)
-        p.setPen(Qt.PenStyle.NoPen)
+        grad.setColorAt(0, EYE_IRIS)
+        grad.setColorAt(1, EYE_IRIS_DK)
+        p.setPen(_pen(OUTLINE, 1.4))  # dunkler Lidstrich
         p.setBrush(QBrush(grad))
         p.drawEllipse(QRectF(ex - rx, ey - ry, rx * 2, ry * 2))
+
+        # Grosse dunkle Pupille (Kawaii)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(EYE_PUPIL)
+        prx, pry = rx * 0.68, ry * 0.72
+        p.drawEllipse(QRectF(ex - prx + lx * 0.6, ey - pry + ly * 0.6, prx * 2, pry * 2))
+
+        # Glanzpunkte
         p.setBrush(QColor("white"))
         big = 3.6 if mode != "wide" else 4.2
         p.drawEllipse(QPointF(ex - 2.7 + lx * 0.8, ey - ry * 0.38), big, big)
         p.drawEllipse(QPointF(ex + 3.2 + lx * 0.4, ey + ry * 0.36), 1.8, 1.8)
         if mode == "sad":
             p.setPen(_pen(OUTLINE, 2.4))
-            # innere Enden hoch -> traurige Augenbrauen
             inner = -side
             p.drawLine(QPointF(ex + inner * -9, ey - 12.5), QPointF(ex + inner * 7.5, ey - 17))
     elif mode == "blink":
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(EYE_TOP)
+        p.setBrush(EYE_PUPIL)
         p.drawEllipse(QRectF(cx - 8.4, cy + 2.5, 16.8, 3.0))
     elif mode == "sleep":
-        p.setPen(_pen(EYE_TOP, 2.9))
+        p.setPen(_pen(OUTLINE, 2.9))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawArc(QRectF(cx - 8, cy - 6, 16, 11), 180 * 16, 180 * 16)
     elif mode == "happy":
-        p.setPen(_pen(EYE_TOP, 3.1))
+        p.setPen(_pen(OUTLINE, 3.1))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawArc(QRectF(cx - 8, cy - 4, 16, 13), 0, 180 * 16)
     elif mode == "heart":
@@ -473,7 +484,6 @@ def _draw_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: i
         p.drawEllipse(QPointF(cx - 1.6, cy - 3.2), 1.4, 1.4)
 
 
-
 def _draw_tail(p: QPainter, pose: Pose):
     if pose.tail_curl:
         path = QPainterPath(QPointF(54, 140))
@@ -482,19 +492,34 @@ def _draw_tail(p: QPainter, pose: Pose):
         a = pose.tail
         path = QPainterPath(QPointF(58, 132))
         path.cubicTo(QPointF(24, 140), QPointF(6 - 8 * a, 104), QPointF(26 - 13 * a, 72 - 8 * abs(a)))
+
     p.setBrush(Qt.BrushStyle.NoBrush)
     p.setPen(_pen(OUTLINE, 14.5))
     p.drawPath(path)
-    p.setPen(_pen(FUR, 10.5))
+    # Grundfarbe Tabby (braun-grau)
+    p.setPen(_pen(TABBY, 10.5))
     p.drawPath(path)
+
+    # Dunkle Ringstreifen entlang des Schwanzes
+    p.setPen(_pen(STRIPE, 3.2))
+    for frac in (0.24, 0.40, 0.56, 0.72, 0.86):
+        pt = path.pointAtPercent(frac)
+        angle = path.angleAtPercent(frac)
+        p.save()
+        p.translate(pt)
+        p.rotate(-angle + 90)
+        p.drawLine(QPointF(-4.5, 0), QPointF(4.5, 0))
+        p.restore()
+
+    # Dunkle Schwanzspitze
     end = path.pointAtPercent(1.0)
-    p.setPen(_pen(OUTLINE, 2.2))
-    p.setBrush(CREAM)
-    p.drawEllipse(end, 5.6, 5.6)
+    p.setPen(_pen(OUTLINE, 2.0))
+    p.setBrush(STRIPE)
+    p.drawEllipse(end, 5.4, 5.4)
 
 
 def _draw_ear(p: QPainter, sign: int, rot: float):
-    """sign=-1 links, +1 rechts; Koordinaten relativ zur Kopfmitte."""
+    """sign=-1 links (orange), +1 rechts (tabby); Koordinaten relativ zur Kopfmitte."""
     bx, by = sign * 30, -22
     p.save()
     p.translate(bx, by)
@@ -503,11 +528,15 @@ def _draw_ear(p: QPainter, sign: int, rot: float):
     outer = QPolygonF([QPointF(sign * 43, -11), QPointF(sign * 38, -51), QPointF(sign * 9, -31)])
     inner = QPolygonF([QPointF(sign * 37, -17), QPointF(sign * 34.5, -42), QPointF(sign * 17, -29)])
     p.setPen(_pen(OUTLINE, 2.6))
-    p.setBrush(FUR)
+    ear_color = ORANGE if sign < 0 else TABBY
+    p.setBrush(ear_color)
     p.drawPolygon(outer)
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(PINK)
     p.drawPolygon(inner)
+    # Helles Haarbueschel am Innenohr
+    p.setBrush(WHITE_FUR)
+    p.drawPolygon(QPolygonF([QPointF(sign * 26, -24), QPointF(sign * 33, -33), QPointF(sign * 28, -20)]))
     p.restore()
 
 
@@ -520,31 +549,65 @@ def _draw_head(p: QPainter, pose: Pose):
     _draw_ear(p, -1, pose.ear_l)
     _draw_ear(p, +1, pose.ear_r)
 
-    grad = QRadialGradient(QPointF(-12, -20), 72)
-    grad.setColorAt(0, FUR_LIGHT)
-    grad.setColorAt(1, FUR)
+    # 1. Grundform Kopf (weiss)
+    head_rect = QRectF(-46, -37, 92, 74)
+    head_path = QPainterPath()
+    head_path.addEllipse(head_rect)
+
     p.setPen(_pen(OUTLINE, 2.6))
-    p.setBrush(QBrush(grad))
-    p.drawEllipse(QRectF(-46, -37, 92, 74))
+    p.setBrush(WHITE_FUR)
+    p.drawPath(head_path)
 
-    # Tabby-Streifen
-    p.setPen(_pen(FUR_DARK, 3.2))
-    p.drawLine(QPointF(0, -34), QPointF(0, -23))
-    p.drawLine(QPointF(-9.5, -33), QPointF(-7.5, -25.5))
-    p.drawLine(QPointF(9.5, -33), QPointF(7.5, -25.5))
+    # 2. Asymmetrische Calico- & Tabby-Muster auf Kopf clippen
+    p.save()
+    p.setClipPath(head_path)
 
-    # Schnauze
+    # Linke Haelfte (vom Betrachter links, x < 0): oranger Fleck ueber Wange und Ohrbasis
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(CREAM)
-    p.drawEllipse(QRectF(-15, 6.5, 30, 19))
+    p.setBrush(ORANGE)
+    p.drawEllipse(QRectF(-48, -38, 44, 52))
+
+    # Rechte Haelfte + Stirn: braun-graues Tabby
+    p.setBrush(TABBY)
+    p.drawEllipse(QRectF(-8, -40, 56, 54))
+
+    # Dunkle "M"-Tabby-Streifen auf der Stirn rechts
+    p.setPen(_pen(STRIPE, 2.4))
+    p.drawLine(QPointF(4, -35), QPointF(2, -22))
+    p.drawLine(QPointF(12, -34), QPointF(9, -21))
+    p.drawLine(QPointF(20, -31), QPointF(16, -20))
+
+    # 2 dunkle Wangenstreifen rechts
+    p.drawLine(QPointF(32, -4), QPointF(43, -8))
+    p.drawLine(QPointF(34, 3), QPointF(44, 1))
+
+    # Kleiner oranger Tupfer Stirnmitte
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(ORANGE)
+    p.drawEllipse(QRectF(-3.5, -30, 7.0, 8.0))
+
+    # Weisse Blesse von Nase zur Stirn
+    p.setBrush(WHITE_FUR)
+    p.drawEllipse(QRectF(-6.0, -22, 12.0, 30.0))
+
+    # Weisse Schnauzen-, Wangen- und Kinnpartie
+    p.drawEllipse(QRectF(-20, 3, 40, 24))
+
+    p.restore()
+
+    # Kontur nachzeichnen
+    p.setPen(_pen(OUTLINE, 2.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(head_rect)
 
     # Wangenroeschen
     if pose.blush > 0:
-        p.setBrush(QColor(255, 118, 150, int(_clamp(pose.blush, 0, 1) * 150)))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(255, 118, 150, int(_clamp(pose.blush, 0, 1) * 140)))
         for s in (-1, 1):
             p.drawEllipse(QRectF(s * 31 - 8.5, 10.5, 17, 10))
 
-    # Schnurrhaare
+    # Schnurrhaare (weiss)
     p.setPen(_pen(WHISKER, 1.6))
     for s in (-1, 1):
         for (y0, x1, y1) in ((13, 54, 8), (18, 56, 18), (23, 53, 28)):
@@ -590,9 +653,8 @@ def _draw_head(p: QPainter, pose: Pose):
         p.drawLine(QPointF(33, 1), QPointF(44, -3))
         p.restore()
 
-
-    # Nase
-    p.setPen(_pen(NOSE, 1.6))
+    # Nase (rosa)
+    p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(NOSE)
     p.drawPolygon(QPolygonF([QPointF(-3.6, 8.6), QPointF(3.6, 8.6), QPointF(0, 12.6)]))
 
@@ -757,13 +819,49 @@ def draw_cat(p: QPainter, pose: Pose):
     if not pose.tail_curl:
         _draw_tail(p, pose)
 
-    # Koerper
+    # Koerper (Calico: weisse Basis mit unregelmaessigen Flecken)
+    body_rect = QRectF(47, 100, 66, 47.5)
+    body_path = QPainterPath()
+    body_path.addEllipse(body_rect)
+
+    p.save()
     p.setPen(_pen(OUTLINE, 2.6))
-    p.setBrush(FUR)
-    p.drawEllipse(QRectF(47, 100, 66, 47.5))
+    p.setBrush(WHITE_FUR)
+    p.drawPath(body_path)
+
+    p.setClipPath(body_path)
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(CREAM)
-    p.drawEllipse(QRectF(61, 114, 38, 30))
+
+    # Schwarz-brauner Rueckenfleck (links/oben)
+    p.setBrush(BLACK_FUR)
+    p.drawEllipse(QRectF(44, 96, 32, 28))
+    p.drawEllipse(QRectF(55, 94, 26, 24))
+
+    # Feine Tabby-Streifen im dunklen Fleck
+    p.setPen(_pen(STRIPE, 1.4))
+    p.drawLine(QPointF(53, 99), QPointF(49, 108))
+    p.drawLine(QPointF(59, 97), QPointF(56, 109))
+    p.drawLine(QPointF(65, 98), QPointF(63, 107))
+    p.setPen(Qt.PenStyle.NoPen)
+
+    # Oranger Fleck (rechts/Mitte Ruecken)
+    p.setBrush(ORANGE)
+    p.drawEllipse(QRectF(75, 97, 34, 28))
+    p.drawEllipse(QRectF(86, 104, 24, 22))
+
+    # Weisser Bauchbereich
+    p.setBrush(WHITE_FUR)
+    p.drawEllipse(QRectF(56, 116, 48, 34))
+
+    # Zarter Schatten am Bauch
+    p.setBrush(WHITE_SHADE)
+    p.drawEllipse(QRectF(64, 130, 32, 16))
+
+    p.restore()
+    # Kante nachzeichnen
+    p.setPen(_pen(OUTLINE, 2.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPath(body_path)
 
     if pose.tail_curl:
         _draw_tail(p, pose)
@@ -777,23 +875,7 @@ def draw_cat(p: QPainter, pose: Pose):
             _paw(p, 65, 143 - pose.paw_l, 0)
             _paw(p, 95, 143 - pose.paw_r, 0)
 
-    # Halsband + Glocke
-    collar = QPainterPath(QPointF(53, 107))
-    collar.quadTo(QPointF(80, 129), QPointF(107, 107))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.setPen(_pen(OUTLINE, 8.2))
-    p.drawPath(collar)
-    p.setPen(_pen(COLLAR, 5.0))
-    p.drawPath(collar)
-    bx = 80 + pose.bell
-    p.setPen(_pen(OUTLINE, 1.9))
-    p.setBrush(BELL)
-    p.drawEllipse(QPointF(bx, 121.5), 5.4, 5.4)
-    p.setPen(_pen(OUTLINE, 1.2))
-    p.drawLine(QPointF(bx - 3.6, 122.2), QPointF(bx + 3.6, 122.2))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(255, 255, 255, 200))
-    p.drawEllipse(QPointF(bx - 1.8, 119.2), 1.3, 1.3)
+    # Halsband + Glocke entfernt (echte Katze traegt keins)
 
     _draw_head(p, pose)
 
