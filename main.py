@@ -69,7 +69,7 @@ try:
 except Exception:
     pass
 
-import requests
+import gemini_cli
 from PyQt6.QtCore import (
     QAbstractNativeEventFilter, QBuffer, QObject, QThread, QTimer, pyqtSignal, pyqtSlot,
 )
@@ -109,48 +109,42 @@ class AmbientVisionWorker(QObject):
         self.finished.emit(comment or "")
 
     def _analyze(self) -> str:
-        ai = self.cfg.get("ai", {})
-        key = ai.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         top = self.top_window or ""
         top_low = top.lower()
         apps_str = ", ".join(self.open_apps[:6])
 
-        # Schritt 1: Cloud-Vision (Gemini Multimodal mit schnellen Modellen)
-        if key and self.b64_img:
-            prompt = (
-                f"Du bist Mochi, ein extrem neugieriger, süßer Katzen-Buddy auf dem Windows-Desktop des Nutzers ('Boss'). "
-                f"Aktives Fenster des Bosses: '{top}'. Offene Programme: {apps_str}.\n"
-                "Schau dir den Screenshot und das aktive Fenster genau an. Was macht der Boss gerade (z. B. Coden in Angular/Python/React, Dokumente schreiben, Recherche, Surfen, Design)?\n"
-                "Reagiere spontan, lebensfroh und liebenswert darauf:\n"
-                "- Sag kurz, wie du es findest (z. B. ob es spannend, cool, komplex aussieht),\n"
-                "- ODER biete ihm charmant deine Hilfe an bzw. stelle eine neugierige Frage dazu (z. B. 'Soll ich dir ein Notizblatt anlegen?' oder 'Brauchst du Tipps für Angular-Routing?').\n"
-                "WICHTIG:\n"
-                "- Maximal 1-2 kurze Sätze auf Deutsch.\n"
-                "- Höchstens ein Emoji.\n"
-                "- Nenne den Nutzer gern 'Boss'.\n"
-                "- Sei niemals belehrend, sondern sympathisch und neugierig."
-            )
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": prompt},
-                        {"inlineData": {"mimeType": "image/jpeg", "data": self.b64_img}}
-                    ]
-                }]
-            }
-            models = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.8-flash"]
-            for m in models:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+        # Schritt 1: Cloud-Vision ueber Gemini CLI falls angemeldet
+        if gemini_cli.is_logged_in() and self.b64_img:
+            screen_file = gemini_cli.WORKSPACE / "screen.png"
+            try:
+                raw_bytes = base64.b64decode(self.b64_img)
+                with open(screen_file, "wb") as f:
+                    f.write(raw_bytes)
+
+                prompt = (
+                    f"Du bist Mochi, ein extrem neugieriger, süßer Katzen-Buddy auf dem Windows-Desktop des Nutzers ('Boss'). "
+                    f"Aktives Fenster des Bosses: '{top}'. Offene Programme: {apps_str}.\n"
+                    "Schau dir den Screenshot und das aktive Fenster genau an. Was macht der Boss gerade (z. B. Coden in Angular/Python/React, Dokumente schreiben, Recherche, Surfen, Design)?\n"
+                    "Reagiere spontan, lebensfroh und liebenswert darauf:\n"
+                    "- Sag kurz, wie du es findest,\n"
+                    "- ODER biete ihm charmant deine Hilfe an bzw. stelle eine neugierige Frage dazu.\n"
+                    "WICHTIG:\n"
+                    "- Maximal 1-2 kurze Sätze auf Deutsch.\n"
+                    "- Höchstens ein Emoji.\n"
+                    "- Nenne den Nutzer gern 'Boss'.\n"
+                    "- Sei niemals belehrend, sondern sympathisch und neugierig."
+                )
+                comment = gemini_cli.ask(f"@screen.png {prompt}", timeout_s=45)
+                if comment and comment.strip():
+                    return comment.strip()
+            except Exception:
+                pass
+            finally:
                 try:
-                    r = requests.post(url, headers={"x-goog-api-key": key, "Content-Type": "application/json"}, json=payload, timeout=12)
-                    if r.status_code == 200:
-                        cands = r.json().get("candidates", [])
-                        if cands:
-                            text = cands[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-                            if text:
-                                return text
+                    if screen_file.exists():
+                        screen_file.unlink()
                 except Exception:
-                    continue
+                    pass
 
         # Schritt 2: Intelligenter heuristischer Kontext (falls Offline oder API Rate-Limit)
         if "angular" in top_low:
@@ -264,14 +258,8 @@ class Buddy(QObject):
         self.tray = QSystemTrayIcon(self.icon, self)
         self.tray.setToolTip("Mochi - dein Desktop-Buddy")
         self.tray_menu = style_menu(QMenu())
-        self._act(self.tray_menu, "\U0001F4AC  Befehl eingeben", self.open_input)
-        self._act(self.tray_menu, "\U0001F441\uFE0F  Bildschirm beobachten (Vision)", lambda: self._on_submit("was mache ich gerade"))
-        self._act(self.tray_menu, "\U0001F4C4  Word-Dokument am Desktop erstellen", lambda: self._on_submit("erstelle ein word dokument am desktop"))
-        self._act(self.tray_menu, "\U0001F3E0  Zur Taskleiste zur\u00fccksetzen", self.pet.reset_to_taskbar)
-        self.tray_menu.addSeparator()
-        self._act(self.tray_menu, "\u2699\uFE0F  Einstellungen", self.open_settings)
-        self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Mochi (v{__version__})", self._about)
-        self._act(self.tray_menu, "\U0001F44B  Beenden", self.quit)
+        self.tray_menu.aboutToShow.connect(self._update_tray_menu)
+        self._update_tray_menu()
         self.tray.setContextMenu(self.tray_menu)
         self.tray.activated.connect(self._on_tray)
         self.tray.show()
@@ -307,6 +295,20 @@ class Buddy(QObject):
         self._vision_timer.setSingleShot(True)
         self._vision_timer.timeout.connect(self._on_autonomous_vision)
 
+    def _update_tray_menu(self) -> None:
+        self.tray_menu.clear()
+        if not gemini_cli.is_logged_in():
+            self._act(self.tray_menu, "\U0001F511  Mit Google anmelden", self.open_settings)
+            self.tray_menu.addSeparator()
+        self._act(self.tray_menu, "\U0001F4AC  Befehl eingeben", self.open_input)
+        self._act(self.tray_menu, "\U0001F441\uFE0F  Bildschirm beobachten (Vision)", lambda: self._on_submit("was mache ich gerade"))
+        self._act(self.tray_menu, "\U0001F4C4  Word-Dokument am Desktop erstellen", lambda: self._on_submit("erstelle ein word dokument am desktop"))
+        self._act(self.tray_menu, "\U0001F3E0  Zur Taskleiste zur\u00fccksetzen", self.pet.reset_to_taskbar)
+        self.tray_menu.addSeparator()
+        self._act(self.tray_menu, "\u2699\uFE0F  Einstellungen", self.open_settings)
+        self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Mochi (v{__version__})", self._about)
+        self._act(self.tray_menu, "\U0001F44B  Beenden", self.quit)
+
     @staticmethod
     def _act(menu: QMenu, text: str, slot) -> QAction:
         act = menu.addAction(text)
@@ -317,10 +319,22 @@ class Buddy(QObject):
     def start(self) -> None:
         set_autostart(bool(self.cfg.get("autostart", True)))
         self.pet.drop_in()
-        hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
-        hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
-        if not self._hotkey_ok:
-            hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick auf mich = Befehl"
+
+        first_run = not self.cfg.get("first_run_done", False)
+        if first_run:
+            self.cfg.set("first_run_done", True)
+            self.cfg.save()
+            if not gemini_cli.is_logged_in():
+                hint = "Hi! Klick mich rechts \u2192 Mit Google anmelden, dann werde ich schlau \U0001f9e0"
+            else:
+                hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
+                hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
+        else:
+            hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
+            hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
+            if not self._hotkey_ok:
+                hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick auf mich = Befehl"
+
         QTimer.singleShot(1500, lambda: self._say(hint, 6000))
         self._schedule_chatter()
         self._schedule_vision(initial_delay_s=50)

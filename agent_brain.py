@@ -13,9 +13,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
-import requests
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
+import gemini_cli
+from gemini_cli import LLMError
 import tools
 from tools import ToolResult
 
@@ -62,39 +63,7 @@ def system_prompt(name: str) -> str:
     )
 
 
-def _prepare_gemini_contents(history: list[tuple[str, str]], current_text: str) -> list[dict]:
-    """Formatiert den Chatverlauf fuer Gemini so, dass Rollen immer abwechselnd (user -> model) sind."""
-    items: list[dict] = []
-    for r, t in history:
-        t_clean = (t or "").strip()
-        if not t_clean:
-            continue
-        role = "user" if r == "user" else "model"
-        if not items:
-            if role == "model":
-                items.append({"role": "user", "parts": [{"text": f"[Mochi hat zuvor gesagt: „{t_clean}“]"}]})
-                items.append({"role": "model", "parts": [{"text": t_clean}]})
-                continue
-            items.append({"role": role, "parts": [{"text": t_clean}]})
-        else:
-            if items[-1]["role"] == role:
-                prev_text = items[-1]["parts"][0]["text"]
-                items[-1]["parts"][0]["text"] = f"{prev_text}\n{t_clean}"
-            else:
-                items.append({"role": role, "parts": [{"text": t_clean}]})
 
-    if not items or items[-1]["role"] == "model":
-        items.append({"role": "user", "parts": [{"text": current_text.strip()}]})
-    else:
-        prev_text = items[-1]["parts"][0]["text"]
-        items[-1]["parts"][0]["text"] = f"{prev_text}\n{current_text.strip()}"
-
-    return items
-
-
-
-class LLMError(Exception):
-    """Fehler der Cloud-API - mit verstaendlicher Meldung."""
 
 
 # ======================================================================================
@@ -229,7 +198,7 @@ def parse_offline(text: str) -> Plan:
         return Plan("media_control", {"action": "play_pause"})
 
     # 7. Datum & Uhrzeit
-    if re.search(r"\b(uhrzeit|wie\s*spat|wieviel\s*uhr|zeit\b|uhr\b|welcher\s*tag|welches\s*datum|heutiges\s*datum|kalender|datum\b)\b", n):
+    if re.search(r"\b(uhrzeit|wie\s*sp(a|ae)t|wieviel\s*uhr|zeit\b|uhr\b|welcher\s*tag|welches\s*datum|heutiges\s*datum|kalender|datum\b)\b", n):
         return Plan("show_time_and_date")
 
     # 8. Taschenrechner
@@ -344,50 +313,10 @@ def parse_offline(text: str) -> Plan:
 
 
 # ======================================================================================
-#  Cloud-LLM (per HTTP / requests)
+#  Gemini CLI Integration & Tool-Calling-Protokoll
 # ======================================================================================
-def _http_error_text(resp: requests.Response) -> str:
-    detail = ""
-    try:
-        body = resp.json()
-        err = body.get("error", body) if isinstance(body, dict) else {}
-        detail = (err.get("message") if isinstance(err, dict) else str(err)) or ""
-    except ValueError:
-        pass
-    code = resp.status_code
-    low = detail.lower()
-    if code in (401, 403) or "api key not valid" in low or "api_key_invalid" in low or "incorrect api key" in low:
-        return "Dein API-Key scheint ungueltig zu sein oder hat keine Berechtigung \U0001F511"
-    if code == 400 and "key" in low:
-        return "Dein API-Key scheint ungueltig zu sein \U0001F511"
-    if code == 429:
-        return "Das Kontingent der KI ist gerade aufgebraucht (Rate-Limit). Versuch's gleich nochmal \u23F3"
-    if code == 404:
-        return "Das eingestellte KI-Modell gibt es nicht - bitte in den Einstellungen pruefen \U0001F914"
-    if code >= 500:
-        return "Der KI-Server hat gerade Probleme - spaeter nochmal probieren \U0001F6E0\uFE0F"
-    return f"Die KI hat einen Fehler gemeldet (HTTP {code}) {detail[:120]}".strip()
-
-
-def _post(url: str, headers: dict, payload: dict, timeout_s: float) -> dict:
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=(6, timeout_s))
-    except requests.Timeout:
-        raise LLMError("Die Cloud-KI antwortet nicht (Zeitueberschreitung) \u23F3")
-    except requests.ConnectionError:
-        raise LLMError("Ich komme nicht ins Internet \U0001F4E1 - ich versuch's im Offline-Modus")
-    except requests.RequestException as exc:
-        raise LLMError(f"Netzwerkfehler ({type(exc).__name__})")
-    if resp.status_code >= 400:
-        raise LLMError(_http_error_text(resp))
-    try:
-        return resp.json()
-    except ValueError:
-        raise LLMError("Die KI hat etwas Unverstaendliches geantwortet \U0001F635")
-
-
 class AgentWorker(QObject):
-    """Laeuft im QThread: Cloud-KI (falls Key vorhanden) -> Fallback regelbasiert -> Tools ausfuehren."""
+    """Laeuft im QThread: Gemini-CLI (falls angemeldet) -> Fallback regelbasiert -> Tools ausfuehren."""
 
     finished = pyqtSignal(bool, str, str)     # ok, Nachricht, Benachrichtigungstitel ("" = keine)
 
@@ -411,23 +340,18 @@ class AgentWorker(QObject):
 
     def _provider(self) -> Optional[str]:
         ai = self.cfg.get("ai", {})
-        choice = (ai.get("provider") or "auto").lower()
-        gem = ai.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        oai = ai.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
-        if choice == "offline":
+        if not ai.get("enabled", True):
             return None
-        if choice == "gemini":
-            return "gemini" if gem else None
-        if choice == "openai":
-            return "openai" if oai else None
-        return "gemini" if gem else ("openai" if oai else None)
+        if gemini_cli.cli_command() and gemini_cli.is_logged_in():
+            return "gemini"
+        return None
 
     def _process(self) -> tuple[bool, str, str]:
         llm_error = ""
         provider = self._provider()
         if provider:
             try:
-                text = self._chat_gemini() if provider == "gemini" else self._chat_openai()
+                text = self._chat_cli()
                 ok = all(r.ok for r in self.results) if self.results else True
                 if not text:
                     text = self.results[-1].message if self.results else "Miau? Dazu fallen mir keine Worte ein \U0001F63A"
@@ -457,111 +381,103 @@ class AgentWorker(QObject):
         self.results.append(res)
         return {"ok": res.ok, "result": res.message}
 
-    # -- Gemini (REST, Function Calling) -----------------------------------------------------
-    def _chat_gemini(self) -> str:
-        ai = self.cfg["ai"]
-        key = ai.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        configured_model = (ai.get("gemini_model") or "gemini-3.5-flash").replace("models/", "").strip()
+    # -- Gemini CLI (JSON Tool-Calling Protokoll) ---------------------------------------
+    def _chat_cli(self) -> str:
+        ai = self.cfg.get("ai", {})
+        timeout = float(ai.get("timeout_s", 60))
+        model = ai.get("model") or None
+        pet_name = self.cfg.get("pet", {}).get("name", "Mochi")
 
-        # Automatische Ersatz-Modelle bei 404 (Modell veraltet) oder 429 (Quota Limit)
-        candidates = [
-            configured_model,
-            "gemini-flash-latest",
-            "gemini-flash-lite-latest",
-            "gemini-3.5-flash",
-            "gemini-3.8-flash",
-        ]
-        models_to_try = []
-        for m in candidates:
-            if m and m not in models_to_try:
-                models_to_try.append(m)
+        tool_specs_json = json.dumps([
+            {"name": s["name"], "description": s["description"], "parameters": s["parameters"]}
+            for s in tools.TOOL_SPECS
+        ], ensure_ascii=False)
 
-        decls = []
-        for spec in tools.TOOL_SPECS:
-            d = {"name": spec["name"], "description": spec["description"]}
-            if spec["parameters"].get("properties"):      # Gemini mag keine leeren Parameter-Objekte
-                d["parameters"] = spec["parameters"]
-            decls.append(d)
+        tool_history: list[dict] = []
 
-        timeout = float(ai.get("timeout_s", 30))
-        headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
-        last_error = None
+        for step in range(self.MAX_STEPS):
+            prompt_parts = [
+                system_prompt(pet_name),
+                f"\nVERF\u00dcGBARE WERKZEUGE:\n{tool_specs_json}\n",
+            ]
 
-        for model in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            contents = _prepare_gemini_contents(self.history, self.text)
-            try:
-                for step in range(self.MAX_STEPS):
-                    data = _post(url, headers, {
-                        "systemInstruction": {"parts": [{"text": system_prompt(self.cfg["pet"]["name"])}]},
-                        "contents": contents,
-                        "tools": [{"functionDeclarations": decls}],
-                    }, timeout)
-                    cands = data.get("candidates") or []
-                    if not cands:
-                        reason = (data.get("promptFeedback") or {}).get("blockReason")
-                        raise LLMError("Die KI wollte darauf nicht antworten" + (f" ({reason})" if reason else ""))
-                    content = cands[0].get("content") or {}
-                    parts = content.get("parts") or []
-                    calls = [p["functionCall"] for p in parts if "functionCall" in p]
-                    if not calls:
-                        return "".join(p.get("text", "") for p in parts if p.get("text") and not p.get("thought")).strip()
-                    contents.append({"role": "model", "parts": parts})
-                    responses = []
-                    for c in calls:
-                        out = self._run_tool(c.get("name", ""), c.get("args") or {})
-                        fn_resp = {"name": c.get("name", ""), "response": out}
-                        if "id" in c:
-                            fn_resp["id"] = c["id"]
-                        responses.append({"functionResponse": fn_resp})
-                    contents.append({"role": "user", "parts": responses})
-                return self.results[-1].message if self.results else ""
-            except LLMError as exc:
-                last_error = exc
-                err_str = str(exc).lower()
-                if "404" in err_str or "nicht gibt" in err_str or "rate-limit" in err_str or "kontingent" in err_str or "429" in err_str:
-                    continue
-                raise
+            if self.history:
+                prompt_parts.append("BISHERIGER GESPR\u00c4CHSVERLAUF:")
+                for r, t in self.history:
+                    role_str = "Boss" if r == "user" else pet_name
+                    prompt_parts.append(f"{role_str}: {t}")
+                prompt_parts.append("")
 
-        if last_error:
-            raise last_error
-        return self.results[-1].message if self.results else ""
+            prompt_parts.append(f"AKTUELLE NACHRICHT VOM BOSS:\n{self.text}\n")
 
+            if tool_history:
+                prompt_parts.append("ERGEBNISSE BEREITS AUSGEF\u00dcHRTER WERKZEUGE DIESER RUNDE:")
+                for th in tool_history:
+                    prompt_parts.append(f"- Tool '{th['name']}' mit Parametern {json.dumps(th['args'])} -> Ergebnis: {th['result']}")
+                prompt_parts.append("")
 
-    # -- OpenAI-kompatibel (Chat Completions + tools) ---------------------------------------------
-    def _chat_openai(self) -> str:
-        ai = self.cfg["ai"]
-        key = ai.get("openai_api_key") or os.environ.get("OPENAI_API_KEY")
-        base = (ai.get("openai_base_url") or "https://api.openai.com/v1").rstrip("/")
-        url = f"{base}/chat/completions"
-        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-        oa_tools = [{"type": "function", "function": {
-            "name": s["name"], "description": s["description"], "parameters": s["parameters"]}} for s in tools.TOOL_SPECS]
-        messages = [{"role": "system", "content": system_prompt(self.cfg["pet"]["name"])}]
-        messages += [{"role": "user" if r == "user" else "assistant", "content": t} for r, t in self.history]
-        messages.append({"role": "user", "content": self.text})
-        timeout = float(ai.get("timeout_s", 30))
+            prompt_parts.append(
+                "ANTWORT-REGEL:\n"
+                "Antworte AUSSCHLIESSLICH mit einem JSON-Objekt, ohne Markdown-Formatierung:\n"
+                "{\"say\": \"<kurze Antwort an den User oder leer>\", \"tool\": null}\n"
+                "oder\n"
+                "{\"say\": \"\", \"tool\": {\"name\": \"<tool_name>\", \"args\": {...}}}\n"
+                "W\u00e4hle ein Werkzeug nur dann, wenn es f\u00fcr die Anfrage des Nutzers wirklich erforderlich ist. "
+                "Wenn alle Aufgaben erledigt sind oder keine Werkzeuge n\u00f6tig sind, setze 'tool' auf null und formuliere eine nette Antwort in 'say'."
+            )
 
-        for _ in range(self.MAX_STEPS):
-            data = _post(url, headers, {
-                "model": ai.get("openai_model") or "gpt-4o-mini", "messages": messages, "tools": oa_tools,
-            }, timeout)
-            choices = data.get("choices") or []
-            if not choices:
-                raise LLMError("Die KI hat keine Antwort geliefert \U0001F635")
-            msg = choices[0].get("message") or {}
-            calls = msg.get("tool_calls") or []
-            if not calls:
-                return (msg.get("content") or "").strip()
-            messages.append({"role": "assistant", "content": msg.get("content"), "tool_calls": calls})
-            for c in calls:
-                fn = c.get("function", {})
+            full_prompt = "\n".join(prompt_parts)
+            raw_response = gemini_cli.ask(full_prompt, timeout_s=timeout, model=model)
+
+            # Markdown-Z\u00e4une entfernen
+            cleaned = raw_response.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+                cleaned = re.sub(r"\s*```$", "", cleaned)
+                cleaned = cleaned.strip()
+
+            # Erstes JSON-Objekt extrahieren
+            data = None
+            start_idx = cleaned.find("{")
+            end_idx = cleaned.rfind("}")
+            if start_idx != -1 and end_idx > start_idx:
                 try:
-                    args = json.loads(fn.get("arguments") or "{}")
+                    data = json.loads(cleaned[start_idx : end_idx + 1])
                 except ValueError:
-                    args = {}
-                out = self._run_tool(fn.get("name", ""), args)
-                messages.append({"role": "tool", "tool_call_id": c.get("id", ""), "content": json.dumps(out, ensure_ascii=False)})
+                    pass
+
+            if not isinstance(data, dict):
+                # Nicht parsebar -> gesamten Text als say nehmen
+                return cleaned
+
+            tool_call = data.get("tool")
+            say_text = (data.get("say") or "").strip()
+
+            if not tool_call or not isinstance(tool_call, dict) or not tool_call.get("name"):
+                return say_text or (self.results[-1].message if self.results else "Miau! Alles erledigt \U0001F43E")
+
+            tool_name = str(tool_call.get("name", "")).strip()
+            tool_args = tool_call.get("args") if isinstance(tool_call.get("args"), dict) else {}
+
+            valid_names = {s["name"] for s in tools.TOOL_SPECS}
+            if tool_name not in valid_names:
+                tool_history.append({
+                    "name": tool_name,
+                    "args": tool_args,
+                    "result": f"Fehler: Werkzeug '{tool_name}' existiert nicht.",
+                })
+                continue
+
+            res = self._run_tool(tool_name, tool_args)
+            tool_history.append({
+                "name": tool_name,
+                "args": tool_args,
+                "result": res.get("result", ""),
+            })
+
+            if say_text and not self.results[-1].message:
+                self.results[-1].message = say_text
+
         return self.results[-1].message if self.results else ""
 
 

@@ -28,16 +28,12 @@ DEFAULTS: dict[str, Any] = {
         "working": "", "success": "", "sleep": "", "sad": "",
     },
     "ai": {
-        "provider": "auto",     # auto | gemini | openai | offline
-        "gemini_api_key": "",
-        "gemini_model": "gemini-3.5-flash",
-        "openai_api_key": "",
-
-        "openai_model": "gpt-4o-mini",
-        "openai_base_url": "https://api.openai.com/v1",
-        "timeout_s": 30,
+        "enabled": True,
+        "model": "",
+        "timeout_s": 60,
     },
     "autostart": True,
+    "first_run_done": False,
     "hotkey": "ctrl+alt+p",
 }
 
@@ -47,6 +43,7 @@ def _clean_migrated_ai(data: dict) -> dict:
     if "ai" in cleaned and isinstance(cleaned["ai"], dict):
         ai = cleaned["ai"]
         ai.pop("gemini_api_key", None)
+        ai.pop("gemini_model", None)
         ai.pop("provider", None)
         for k in list(ai.keys()):
             if k.startswith("openai_"):

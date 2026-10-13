@@ -607,6 +607,10 @@ class PetWindow(QWidget):
     def contextMenuEvent(self, e) -> None:
         self._click_timer.stop()
         menu = style_menu(QMenu(self))
+        import gemini_cli
+        if not gemini_cli.is_logged_in():
+            menu.addAction("\U0001F511  Mit Google anmelden").triggered.connect(self.settings_requested.emit)
+            menu.addSeparator()
         menu.addAction("\U0001F4AC  Befehl eingeben").triggered.connect(self.input_requested.emit)
         menu.addSeparator()
 
