@@ -7,7 +7,9 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Use default QPA (windows) if available, so Windows fonts render properly
+if sys.platform != "win32":
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication
@@ -171,6 +173,91 @@ def main():
     save_character_sheet(out_dir)
     save_anchors_sheet(out_dir)
     save_accessories_sheet(out_dir)
+    save_ui_screenshots(out_dir)
+
+
+def save_ui_screenshots(out_dir: Path):
+    """Rendert die 6 neuen UI-Fenster mit Beispieldaten in einer temporaeren DB."""
+    import tempfile
+    from chat_history import ChatHistoryDialog
+    from config import Config
+    from fun_dialogs import FlashcardsDialog, FocusStatsDialog, FriendshipDialog
+    from memory_store import MemoryStore
+    from my_data_dialog import MyDataDialog
+    from pet_sprites import get_character_info
+    from sticky_notes import StickyNoteWindow
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
+        db_path = tf.name
+
+    try:
+        store = MemoryStore(db_path)
+        store.add_message("user", "Hallo Kylie, wie läuft das Projekt?")
+        store.add_message("assistant", "Super! Wir sind in Phase 8 der Entwicklung. 🐾✨")
+        store.add_fact("Mag Katzen und Python")
+        store.add_fact("Geburtstag am 14. März", due_date="03-14", kind="birthday")
+        store.set_friendship_points(160)
+        store.record_focus("2026-10-13", 50)
+        store.record_focus("2026-10-12", 25)
+        store.add_card("Allgemein", "Katze", "Cat")
+        store.add_card("Allgemein", "Hund", "Dog")
+
+        cfg = Config()
+        char_info = get_character_info("cat_mochi")
+
+        # 1. Chats
+        dlg_chats = ChatHistoryDialog(cfg, store=store)
+        dlg_chats.show()
+        pix = dlg_chats.grab()
+        pix.save(str(out_dir / "ui_chats.png"))
+        dlg_chats.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / 'ui_chats.png'}")
+
+        # 2. Daten
+        dlg_data = MyDataDialog(cfg, store=store)
+        dlg_data.show()
+        pix = dlg_data.grab()
+        pix.save(str(out_dir / "ui_data.png"))
+        dlg_data.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / 'ui_data.png'}")
+
+        # 3. Freundschaft
+        dlg_friend = FriendshipDialog(store, cfg, char_info)
+        dlg_friend.show()
+        pix = dlg_friend.grab()
+        pix.save(str(out_dir / "ui_friendship.png"))
+        dlg_friend.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / 'ui_friendship.png'}")
+
+        # 4. Fokus
+        dlg_focus = FocusStatsDialog(store, char_info)
+        dlg_focus.show()
+        pix = dlg_focus.grab()
+        pix.save(str(out_dir / "ui_focus.png"))
+        dlg_focus.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / 'ui_focus.png'}")
+
+        # 5. Lernkarten
+        dlg_cards = FlashcardsDialog(store)
+        dlg_cards.show()
+        pix = dlg_cards.grab()
+        pix.save(str(out_dir / "ui_flashcards.png"))
+        dlg_cards.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / 'ui_flashcards.png'}")
+
+        # 6. Haftnotiz
+        note_win = StickyNoteWindow(1, "Meeting um 14 Uhr vorbereiten! 📌\nDesktop Cat v2.2.0 testen.", "yellow", 100, 100, store)
+        note_win.show()
+        pix = note_win.grab()
+        pix.save(str(out_dir / "ui_note.png"))
+        note_win.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / 'ui_note.png'}")
+    finally:
+        try:
+            os.remove(db_path)
+        except Exception:
+            pass
+
 
 if __name__ == "__main__":
     main()

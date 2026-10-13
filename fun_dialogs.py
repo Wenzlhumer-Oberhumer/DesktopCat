@@ -271,7 +271,7 @@ class FocusStatsDialog(QDialog):
         self.char_info = char_info
 
         self.setWindowTitle(tr("focus.title"))
-        self.setFixedSize(460, 480)
+        self.setFixedSize(480, 520)
         self.setStyleSheet("""
             QDialog {
                 background-color: #F8FAFC;
@@ -311,12 +311,15 @@ class FocusStatsDialog(QDialog):
 
         # Kachel 1: Heute
         card_today = QFrame()
-        card_today.setStyleSheet("background: #EEF2FF; border-radius: 10px; padding: 10px;")
+        card_today.setObjectName("card_today")
+        card_today.setStyleSheet("QFrame#card_today { background: #EEF2FF; border-radius: 10px; }")
         l_today = QVBoxLayout(card_today)
+        l_today.setContentsMargins(14, 12, 14, 12)
+        l_today.setSpacing(4)
         l_today.addWidget(QLabel(tr("focus.today_title")))
         mins = stats["today_minutes"]
         cnt = stats["today_count"]
-        lbl_m = QLabel(f"<span style='font-size: 22px; font-weight: bold; color: #4F46E5;'>{tr('focus.minutes_label', mins=mins)}</span>")
+        lbl_m = QLabel(f"<span style='font-size: 20px; font-weight: bold; color: #4F46E5;'>{tr('focus.minutes_label', mins=mins)}</span>")
         suffix = 's' if (cnt != 1 and i18n.lang() == "en") or (cnt != 1 and i18n.lang() == "de") else ''
         lbl_c = QLabel(tr("focus.sessions_label", count=cnt, suffix=suffix))
         lbl_c.setStyleSheet("color: #64748B; font-size: 11px;")
@@ -326,12 +329,15 @@ class FocusStatsDialog(QDialog):
 
         # Kachel 2: Serie
         card_streak = QFrame()
-        card_streak.setStyleSheet("background: #FEF3C7; border-radius: 10px; padding: 10px;")
+        card_streak.setObjectName("card_streak")
+        card_streak.setStyleSheet("QFrame#card_streak { background: #FEF3C7; border-radius: 10px; }")
         l_streak = QVBoxLayout(card_streak)
+        l_streak.setContentsMargins(14, 12, 14, 12)
+        l_streak.setSpacing(4)
         l_streak.addWidget(QLabel(tr("focus.streak_title")))
         stk = stats["streak"]
         unit_str = tr("focus.day_singular") if stk == 1 else tr("focus.days_plural")
-        lbl_s = QLabel(f"<span style='font-size: 22px; font-weight: bold; color: #D97706;'>{tr('focus.streak_days', days=stk, unit=unit_str)}</span>")
+        lbl_s = QLabel(f"<span style='font-size: 20px; font-weight: bold; color: #D97706;'>{tr('focus.streak_days', days=stk, unit=unit_str)}</span>")
         lbl_sub = QLabel(tr("focus.streak_sub_active") if stk > 0 else tr("focus.streak_sub_zero"))
         lbl_sub.setStyleSheet("color: #78350F; font-size: 11px;")
         l_streak.addWidget(lbl_s)
@@ -445,18 +451,44 @@ class FlashcardsDialog(QDialog):
             QLabel {
                 color: #2D3748;
             }
+            QComboBox {
+                background-color: #FFFFFF;
+                color: #1A202C;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 4px 8px;
+            }
+            QLineEdit {
+                background-color: #FFFFFF;
+                color: #1A202C;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 5px 8px;
+            }
             QTableWidget {
                 background: #FFFFFF;
+                color: #1A202C;
                 border: 1px solid #E2E8F0;
                 border-radius: 6px;
                 gridline-color: #EDF2F7;
             }
             QHeaderView::section {
-                background-color: #F7FAFC;
-                padding: 4px;
+                background-color: #F1F5F9;
+                color: #334155;
+                padding: 6px;
                 font-weight: bold;
                 border: none;
                 border-bottom: 1px solid #E2E8F0;
+            }
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #1F2937;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 5px 10px;
+            }
+            QPushButton:hover {
+                background-color: #E2E8F0;
             }
         """)
 
