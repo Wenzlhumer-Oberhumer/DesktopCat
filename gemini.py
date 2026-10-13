@@ -51,6 +51,17 @@ def clear_key() -> None:
         pass
 
 
+def validate_key(key: str) -> None:
+    """Prueft den Key ueber die Modellliste: schnell und ohne Kontingent-Verbrauch. Wirft LLMError."""
+    try:
+        resp = requests.get(_API.split("/models/")[0] + "/models", params={"pageSize": 1},
+                            headers={"x-goog-api-key": key.strip()}, timeout=(6, 10))
+    except requests.RequestException:
+        raise LLMError("Keine Internetverbindung zu Gemini 📡")
+    if not resp.ok:
+        raise LLMError(_error_text(resp))
+
+
 # -- Anfrage --------------------------------------------------------------------------
 def _error_text(resp: requests.Response) -> str:
     try:

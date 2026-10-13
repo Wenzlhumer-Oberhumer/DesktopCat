@@ -194,7 +194,7 @@ class SettingsDialog(QDialog):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
-            gemini.ask("Antworte nur mit OK", timeout_s=20, key=key)
+            gemini.validate_key(key)
             gemini.save_key(key)
         except Exception as exc:  # noqa: BLE001 - LLMError oder Credential-Fehler anzeigen
             self._set_status(f"\u274c  {exc}", "#FF8F8F")

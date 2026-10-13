@@ -65,3 +65,16 @@ def test_response_mentioning_key_words_is_returned_normally():
     body = {"candidates": [{"content": {"parts": [{"text": '{"say": "Login, Auth und API-Key sind ok"}'}]}}]}
     res, _ = _ask(_resp(200, body))
     assert "Login" in res
+
+
+def test_validate_key_uses_model_list_and_maps_errors():
+    with patch("gemini.requests.get", return_value=_resp(200, {"models": []})) as get:
+        gemini.validate_key(" AIzaTest ")
+    assert get.call_args.args[0].endswith("/v1beta/models")
+    assert get.call_args.kwargs["headers"] == {"x-goog-api-key": "AIzaTest"}
+    with patch("gemini.requests.get", return_value=_resp(400, {"error": {"message": "API key not valid."}})):
+        try:
+            gemini.validate_key("AIzaFalsch")
+            assert False
+        except LLMError as exc:
+            assert "API-Key" in str(exc)
