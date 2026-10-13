@@ -18,17 +18,25 @@ if ($versionPy -match '__version__\s*=\s*["'']([^"'']+)["'']') {
 }
 Write-Host "Baue Mochi Version: $Version" -ForegroundColor Green
 
-# 2. Python-Abhaengigkeiten pruefen/installieren
-Write-Host "Installiere/aktualisiere Python-Pakete..." -ForegroundColor Yellow
-python -m pip install -r "$ScriptDir\requirements.txt" pyinstaller
+# 2. Eigenes Build-venv: sonst packt PyInstaller alles aus dem globalen Python mit (torch, cv2, ...)
+$venvDir = "$ScriptDir\.venv-build"
+$py = "$venvDir\Scripts\python.exe"
+if (-not (Test-Path $py)) {
+    Write-Host "Erzeuge Build-venv..." -ForegroundColor Yellow
+    python -m venv $venvDir
+    if ($LASTEXITCODE -ne 0) { throw "venv konnte nicht erstellt werden!" }
+}
+Write-Host "Installiere/aktualisiere Python-Pakete im Build-venv..." -ForegroundColor Yellow
+& $py -m pip install --disable-pip-version-check -q -r "$ScriptDir\requirements.txt" pyinstaller
+if ($LASTEXITCODE -ne 0) { throw "pip install fehlgeschlagen!" }
 
 # 3. Multi-Size-Icon erzeugen
 Write-Host "Erzeuge Multi-Size-Icon..." -ForegroundColor Yellow
-python "$ScriptDir\tools_dev\make_icon.py"
+& $py "$ScriptDir\tools_dev\make_icon.py"
 
 # 4. PyInstaller-Build
 Write-Host "Fuehre PyInstaller aus (onedir)..." -ForegroundColor Yellow
-python -m PyInstaller "$ScriptDir\mochi.spec" --noconfirm --clean
+& $py -m PyInstaller "$ScriptDir\mochi.spec" --noconfirm --clean
 
 $distApp = "$ScriptDir\dist\Mochi\Mochi.exe"
 if (-not (Test-Path $distApp)) {

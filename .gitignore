@@ -10,3 +10,4 @@ vendor/
 *.spec.bak
 *.egg-info/
 .pytest_cache/
+.venv-build/

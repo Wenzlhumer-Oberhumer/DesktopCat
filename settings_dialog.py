@@ -73,7 +73,8 @@ class SettingsDialog(QDialog):
         ai_lay.addWidget(self.status_lbl)
 
         steps = QLabel("1. „Gratis-Key holen“ klicken und mit Google anmelden\n"
-                       "2. „Create API key“ → Key kopieren\n"
+                       "2. „Create API key“ → Key kopieren (Free Tier reicht, KEIN Bezahlkonto nötig –\n"
+                       "    Angebote für Billing, Firebase oder Guthaben einfach überspringen)\n"
                        "3. Hier einfügen → „Prüfen & speichern“")
         steps.setObjectName("hint")
         ai_lay.addWidget(steps)

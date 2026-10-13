@@ -39,7 +39,7 @@
   - Klick auf die Sprechblase öffnet direkt den Antwort-Modus oder installiert anstehende Updates.
 
 - **🤖 Gemini-KI mit kostenlosem Key in 3 Klicks:**
-  - Einstellungen ➜ *Gratis-Key holen* öffnet Google AI Studio, dort mit Google anmelden und *Create API key* klicken.
+  - Einstellungen ➜ *Gratis-Key holen* öffnet Google AI Studio, dort mit Google anmelden und *Create API key* klicken. Ein Bezahlkonto ist nicht nötig (Free Tier); Angebote für Billing, Firebase oder Guthaben kann man überspringen.
   - Key einfügen ➜ *Prüfen & speichern*. Der Key liegt sicher in der Windows-Anmeldeinformationsverwaltung, nicht in `config.json`.
   - Jeder Nutzer verwendet sein eigenes Gratis-Kontingent; keine Kosten für den Entwickler.
   - Sicheres JSON-Tool-Protokoll: die KI kann nur Mochis eigene Werkzeuge auslösen.
