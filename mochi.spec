@@ -1,0 +1,61 @@
+# -*- mode: python ; coding: utf-8 -*-
+import os
+from pathlib import Path
+
+block_cipher = None
+
+datas = [
+    ('assets', 'assets'),
+    ('THIRD_PARTY_LICENSES.txt', '.'),
+]
+
+if os.path.exists('vendor/node'):
+    datas.append(('vendor/node', 'vendor/node'))
+
+if os.path.exists('vendor/gemini-cli'):
+    datas.append(('vendor/gemini-cli', 'vendor/gemini-cli'))
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=[],
+    datas=datas,
+    hiddenimports=['win32timezone'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='Mochi',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['assets/mochi.ico'],
+    version='version_info.txt',
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='Mochi',
+)
