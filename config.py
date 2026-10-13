@@ -52,6 +52,11 @@ DEFAULTS: dict[str, Any] = {
         "use_history": True,
         "intro_shown": False,
     },
+    "daily": {
+        "briefing": True,
+        "bedtime": "23:00",
+        "curious": True,
+    },
 }
 
 

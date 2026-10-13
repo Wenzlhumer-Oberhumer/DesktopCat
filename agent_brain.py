@@ -5,6 +5,7 @@ bekommt nur Signale (started / finished).
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import random
@@ -709,6 +710,22 @@ class AgentWorker(QObject):
                 return True, nr.reply or f"Ich bin {char_name}! 🐾", ""
             if nr.kind == "prefix" and nr.rest:
                 self.text = nr.rest
+
+        # Geburtstagserkennung
+        from daily import parse_birthday_mention
+        bday = parse_birthday_mention(self.text, datetime.date.today())
+        if bday:
+            b_day, b_mon, next_d = bday
+            priv = self.cfg.get("privacy", {}) if isinstance(self.cfg.get("privacy"), dict) else {}
+            if priv.get("remember", True):
+                try:
+                    from memory_store import get_memory_store
+                    store = get_memory_store()
+                    store.add_fact(f"Geburtstag von {self.user_name} am {b_day}.{b_mon:02d}.", due_date=next_d.strftime("%Y-%m-%d"), kind="birthday")
+                except Exception:
+                    pass
+            cinfo = get_character_info(self.character_id)
+            return True, f"Oh, das merke ich mir, {self.user_name}! Dein Geburtstag am {b_day}.{b_mon:02d}. ist notiert 🎂🎉 {cinfo.get('emoji', '🐾')}".strip(), ""
 
         llm_error = ""
         provider = self._provider()

@@ -36,6 +36,7 @@ def main():
         "test_confirm",
         "test_name_kylie",
         "test_memory_store",
+        "test_daily",
     ]
 
     total = 0

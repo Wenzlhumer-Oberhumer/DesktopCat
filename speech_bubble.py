@@ -208,6 +208,52 @@ class SpeechBubble(FloatingCard):
         self.persistent = False
 
 
+class BriefingCard(FloatingCard):
+    """Guten-Morgen-Briefing als freundliche Karte neben der Figur."""
+
+    clicked = pyqtSignal()
+    CARD_W = 320
+
+    def __init__(self, parent=None):
+        super().__init__(focusable=False)
+        self.label = QLabel(self)
+        self.label.setWordWrap(True)
+        self.label.setTextFormat(Qt.TextFormat.RichText)
+        font = QFont(FONT_FAMILY)
+        font.setPointSizeF(10)
+        self.label.setFont(font)
+        self.label.setStyleSheet("color: #F5F6F8; background: transparent;")
+        self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.timeout.connect(lambda: self.fade_out())
+
+    def show_briefing(self, title: str, lines: list[str], anchor: QPoint, duration_ms: int = 12000) -> None:
+        content_html = f"<div style='font-weight:600; font-size:12pt; color:#FF8FB1; margin-bottom:6px;'>{title}</div>"
+        for line in lines:
+            content_html += f"<div style='margin-bottom:4px; font-size:10pt; color:#F5F6F8;'>{line}</div>"
+        self.label.setText(content_html)
+
+        th = max(50, 36 + len(lines) * 26)
+        tw = self.CARD_W
+        self.label.setGeometry(self.M + 16, self.M + 12, tw, th)
+        self.set_content_size(tw + 32, th + 24)
+        self.anchor_to(anchor)
+
+        self._hide_timer.stop()
+        if not self.isVisible():
+            self.setWindowOpacity(0.0)
+            self.show()
+        self.fade_in()
+        self._hide_timer.start(duration_ms)
+
+    def mousePressEvent(self, event) -> None:
+        self._hide_timer.stop()
+        self.fade_out(150)
+        self.clicked.emit()
+
+
 class _Line(QLineEdit):
     escaped = pyqtSignal()
 

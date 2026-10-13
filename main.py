@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import ctypes
 import ctypes.wintypes
+import datetime
 import os
 import random
 import sys
@@ -88,7 +89,7 @@ except ImportError:         # alte pet_sprites ohne Charakter-Registry
         return {}
 from pet_window import PetState, PetWindow, is_night, style_menu
 from settings_dialog import SettingsDialog
-from speech_bubble import InputBar, SpeechBubble
+from speech_bubble import BriefingCard, InputBar, SpeechBubble
 import tools
 
 APP_ID = "MochiDesktopBuddy"
@@ -287,6 +288,7 @@ class Buddy(QObject):
         self.app, self.cfg = app, cfg
         self.pet = PetWindow(cfg, APP_DIR)
         self.bubble = SpeechBubble(cfg)
+        self.briefing_card = BriefingCard()
         self.input = InputBar()
         self.brain = AgentBrain(cfg)
         self._settings_open = False
@@ -352,6 +354,14 @@ class Buddy(QObject):
         self._vision_timer = QTimer(self)
         self._vision_timer.setSingleShot(True)
         self._vision_timer.timeout.connect(self._on_autonomous_vision)
+
+        # Phase 3: Neugier-Fragen, Fakten-Erinnerungen und Schlafenszeit
+        self._curious_timer = QTimer(self)
+        self._curious_timer.timeout.connect(self._on_curious_check)
+        self._reminder_timer = QTimer(self)
+        self._reminder_timer.timeout.connect(self._on_reminders_check)
+        self._bedtime_timer = QTimer(self)
+        self._bedtime_timer.timeout.connect(self._on_bedtime_check)
 
     def user_name(self) -> str:
         return str(self.cfg.get("pet.user_name", "Boss")).strip() or "Boss"
@@ -431,6 +441,11 @@ class Buddy(QObject):
         self._schedule_vision(initial_delay_s=50)
         self._schedule_wellbeing()
         self._battery_timer.start(60000)
+        self._curious_timer.start(1800000)
+        self._reminder_timer.start(900000)
+        self._bedtime_timer.start(300000)
+        QTimer.singleShot(4000, self._check_birthday_and_briefing)
+        QTimer.singleShot(15000, self._on_reminders_check)
         QTimer.singleShot(30000, lambda: self._check_update(manual=False))
 
     def _about(self) -> None:
@@ -499,6 +514,7 @@ class Buddy(QObject):
     def _follow(self) -> None:
         a = self.pet.head_anchor()
         self.bubble.anchor_to(a)
+        self.briefing_card.anchor_to(a)
         self.input.anchor_to(a)
 
     def _say(self, text: str, duration_ms=None, persistent: bool = False) -> None:
@@ -517,7 +533,7 @@ class Buddy(QObject):
         self.bubble.hide_now()
         self.pet.freeze(True)
         self.pet.wake()
-        placeholder = (f"Antworte {self.char_info().get('name', 'Mochi')}... \U0001F43E" if (reply_mode or getattr(self, "_mochi_asked_question", False))
+        placeholder = (f"Antworte {self.char_info().get('name', 'Kylie')}... \U0001F43E" if (reply_mode or getattr(self, "_mochi_asked_question", False))
                        else f"Was soll ich tun, {self.user_name()}? \U0001F43E")
         self.input.popup(self.pet.head_anchor(), placeholder)
 
@@ -613,12 +629,163 @@ class Buddy(QObject):
 
     def _on_character_changed(self, _cid: str) -> None:
         ci = self.char_info()
-        self._say(f"{ci.get('sound', '')} Ich bin {ci.get('name', 'Mochi')}! {ci.get('emoji', '')}", 3000)
+        self._say(f"{ci.get('sound', '')} Ich bin {ci.get('name', 'Kylie')}! {ci.get('emoji', '')}", 3000)
 
     def _on_treat(self) -> None:
         n = int(self.cfg.get("treats", 0))
         ci = self.char_info()
         self._say(f"{ci.get('sound', 'Mjam!')} Danke, {self.user_name()}! \U0001F356 Schon {n} Leckerli bekommen! \U0001F496", 4000)
+
+    # -- Phase 3: Alltag, Neugier, Briefing, Geburtstag, Schlafenszeit -----------------
+    def _check_birthday_and_briefing(self) -> None:
+        try:
+            from memory_store import get_memory_store
+            store = get_memory_store()
+            now = datetime.datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+
+            # 1. Geburtstag
+            facts = store.facts()
+            for f in facts:
+                if f.get("kind") == "birthday" and f.get("due_date") == today_str:
+                    bday_stat = f"birthday_greeted_{today_str}"
+                    if not store.get_stat(bday_stat):
+                        store.set_stat(bday_stat, "1")
+                        self.pet.wake()
+                        self.pet.celebrate_confetti(6.0)
+                        self._say(f"Alles Gute zum Geburtstag, {self.user_name()}! 🎂🎉✨", 10000)
+                        return
+
+            # 2. Guten-Morgen-Briefing
+            daily_cfg = self.cfg.get("daily", {}) if isinstance(self.cfg.get("daily"), dict) else {}
+            if not daily_cfg.get("briefing", True):
+                return
+            last_briefing = store.get_stat("last_briefing")
+            from daily import should_brief
+            if should_brief(now, last_briefing):
+                store.set_stat("last_briefing", today_str)
+                self._show_morning_briefing(store, now)
+        except Exception:
+            pass
+
+    def _show_morning_briefing(self, store, now: datetime.datetime) -> None:
+        try:
+            w_res = tools.get_weather()
+            w_text = w_res.message.split("\n")[0] if w_res.ok else "Einen wunderbaren Tag dir!"
+        except Exception:
+            w_text = "Einen wunderbaren Tag dir!"
+
+        lines = [f"🌤️ {w_text}"]
+        today = now.date()
+        tmrw = today + datetime.timedelta(days=1)
+        t_str = today.strftime("%Y-%m-%d")
+        tm_str = tmrw.strftime("%Y-%m-%d")
+
+        facts = store.facts()
+        events = [f["text"] for f in facts if f.get("due_date") == t_str]
+        tmrw_events = [f["text"] for f in facts if f.get("due_date") == tm_str]
+
+        if events:
+            lines.append(f"📅 Heute: {', '.join(events[:2])}")
+        if tmrw_events:
+            lines.append(f"🗓️ Morgen: {', '.join(tmrw_events[:2])}")
+
+        ci = self.char_info()
+        sound = ci.get("sound", "")
+        quotes = [
+            f"{sound} Auf einen produktiven Tag, {self.user_name()}! ✨",
+            f"{sound} Wir schaffen heute alles, was ansteht! 🐾",
+            f"{sound} Schön, dass du da bist, {self.user_name()}! 💖",
+        ]
+        lines.append(f"🐾 {random.choice(quotes)}")
+
+        self.briefing_card.show_briefing(
+            f"☀️ Guten Morgen, {self.user_name()}!",
+            lines,
+            self.pet.head_anchor(),
+            duration_ms=12000,
+        )
+
+    def _on_curious_check(self) -> None:
+        if is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy or self.input.isVisible():
+            return
+        try:
+            from memory_store import get_memory_store
+            from daily import should_ask_curious, curious_question_for
+            store = get_memory_store()
+            now = datetime.datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+            stats = {
+                "curious_date": store.get_stat("curious_date", ""),
+                "curious_count": store.get_stat("curious_count", "0"),
+                "curious_last_ts": store.get_stat("curious_last_ts", "0"),
+            }
+            if not should_ask_curious(now, stats, self.cfg.snapshot()):
+                return
+
+            facts = store.facts()[:5]
+            q = curious_question_for(self.pet.character, self.user_name(), facts)
+
+            count = int(stats["curious_count"]) if stats["curious_date"] == today_str else 0
+            store.set_stat("curious_date", today_str)
+            store.set_stat("curious_count", str(count + 1))
+            store.set_stat("curious_last_ts", str(now.timestamp()))
+
+            self.pet.wake()
+            self._say(q, duration_ms=8000)
+            self.brain.record_assistant_message(q)
+            self._mochi_asked_question = True
+            QTimer.singleShot(1500, lambda: self.open_input(reply_mode=True))
+        except Exception:
+            pass
+
+    def _on_reminders_check(self) -> None:
+        if is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy:
+            return
+        try:
+            from memory_store import get_memory_store
+            from daily import due_reminders
+            store = get_memory_store()
+            now = datetime.datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+            facts = store.facts()
+            stats_dict = {
+                f"remind_{f['id']}_{sfx}_{today_str}": store.get_stat(f"remind_{f['id']}_{sfx}_{today_str}")
+                for f in facts for sfx in ("eve", "day", "after")
+            }
+            rems = due_reminders(facts, now, stats_dict)
+            if rems:
+                _, msg, stat_key = rems[0]
+                store.set_stat(stat_key, "1")
+                self.pet.wake()
+                self._say(msg, duration_ms=9000)
+                self.tray.showMessage("Erinnerung 🐾", msg, self.icon, 7000)
+                self.brain.record_assistant_message(msg)
+        except Exception:
+            pass
+
+    def _on_bedtime_check(self) -> None:
+        try:
+            daily_cfg = self.cfg.get("daily", {}) if isinstance(self.cfg.get("daily"), dict) else {}
+            bedtime = str(daily_cfg.get("bedtime", "23:00") or "").strip()
+            if not bedtime:
+                return
+            from memory_store import get_memory_store
+            from daily import bedtime_due
+            store = get_memory_store()
+            now = datetime.datetime.now()
+            last_shown_str = store.get_stat("bedtime_last_ts")
+            last_shown = float(last_shown_str) if last_shown_str else None
+            due, is_second = bedtime_due(now, bedtime, last_shown)
+            if due and not self.brain.busy and not self.input.isVisible():
+                store.set_stat("bedtime_last_ts", str(now.timestamp()))
+                self.pet.wake_with_stretch(4.0)
+                if is_second:
+                    self._say(f"Immer noch fleißig, {self.user_name()}? Schlaf gut und erhol dich schön! 😴💤", 9000)
+                else:
+                    self._say(f"Es ist schon spät, {self.user_name()} – Zeit fürs Bett? 😴", 9000)
+        except Exception:
+            pass
 
     # -- Wohlfuehl-Erinnerungen & Akku ---------------------------------------------------------
     def _schedule_wellbeing(self) -> None:

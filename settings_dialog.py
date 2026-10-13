@@ -197,6 +197,19 @@ class SettingsDialog(QDialog):
         self.night_mode.setChecked(bool(cfg.get("night_mode", True)))
         form2.addRow("", self.night_mode)
 
+        daily = cfg.get("daily", {}) if isinstance(cfg.get("daily"), dict) else {}
+        self.briefing_chk = QCheckBox("Guten-Morgen-Briefing anzeigen")
+        self.briefing_chk.setChecked(bool(daily.get("briefing", True)))
+        form2.addRow("", self.briefing_chk)
+
+        self.curious_chk = QCheckBox("Gelegentlich neugierige Fragen stellen")
+        self.curious_chk.setChecked(bool(daily.get("curious", True)))
+        form2.addRow("", self.curious_chk)
+
+        self.bedtime_edit = QLineEdit(str(daily.get("bedtime", "23:00")))
+        self.bedtime_edit.setPlaceholderText("z. B. 23:00 (leer = aus)")
+        form2.addRow("Schlafenszeit", self.bedtime_edit)
+
         self.hotkey_edit = QLineEdit(str(cfg.get("hotkey", "ctrl+alt+p")))
         self.hotkey_edit.setPlaceholderText("z. B. ctrl+alt+p")
         form2.addRow("Tastenk\u00fcrzel", self.hotkey_edit)
@@ -304,6 +317,9 @@ class SettingsDialog(QDialog):
         c.set("wellbeing.break_min", self.break_min.value())
         c.set("battery_warn", self.battery_warn.isChecked())
         c.set("night_mode", self.night_mode.isChecked())
+        c.set("daily.briefing", self.briefing_chk.isChecked())
+        c.set("daily.curious", self.curious_chk.isChecked())
+        c.set("daily.bedtime", self.bedtime_edit.text().strip())
         c.set("ai.enabled", self.ai_enabled.isChecked())
         c.set("pet.speed", self.speed.value())
         c.set("pet.scale", self.scale.value() / 100.0)
