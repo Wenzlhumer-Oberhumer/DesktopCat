@@ -97,6 +97,11 @@ class PetWindow(QWidget):
     treat_given = pyqtSignal()
     arrived = pyqtSignal()
     error_doctor_requested = pyqtSignal()
+    friendship_requested = pyqtSignal()
+    focus_stats_requested = pyqtSignal()
+    flashcards_requested = pyqtSignal()
+    photobox_requested = pyqtSignal()
+    new_note_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -633,8 +638,15 @@ class PetWindow(QWidget):
         ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
                           squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until)
         pose = compute_pose(ctx)
-        pose.accessories = tuple(sorted(self._accessories))
-        if "fan" in self._accessories:
+        active_accs = set(self._accessories)
+        worn = str(self.cfg.get("fun.worn", "")).strip()
+        if worn:
+            if worn == "gold_sparkle":
+                pose.sparkles = now - self._t0
+            else:
+                active_accs.add(worn)
+        pose.accessories = tuple(sorted(active_accs))
+        if "fan" in active_accs:
             pose.sweat = True
         if self.state == PetState.FLY:
             pose.dy += math.sin((now - self._state_since) * 3.5) * 4.0
@@ -815,6 +827,12 @@ class PetWindow(QWidget):
             menu.addAction("🔑  Gemini-Key eintragen").triggered.connect(self.settings_requested.emit)
             menu.addSeparator()
         menu.addAction("💬  Befehl eingeben").triggered.connect(self.input_requested.emit)
+        menu.addAction("💖  Freundschaft").triggered.connect(self.friendship_requested.emit)
+        menu.addAction("📊  Fokus-Statistik").triggered.connect(self.focus_stats_requested.emit)
+        menu.addAction("📚  Lernkarten").triggered.connect(self.flashcards_requested.emit)
+        cname = self.char_info().get("name", "Kylie")
+        menu.addAction(f"📸  Foto mit {cname}").triggered.connect(self.photobox_requested.emit)
+        menu.addAction("📝  Neue Haftnotiz").triggered.connect(self.new_note_requested.emit)
         menu.addAction("🩺  Was heißt dieser Fehler?").triggered.connect(self.error_doctor_requested.emit)
         menu.addAction("📚  Meine Chats").triggered.connect(self.chats_requested.emit)
         menu.addAction("🔒  Meine Daten").triggered.connect(self.data_requested.emit)

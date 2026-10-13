@@ -61,6 +61,7 @@ DEFAULTS: dict[str, Any] = {
     "fun": {
         "weather_outfits": True,
         "pc_fever": True,
+        "worn": "",
     },
 }
 

@@ -68,6 +68,11 @@ class MemoryStore:
             db.execute("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, conversation_id INTEGER, ts REAL, role TEXT, text TEXT);")
             db.execute("CREATE TABLE IF NOT EXISTS facts(id INTEGER PRIMARY KEY, ts REAL, text TEXT, due_date TEXT NULL, kind TEXT DEFAULT 'fact');")
             db.execute("CREATE TABLE IF NOT EXISTS stats(key TEXT PRIMARY KEY, value TEXT);")
+            db.execute("CREATE TABLE IF NOT EXISTS friendship(id INTEGER PRIMARY KEY, points INTEGER, last_update TEXT);")
+            db.execute("CREATE TABLE IF NOT EXISTS friendship_daily(date TEXT, kind TEXT, count INTEGER, PRIMARY KEY(date, kind));")
+            db.execute("CREATE TABLE IF NOT EXISTS focus(date TEXT, minutes INTEGER, count INTEGER);")
+            db.execute("CREATE TABLE IF NOT EXISTS cards(id INTEGER PRIMARY KEY AUTOINCREMENT, deck TEXT, front TEXT, back TEXT, box INTEGER DEFAULT 1, due REAL DEFAULT 0.0);")
+            db.execute("CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, color TEXT, x INTEGER, y INTEGER, done INTEGER DEFAULT 0);")
 
     # -- Conversations & Messages ------------------------------------------------------
     def add_message(self, role: str, text: str, character: str = "cat_mochi") -> None:
@@ -299,6 +304,144 @@ class MemoryStore:
 
         out_path.write_text("\n".join(lines), encoding="utf-8")
 
+    # -- Freundschaft & Belohnungen (Phase 6) -------------------------------------------
+    def get_friendship_points(self) -> int:
+        with self._db() as db:
+            cur = db.execute("SELECT points FROM friendship WHERE id = 1")
+            row = cur.fetchone()
+            return int(row["points"]) if row else 0
+
+    def set_friendship_points(self, points: int) -> None:
+        today_str = datetime.date.today().isoformat()
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO friendship(id, points, last_update) VALUES(1, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET points = excluded.points, last_update = excluded.last_update",
+                (points, today_str),
+            )
+
+    def get_daily_friendship_count(self, kind: str, date_str: str) -> int:
+        with self._db() as db:
+            cur = db.execute("SELECT count FROM friendship_daily WHERE date = ? AND kind = ?", (date_str, kind))
+            row = cur.fetchone()
+            return int(row["count"]) if row else 0
+
+    def increment_daily_friendship(self, kind: str, date_str: str) -> int:
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO friendship_daily(date, kind, count) VALUES(?, ?, 1) "
+                "ON CONFLICT(date, kind) DO UPDATE SET count = count + 1",
+                (date_str, kind),
+            )
+            cur = db.execute("SELECT count FROM friendship_daily WHERE date = ? AND kind = ?", (date_str, kind))
+            row = cur.fetchone()
+            return int(row["count"]) if row else 1
+
+    # -- Fokus & Pomodoro (Phase 6) ---------------------------------------------------
+    def record_focus(self, date_str: str, minutes: int) -> None:
+        with self._db() as db:
+            cur = db.execute("SELECT minutes, count FROM focus WHERE date = ?", (date_str,))
+            row = cur.fetchone()
+            if row:
+                db.execute(
+                    "UPDATE focus SET minutes = minutes + ?, count = count + 1 WHERE date = ?",
+                    (minutes, date_str),
+                )
+            else:
+                db.execute("INSERT INTO focus(date, minutes, count) VALUES(?, ?, 1)", (date_str, minutes))
+
+    def get_focus_data(self) -> list[dict]:
+        with self._db() as db:
+            cur = db.execute("SELECT date, minutes, count FROM focus ORDER BY date ASC")
+            return [{"date": str(r["date"]), "minutes": int(r["minutes"]), "count": int(r["count"])} for r in cur.fetchall()]
+
+    # -- Lernkarten (Phase 6) ---------------------------------------------------------
+    def add_card(self, deck: str, front: str, back: str) -> int:
+        with self._db() as db:
+            cur = db.execute(
+                "INSERT INTO cards(deck, front, back, box, due) VALUES(?, ?, ?, 1, 0.0)",
+                (deck.strip() or "Allgemein", front.strip(), back.strip()),
+            )
+            return int(cur.lastrowid)
+
+    def get_cards(self, deck: Optional[str] = None) -> list[dict]:
+        with self._db() as db:
+            if deck:
+                cur = db.execute("SELECT id, deck, front, back, box, due FROM cards WHERE deck = ? ORDER BY id ASC", (deck,))
+            else:
+                cur = db.execute("SELECT id, deck, front, back, box, due FROM cards ORDER BY deck ASC, id ASC")
+            return [
+                {
+                    "id": int(r["id"]),
+                    "deck": str(r["deck"]),
+                    "front": str(r["front"]),
+                    "back": str(r["back"]),
+                    "box": int(r["box"]),
+                    "due": float(r["due"]),
+                }
+                for r in cur.fetchall()
+            ]
+
+    def update_card_box(self, card_id: int, box: int) -> None:
+        with self._db() as db:
+            db.execute("UPDATE cards SET box = ? WHERE id = ?", (box, card_id))
+
+    def delete_card(self, card_id: int) -> None:
+        with self._db() as db:
+            db.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+
+    def get_decks(self) -> list[str]:
+        with self._db() as db:
+            cur = db.execute("SELECT DISTINCT deck FROM cards ORDER BY deck ASC")
+            return [str(r["deck"]) for r in cur.fetchall()]
+
+    # -- Haftnotizen (Phase 6) --------------------------------------------------------
+    def add_note(self, text: str, color: str = "yellow", x: int = 100, y: int = 100) -> int:
+        with self._db() as db:
+            cur = db.execute(
+                "INSERT INTO notes(text, color, x, y, done) VALUES(?, ?, ?, ?, 0)",
+                (text.strip(), color, x, y),
+            )
+            return int(cur.lastrowid)
+
+    def get_notes(self, include_done: bool = False) -> list[dict]:
+        with self._db() as db:
+            if include_done:
+                cur = db.execute("SELECT id, text, color, x, y, done FROM notes ORDER BY id ASC")
+            else:
+                cur = db.execute("SELECT id, text, color, x, y, done FROM notes WHERE done = 0 ORDER BY id ASC")
+            return [
+                {
+                    "id": int(r["id"]),
+                    "text": str(r["text"]),
+                    "color": str(r["color"]),
+                    "x": int(r["x"]),
+                    "y": int(r["y"]),
+                    "done": int(r["done"]),
+                }
+                for r in cur.fetchall()
+            ]
+
+    def update_note(
+        self,
+        note_id: int,
+        text: Optional[str] = None,
+        x: Optional[int] = None,
+        y: Optional[int] = None,
+        done: Optional[int] = None,
+    ) -> None:
+        with self._db() as db:
+            if text is not None:
+                db.execute("UPDATE notes SET text = ? WHERE id = ?", (text, note_id))
+            if x is not None and y is not None:
+                db.execute("UPDATE notes SET x = ?, y = ? WHERE id = ?", (x, y, note_id))
+            if done is not None:
+                db.execute("UPDATE notes SET done = ? WHERE id = ?", (done, note_id))
+
+    def delete_note(self, note_id: int) -> None:
+        with self._db() as db:
+            db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+
     def wipe_everything(self) -> None:
         """Loescht alle Tabellen restlos und fuehrt ein VACUUM aus."""
         conn = sqlite3.connect(str(self.path), timeout=10.0)
@@ -308,6 +451,11 @@ class MemoryStore:
                 conn.execute("DELETE FROM conversations")
                 conn.execute("DELETE FROM facts")
                 conn.execute("DELETE FROM stats")
+                conn.execute("DELETE FROM friendship")
+                conn.execute("DELETE FROM friendship_daily")
+                conn.execute("DELETE FROM focus")
+                conn.execute("DELETE FROM cards")
+                conn.execute("DELETE FROM notes")
             conn.isolation_level = None
             conn.execute("VACUUM")
         finally:

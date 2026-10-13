@@ -10,6 +10,7 @@ import random
 import sys
 import time
 import traceback
+from pathlib import Path
 from typing import Callable, Optional
 
 from paths import APP_DIR, DATA_DIR, FROZEN, set_autostart
@@ -74,7 +75,8 @@ except Exception:
 
 import gemini
 from PyQt6.QtCore import (
-    QAbstractNativeEventFilter, QBuffer, QObject, QPoint, QRect, QThread, QTimer, pyqtSignal, pyqtSlot,
+    QAbstractNativeEventFilter, QBuffer, QObject, QPoint, QPointF, QRect, QStandardPaths,
+    QThread, QTimer, pyqtSignal, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QGuiApplication, QIcon, QScreen
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -424,6 +426,18 @@ class Buddy(QObject):
         self.brain.finished.connect(self._on_task_finished)
         self.brain.it_guide_requested.connect(self.start_it_guide)
         self.pet.error_doctor_requested.connect(self.start_error_doctor)
+        self.pet.friendship_requested.connect(self.open_friendship_dialog)
+        self.pet.focus_stats_requested.connect(self.open_focus_stats_dialog)
+        self.pet.flashcards_requested.connect(self.open_flashcards_dialog)
+        self.pet.photobox_requested.connect(self.start_photobox)
+        self.pet.new_note_requested.connect(lambda: self.create_sticky_note())
+        self.tray.messageClicked.connect(self._on_tray_message_clicked)
+
+        from sticky_notes import StickyNoteManager
+        from memory_store import get_memory_store
+        self.note_manager = StickyNoteManager(get_memory_store(), on_note_done_cb=self._on_note_completed)
+        self._quiz_session: Optional[dict] = None
+        self._last_photo_folder: Optional[str] = None
 
         self.explain_card = ExplainCard()
         self.guide_overlay: Optional[GuideOverlay] = None
@@ -496,6 +510,12 @@ class Buddy(QObject):
             self._act(self.tray_menu, "\U0001F511  Gemini-Key eintragen", self.open_settings)
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, "💬  Befehl eingeben", self.open_input)
+        self._act(self.tray_menu, "💖  Freundschaft", self.open_friendship_dialog)
+        self._act(self.tray_menu, "📊  Fokus-Statistik", self.open_focus_stats_dialog)
+        self._act(self.tray_menu, "📚  Lernkarten", self.open_flashcards_dialog)
+        cname = self.char_info().get("name", "Kylie")
+        self._act(self.tray_menu, f"📸  Foto mit {cname}", self.start_photobox)
+        self._act(self.tray_menu, "📝  Neue Haftnotiz", lambda: self.create_sticky_note())
         self._act(self.tray_menu, "🩺  Was heißt dieser Fehler?", self.start_error_doctor)
         self._act(self.tray_menu, "📚  Meine Chats", self.open_chat_history)
         self._act(self.tray_menu, "🔒  Meine Daten", self.open_my_data)
@@ -573,11 +593,13 @@ class Buddy(QObject):
         QTimer.singleShot(15000, self._on_reminders_check)
         QTimer.singleShot(20000, self._check_weather_outfit)
         QTimer.singleShot(30000, lambda: self._check_update(manual=False))
+        self.note_manager.load_notes()
 
     def _about(self) -> None:
         self._say(f"Desktop Cat v{__version__} \U0001F43E\nDein KI-Desktop-Buddy!", 6000)
 
     def quit(self) -> None:
+        self.note_manager.close_all()
         self.hotkey.unregister()
         self.tray.hide()
         self.app.quit()
@@ -685,12 +707,44 @@ class Buddy(QObject):
         self.open_input()
 
     def _on_submit(self, text: str) -> None:
+        was_question = getattr(self, "_mochi_asked_question", False)
         self._mochi_asked_question = False
         self.input.hide_now()       # sofort weg, damit die "Ich bin dran"-Blase erscheinen darf
+
+        if was_question:
+            self._award_friendship("curious")
+
+        if self._quiz_session:
+            self._handle_quiz_answer(text)
+            return
 
         low_txt = text.strip().lower()
         if any(k in low_txt for k in ("was bedeutet diese fehlermeldung", "was heißt dieser fehler", "was heisst dieser fehler", "fehlermeldung erklären", "fehlermeldung erklaeren")):
             self.start_error_doctor()
+            return
+
+        if low_txt.startswith("merk dir:") or low_txt.startswith("notiz:"):
+            content = text.split(":", 1)[1].strip()
+            self.create_sticky_note(content)
+            return
+        elif low_txt.startswith("merk dir ") or low_txt.startswith("notiz "):
+            content = text.split(" ", 2)[-1].strip() if low_txt.startswith("merk dir ") else text.split(" ", 1)[1].strip()
+            self.create_sticky_note(content)
+            return
+
+        if any(k in low_txt for k in ("frag mich vokabeln ab", "quiz starten", "lernkarten quiz", "starte quiz")):
+            self.start_flashcard_quiz()
+            return
+        elif low_txt in ("lernkarten", "vokabeln"):
+            self.open_flashcards_dialog()
+            return
+
+        import re
+        m_cards = re.search(r"(?:mach|erstelle)\s+(?:mir\s+)?(?:(\d+)\s+)?lernkarten\s+zu\s+(.+)", low_txt)
+        if m_cards:
+            count_str, topic = m_cards.group(1), m_cards.group(2).strip()
+            count = int(count_str) if count_str else 10
+            self._create_ai_flashcards(topic, count)
             return
 
         char_name = str(self.char_info().get("name", "Kylie"))
@@ -729,6 +783,7 @@ class Buddy(QObject):
 
     def _on_task_finished(self, ok: bool, message: str, notify: str) -> None:
         self.pet.freeze(False)
+        self._award_friendship("chat")
         low = (message or "").lower()
         if "💃" in message or "tanz" in low:
             self.pet.dance(6.0)
@@ -762,6 +817,18 @@ class Buddy(QObject):
         self.tray.showMessage(f"\u23F0 Timer abgelaufen: {label}", f"Die Zeit f\u00fcr \u201e{label}\u201c ({time_hint}) ist um!", self.icon, 7000)
         self.brain.record_assistant_message(msg)
 
+        # Phase 6: Pomodoro / Fokus zählen & Freundschaftspunkte
+        low_label = (label or "").lower()
+        if any(k in low_label for k in ("pomodoro", "fokus")):
+            from fun import record_focus_session
+            from memory_store import get_memory_store
+            try:
+                store = get_memory_store()
+                record_focus_session(store, max(1, mins or 25))
+                self._award_friendship("pomodoro")
+            except Exception as exc:
+                print(f"[focus] Fehler beim Zählen: {exc}")
+
     def _on_character_changed(self, _cid: str) -> None:
         ci = self.char_info()
         self._say(f"{ci.get('sound', '')} Ich bin {ci.get('name', 'Kylie')}! {ci.get('emoji', '')}", 3000)
@@ -770,6 +837,7 @@ class Buddy(QObject):
         n = int(self.cfg.get("treats", 0))
         ci = self.char_info()
         self._say(f"{ci.get('sound', 'Mjam!')} Danke, {self.user_name()}! \U0001F356 Schon {n} Leckerli bekommen! \U0001F496", 4000)
+        self._award_friendship("treat")
 
     # -- Phase 3: Alltag, Neugier, Briefing, Geburtstag, Schlafenszeit -----------------
     def _check_birthday_and_briefing(self) -> None:
@@ -856,6 +924,15 @@ class Buddy(QObject):
                 "curious_last_ts": store.get_stat("curious_last_ts", "0"),
             }
             if not should_ask_curious(now, stats, self.cfg.snapshot()):
+                return
+
+            hard_cards = [c for c in store.get_cards() if c["box"] == 1]
+            if len(hard_cards) >= 3 and (getattr(self, "_difficult_cards_count", 0) >= 3 or random.random() < 0.4):
+                self._difficult_cards_count = 0
+                q = f"Wollen wir die {len(hard_cards)} kniffligen Lernkarten nochmal üben, {self.user_name()}? 📚 Sag einfach 'quiz starten'!"
+                self.pet.wake()
+                self._say(q, duration_ms=7500)
+                self.brain.record_assistant_message(q)
                 return
 
             facts = store.facts()[:5]
@@ -1082,6 +1159,251 @@ class Buddy(QObject):
         dlg = MyDataDialog(self.cfg)
         dlg.setWindowIcon(self.icon)
         dlg.exec()
+
+    # -- Phase 6: Freundschaft, Fokus, Lernkarten, Fotobox & Notizen ------------------
+    def _award_friendship(self, kind: str) -> None:
+        try:
+            from fun import LEVEL_NAMES, LEVEL_REWARDS, add_friendship_points
+            from memory_store import get_memory_store
+            store = get_memory_store()
+            pts_added, did_lvl_up, new_lvl = add_friendship_points(store, kind)
+            if did_lvl_up:
+                self.pet.celebrate_confetti(5.0)
+                lvl_title = LEVEL_NAMES.get(new_lvl, "Freunde")
+                reward_title, _ = LEVEL_REWARDS.get(new_lvl, ("", None))
+                rew_text = f" Belohnung freigeschaltet: {reward_title}! 🎁" if reward_title else ""
+                msg = f"Level {new_lvl}! Wir sind jetzt {lvl_title}, {self.user_name()} 💖{rew_text}"
+                self._say(msg, 6000)
+                self.brain.record_assistant_message(msg)
+        except Exception as exc:
+            print(f"[friendship] Fehler beim Vergeben von Punkten: {exc}")
+
+    def open_friendship_dialog(self) -> None:
+        from fun_dialogs import FriendshipDialog
+        from memory_store import get_memory_store
+        dlg = FriendshipDialog(get_memory_store(), self.cfg, self.char_info(), self.pet)
+        dlg.accessory_changed.connect(lambda acc: self.pet.update())
+        dlg.exec()
+
+    def open_focus_stats_dialog(self) -> None:
+        from fun_dialogs import FocusStatsDialog
+        from memory_store import get_memory_store
+        dlg = FocusStatsDialog(get_memory_store(), self.char_info(), self.pet)
+        dlg.exec()
+
+    def open_flashcards_dialog(self) -> None:
+        from fun_dialogs import FlashcardsDialog
+        from memory_store import get_memory_store
+        dlg = FlashcardsDialog(get_memory_store(), self.pet)
+        dlg.quiz_requested.connect(self.start_flashcard_quiz)
+        dlg.exec()
+
+    def start_flashcard_quiz(self, deck: Optional[str] = None) -> None:
+        from memory_store import get_memory_store
+        store = get_memory_store()
+        cards = store.get_cards(deck) if deck else store.get_cards()
+        if not cards and deck:
+            cards = store.get_cards()
+        if not cards:
+            self._say("Du hast noch keine Lernkarten! 📚 Öffne per Rechtsklick '📚 Lernkarten' oder sag 'Kylie, erstelle mir Lernkarten zu Englisch'!", 5000)
+            return
+
+        sorted_cards = sorted(cards, key=lambda c: c.get("box", 1))
+        quiz_cards = sorted_cards[:10]
+        random.shuffle(quiz_cards)
+
+        self._quiz_session = {
+            "deck": deck or "Allgemein",
+            "cards": quiz_cards,
+            "index": 0,
+            "correct": 0,
+            "total": len(quiz_cards),
+        }
+        self.pet.wake()
+        self._say(f"Quiz-Runde startet! 📚 ({len(quiz_cards)} Karten)", 2500)
+        QTimer.singleShot(2600, self._ask_next_quiz_card)
+
+    def _ask_next_quiz_card(self) -> None:
+        if not self._quiz_session:
+            return
+        idx = self._quiz_session["index"]
+        cards = self._quiz_session["cards"]
+        if idx >= len(cards):
+            self._finish_quiz()
+            return
+
+        card = cards[idx]
+        total = self._quiz_session["total"]
+        q_text = f"📚 Frage {idx + 1}/{total}:\n„{card['front']}“\n(Tippe deine Antwort)"
+        self._say(q_text, duration_ms=10000, persistent=True)
+        QTimer.singleShot(500, lambda: self.open_input(reply_mode=True))
+
+    def _handle_quiz_answer(self, text: str) -> None:
+        if not self._quiz_session:
+            return
+        if text.strip().lower() in ("abbrechen", "stop", "beenden", "quiz beenden"):
+            self._quiz_session = None
+            self._say("Quiz abgebrochen. Wir üben ein andermal weiter! 🐾", 3000)
+            return
+
+        from fun import compare_answer, update_leitner_box
+        from memory_store import get_memory_store
+        store = get_memory_store()
+
+        session = self._quiz_session
+        idx = session["index"]
+        card = session["cards"][idx]
+        expected = card["back"]
+
+        is_correct, is_close = compare_answer(text, expected)
+        new_box = update_leitner_box(card["box"], is_correct)
+        try:
+            store.update_card_box(card["id"], new_box)
+        except Exception:
+            pass
+
+        if is_correct:
+            session["correct"] += 1
+            self.pet.react_happy()
+            if is_close:
+                feedback = f"Fast perfekt! 🎉\nRichtige Antwort: „{expected}“"
+            else:
+                feedback = f"Richtig! 🌟\n„{expected}“"
+        else:
+            self.pet.sad(2.0)
+            feedback = f"Leider nicht ganz! 💡\nDie Lösung war: „{expected}“"
+
+        session["index"] += 1
+        self._say(feedback, 2500)
+        QTimer.singleShot(2600, self._ask_next_quiz_card)
+
+    def _finish_quiz(self) -> None:
+        session = self._quiz_session
+        self._quiz_session = None
+        if not session:
+            return
+        correct = session["correct"]
+        total = session["total"]
+        self._award_friendship("quiz")
+        if correct >= total * 0.7:
+            self.pet.celebrate(4.0)
+            msg = f"Quiz abgeschlossen! 🌟 {correct} von {total} richtig! Super gemacht, {self.user_name()}! (+3 Freundschaftspunkte 💖)"
+        elif correct >= total * 0.4:
+            self.pet.react_happy()
+            msg = f"Quiz beendet! 🐾 {correct} von {total} richtig. Guter Versuch! (+3 Freundschaftspunkte 💖)"
+        else:
+            self.pet.calm()
+            msg = f"Quiz beendet! 💡 {correct} von {total} richtig. Nicht aufgeben! (+3 Freundschaftspunkte 💖)"
+        self._say(msg, 6000)
+        self.brain.record_assistant_message(msg)
+
+        from memory_store import get_memory_store
+        try:
+            hard = [c for c in get_memory_store().get_cards() if c["box"] == 1]
+            if len(hard) >= 3:
+                self._difficult_cards_count = len(hard)
+        except Exception:
+            pass
+
+    def _create_ai_flashcards(self, topic: str, count: int = 10) -> None:
+        if not gemini.has_key():
+            self._say("Für automatische KI-Lernkarten trage bitte erst deinen Gemini-Key ein (Rechtsklick → Gemini-Key eintragen) 🔑", 4500)
+            return
+
+        self._say(f"Ich erstelle {count} Lernkarten zu „{topic}“ für dich... 🧠📚", persistent=True)
+        from fun_dialogs import GeminiCardWorker
+        from memory_store import get_memory_store
+
+        worker = GeminiCardWorker(topic)
+        def _on_success(cards):
+            store = get_memory_store()
+            deck_name = topic.strip().capitalize()
+            for front, back in cards[:count]:
+                store.add_card(deck_name, front, back)
+            self.pet.celebrate(3.0)
+            self._say(f"Fertig! 🎉 {len(cards[:count])} Lernkarten im Deck „{deck_name}“ gespeichert. Sag 'quiz starten', um loszulegen! 🐾", 6000)
+        def _on_fail(err):
+            self.pet.sad()
+            self._say(f"Konnte keine Karten erstellen: {err}", 4000)
+
+        worker.success.connect(_on_success)
+        worker.failed.connect(_on_fail)
+        worker.finished.connect(lambda: self._active_workers.remove(worker) if worker in self._active_workers else None)
+        self._active_workers.append(worker)
+        worker.start()
+
+    def start_photobox(self) -> None:
+        cname = self.char_info().get("name", "Kylie")
+        self._say(f"Achtung, der ganze Bildschirm ist auf dem Foto mit {cname} 📸", 2400)
+        pose_choice = random.choice(["dance", "cool", "celebrate"])
+        if pose_choice == "dance":
+            self.pet.dance(6.0)
+        elif pose_choice == "cool":
+            self.pet.be_cool(6.0)
+        else:
+            self.pet.celebrate(6.0)
+
+        QTimer.singleShot(2400, lambda: self._say("3... 🐾", 1000))
+        QTimer.singleShot(3500, lambda: self._say("2... 📸", 1000))
+        QTimer.singleShot(4600, lambda: self._say("1... Smile! ✨", 900))
+        QTimer.singleShot(5600, self._snap_photobox)
+
+    def _snap_photobox(self) -> None:
+        try:
+            from fun import frame_photobox_image, generate_photobox_filename
+            self.bubble.hide_now()
+
+            screen = self.app.primaryScreen()
+            if not screen:
+                return
+            pix = screen.grabWindow(0)
+            img = pix.toImage()
+
+            cname = self.char_info().get("name", "Kylie")
+            now_dt = datetime.datetime.now()
+            date_time_str = now_dt.strftime("%d.%m.%Y %H:%M")
+            framed = frame_photobox_image(img, date_time_str, cname)
+
+            pics_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)
+            target_dir = Path(pics_dir) / "Desktop Cat"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            fname = generate_photobox_filename(now_dt)
+            out_path = target_dir / fname
+            framed.save(str(out_path))
+
+            self.pet.react_happy()
+            self._say("Klick! 📸 Wunderschön geworden! ✨", 4000)
+            self._last_photo_folder = str(target_dir)
+            self.tray.showMessage(
+                "📸 Foto gespeichert!",
+                f"Gespeichert in: Bilder/Desktop Cat/{fname} (Klicken zum Öffnen)",
+                self.icon,
+                7000,
+            )
+        except Exception as exc:
+            print(f"[photobox] Fehler: {exc}")
+            self._say(f"Konnte kein Foto aufnehmen: {exc}", 4000)
+
+    def _on_tray_message_clicked(self) -> None:
+        if getattr(self, "_last_photo_folder", None):
+            folder = self._last_photo_folder
+            self._last_photo_folder = None
+            try:
+                import os
+                os.startfile(folder)
+            except Exception:
+                pass
+
+    def create_sticky_note(self, text: str = "", color: str = "yellow") -> None:
+        note_id, x, y = self.note_manager.create_note(text=text, color=color)
+        target_pt = QPointF(float(x - 50), float(y + 20))
+        self.pet.fly_to(target_pt)
+        QTimer.singleShot(1100, lambda: self.pet.push_animation(1.2))
+        self._say("Haftnotiz angeklebt! 📌", 3000)
+
+    def _on_note_completed(self, _note_id: int) -> None:
+        self.pet.react_happy()
+        self._say("Erledigt! Super gemacht! ✨", 3500)
 
     # -- Phase 5: IT-Support, Klick-Guide, Fehler-Doktor & Kopieren/Erklären -----------
     def _explain_hotkey_pressed(self) -> None:

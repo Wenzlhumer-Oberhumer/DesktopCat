@@ -39,6 +39,7 @@ def main():
         "test_daily",
         "test_accessories",
         "test_it_guide",
+        "test_fun",
     ]
 
     total = 0
