@@ -222,9 +222,13 @@ class SettingsDialog(QDialog):
         self.hotkey_edit = QLineEdit(str(cfg.get("hotkey", "ctrl+alt+p")))
         self.hotkey_edit.setPlaceholderText("z. B. ctrl+alt+p")
         form2.addRow("Tastenk\u00fcrzel", self.hotkey_edit)
+
+        self.hotkey_explain_edit = QLineEdit(str(cfg.get("hotkey_explain", "ctrl+alt+e")))
+        self.hotkey_explain_edit.setPlaceholderText("z. B. ctrl+alt+e")
+        form2.addRow("Kopieren & Erkl\u00e4ren", self.hotkey_explain_edit)
         root.addLayout(form2)
 
-        self.hotkey_hint = QLabel("Format: ctrl / alt / shift / win + Taste, z. B. ctrl+alt+p oder ctrl+shift+f5")
+        self.hotkey_hint = QLabel("Format: ctrl / alt / shift / win + Taste, z. B. ctrl+alt+p oder ctrl+alt+e")
         self.hotkey_hint.setObjectName("hint")
         root.addWidget(self.hotkey_hint)
 
@@ -316,7 +320,13 @@ class SettingsDialog(QDialog):
             self.hotkey_hint.setText("\u274c  Ung\u00fcltiges Tastenk\u00fcrzel - Beispiel: ctrl+alt+p")
             self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
             return
+        hotkey_ex = self.hotkey_explain_edit.text().strip().lower()
+        if not self._hotkey_ok(hotkey_ex):
+            self.hotkey_hint.setText("\u274c  Ung\u00fcltiges Tastenk\u00fcrzel f\u00fcr Kopieren & Erkl\u00e4ren - Beispiel: ctrl+alt+e")
+            self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
+            return
         c.set("hotkey", hotkey)
+        c.set("hotkey_explain", hotkey_ex)
         char = self.char_combo.currentData()
         if char:
             c.set("pet.character", str(char))

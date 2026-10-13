@@ -1,7 +1,7 @@
 """Sprechblase und Eingabeleiste: schwebende, abgerundete Dark-Mode-Karten mit Pfeil zum Pet."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 from PyQt6.QtCore import (
     QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, Qt, QTimer, pyqtSignal,
@@ -9,7 +9,7 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QColor, QFont, QFontMetrics, QGuiApplication, QLinearGradient, QPainter, QPainterPath, QPalette, QPen,
 )
-from PyQt6.QtWidgets import QLabel, QLineEdit, QWidget
+from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton, QWidget
 
 FONT_FAMILY = "Segoe UI"
 BG_TOP = QColor("#35373D")
@@ -171,12 +171,24 @@ class SpeechBubble(FloatingCard):
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(lambda: self.fade_out())
         self.persistent = False
+        self._buttons: list[QPushButton] = []
+        self._action_callbacks: list[tuple[str, Callable]] = []
+        self._actions_active = False
+
+    def _clear_actions(self) -> None:
+        self._actions_active = False
+        self._action_callbacks.clear()
+        for btn in self._buttons:
+            btn.hide()
+            btn.deleteLater()
+        self._buttons.clear()
 
     def say(self, text: str, duration_ms: Optional[int] = None, persistent: bool = False) -> None:
         """Zeigt Text. persistent=True bleibt bis zur naechsten Nachricht stehen (z. B. 'Ich bin dran...')."""
         text = (text or "").strip()
         if not text:
             return
+        self._clear_actions()
         self.persistent = persistent
         fm = QFontMetrics(self.label.font())
         rect = fm.boundingRect(QRect(0, 0, self.MAX_TEXT_W, 4000), int(Qt.TextFlag.TextWordWrap), text)
@@ -199,13 +211,102 @@ class SpeechBubble(FloatingCard):
                 duration_ms = base + max(0, len(text) - 60) * 45
             self._hide_timer.start(min(duration_ms, 14000))
 
+    def show_with_actions(
+        self,
+        text: str,
+        actions: list[tuple[str, Callable]],
+        duration_ms: Optional[int] = None,
+    ) -> None:
+        """Zeigt Text mit interaktiven Aktions-Buttons (z. B. Weiter / Nochmal / Fertig)."""
+        text = (text or "").strip()
+        if not text:
+            return
+        self._clear_actions()
+        self._actions_active = True
+        self.persistent = (duration_ms is None)
+
+        fm = QFontMetrics(self.label.font())
+        rect = fm.boundingRect(QRect(0, 0, max(self.MAX_TEXT_W, 280), 4000), int(Qt.TextFlag.TextWordWrap), text)
+        tw, th = max(rect.width() + 6, 80), rect.height() + 4
+        self.label.setText(text)
+
+        btn_font = QFont(FONT_FAMILY)
+        btn_font.setPointSizeF(9.5)
+        btn_font.setBold(True)
+        btn_fm = QFontMetrics(btn_font)
+
+        btn_widths: list[int] = []
+        for label, cb in actions:
+            btn = QPushButton(label, self)
+            btn.setFont(btn_font)
+            btn.setStyleSheet(
+                "QPushButton { background: rgba(255, 255, 255, 22); border: 1px solid rgba(255, 255, 255, 45);"
+                " border-radius: 9px; color: #F5F6F8; padding: 4px 10px; font-weight: 600; }"
+                "QPushButton:hover { background: rgba(255, 143, 177, 50); border: 1px solid #FF8FB1; color: #FFFFFF; }"
+                "QPushButton:pressed { background: rgba(255, 143, 177, 90); }"
+            )
+            btn.clicked.connect(lambda checked=False, callback=cb: self._on_action_clicked(callback))
+            btn.show()
+            self._buttons.append(btn)
+            self._action_callbacks.append((label, cb))
+            bw = btn_fm.horizontalAdvance(label) + 24
+            btn_widths.append(bw)
+
+        total_btn_w = sum(btn_widths) + max(0, len(btn_widths) - 1) * 8
+        content_w = max(tw, total_btn_w, 200)
+        btn_h = 28
+        content_h = th + 12 + btn_h
+
+        self.label.setGeometry(self.M + self.PAD_X, self.M + self.PAD_Y, content_w, th)
+
+        # Buttons unten anordnen
+        bx = self.M + self.PAD_X
+        by = self.M + self.PAD_Y + th + 10
+        for btn, bw in zip(self._buttons, btn_widths):
+            btn.setGeometry(bx, by, bw, btn_h)
+            bx += bw + 8
+
+        self.set_content_size(content_w + 2 * self.PAD_X, content_h + 2 * self.PAD_Y)
+
+        self._hide_timer.stop()
+        if not self.isVisible():
+            self.setWindowOpacity(0.0)
+            self.show()
+        self.fade_in()
+        self.setFocus()
+        if duration_ms is not None:
+            self._hide_timer.start(duration_ms)
+
+    def _on_action_clicked(self, callback: Callable) -> None:
+        self._actions_active = False
+        self._hide_timer.stop()
+        self.fade_out(150)
+        try:
+            callback()
+        except Exception:
+            pass
+
+    def keyPressEvent(self, event) -> None:
+        if self._actions_active and event.key() == Qt.Key.Key_Escape:
+            for label, cb in self._action_callbacks:
+                low = label.lower()
+                if any(k in low for k in ("fertig", "schließen", "abbrechen", "close")):
+                    self._on_action_clicked(cb)
+                    return
+            self.fade_out(150)
+            return
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event) -> None:
+        if self._actions_active:
+            return
         self._hide_timer.stop()
         self.fade_out(150)
         self.clicked.emit()
 
     def on_hidden(self) -> None:
         self.persistent = False
+        self._clear_actions()
 
 
 class BriefingCard(FloatingCard):
@@ -252,6 +353,85 @@ class BriefingCard(FloatingCard):
         self._hide_timer.stop()
         self.fade_out(150)
         self.clicked.emit()
+
+
+class ExplainCard(FloatingCard):
+    """Ergebnis-Karte fuer 'Kopieren & Erklaeren' mit Kopieren-Button und Dark-Mode Styling."""
+
+    CARD_W = 340
+
+    def __init__(self, parent=None):
+        super().__init__(focusable=True)
+        self._full_text = ""
+
+        self.title_label = QLabel(self)
+        font_title = QFont(FONT_FAMILY)
+        font_title.setPointSizeF(11)
+        font_title.setBold(True)
+        self.title_label.setFont(font_title)
+        self.title_label.setStyleSheet("color: #FF8FB1; background: transparent;")
+
+        self.text_label = QLabel(self)
+        self.text_label.setWordWrap(True)
+        self.text_label.setTextFormat(Qt.TextFormat.PlainText)
+        font_text = QFont(FONT_FAMILY)
+        font_text.setPointSizeF(10)
+        self.text_label.setFont(font_text)
+        self.text_label.setStyleSheet("color: #F5F6F8; background: transparent;")
+
+        btn_style = (
+            "QPushButton { background: rgba(255, 255, 255, 22); border: 1px solid rgba(255, 255, 255, 45);"
+            " border-radius: 9px; color: #F5F6F8; padding: 4px 10px; font-weight: 600; font-family: 'Segoe UI'; font-size: 9.5pt; }"
+            "QPushButton:hover { background: rgba(255, 143, 177, 50); border: 1px solid #FF8FB1; color: #FFFFFF; }"
+            "QPushButton:pressed { background: rgba(255, 143, 177, 90); }"
+        )
+        self.copy_btn = QPushButton("📋 Kopieren", self)
+        self.close_btn = QPushButton("✖ Schließen", self)
+        self.copy_btn.setStyleSheet(btn_style)
+        self.close_btn.setStyleSheet(btn_style)
+        self.copy_btn.clicked.connect(self._copy_to_clipboard)
+        self.close_btn.clicked.connect(lambda: self.fade_out(150))
+
+    def _copy_to_clipboard(self) -> None:
+        if self._full_text:
+            QGuiApplication.clipboard().setText(self._full_text)
+            self.copy_btn.setText("Kopiert! ✨")
+            QTimer.singleShot(1500, lambda: self.copy_btn.setText("📋 Kopieren"))
+
+    def show_result(self, title: str, text: str, anchor: QPoint) -> None:
+        self._full_text = text.strip()
+        self.title_label.setText(title)
+        self.text_label.setText(self._full_text)
+
+        fm = QFontMetrics(self.text_label.font())
+        rect = fm.boundingRect(QRect(0, 0, self.CARD_W - 32, 4000), int(Qt.TextFlag.TextWordWrap), self._full_text)
+        th = max(rect.height() + 8, 40)
+        cw = self.CARD_W
+        title_h = 24
+        btn_h = 28
+        total_h = title_h + 6 + th + 12 + btn_h
+
+        self.title_label.setGeometry(self.M + 16, self.M + 12, cw - 32, title_h)
+        self.text_label.setGeometry(self.M + 16, self.M + 12 + title_h + 6, cw - 32, th)
+
+        by = self.M + 12 + title_h + 6 + th + 10
+        self.copy_btn.setGeometry(self.M + 16, by, 110, btn_h)
+        self.close_btn.setGeometry(self.M + 16 + 118, by, 100, btn_h)
+
+        self.set_content_size(cw, total_h)
+        self.anchor_to(anchor)
+
+        if not self.isVisible():
+            self.setWindowOpacity(0.0)
+            self.show()
+        self.fade_in()
+        self.setFocus()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.fade_out(150)
+            return
+        super().keyPressEvent(event)
 
 
 class _Line(QLineEdit):

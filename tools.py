@@ -1411,6 +1411,15 @@ def wipe_my_data() -> ToolResult:
     return ToolResult(True, f"Alles vergessen, {_user_name()}! Deine Chats und Fakten wurden komplett gelöscht. 🧹✨")
 
 
+def start_it_guide(question: str = "") -> ToolResult:
+    """Startet den interaktiven Klick-Guide fuer Windows und Apps."""
+    return ToolResult(
+        True,
+        "IT-Support-Modus aktiviert! 🕶️ Ich zeig's dir Schritt für Schritt.",
+        data={"question": question},
+    )
+
+
 # ======================================================================================
 #  Registry (fuer KI-Tool-Calling) + sicherer Aufruf
 # ======================================================================================
@@ -1444,6 +1453,7 @@ TOOLS: dict[str, Callable[..., ToolResult]] = {
     "list_facts": list_facts,
     "forget_facts": forget_facts,
     "wipe_my_data": wipe_my_data,
+    "start_it_guide": start_it_guide,
 }
 
 TOOL_SPECS: list[dict] = [
@@ -1653,6 +1663,13 @@ TOOL_SPECS: list[dict] = [
         "name": "wipe_my_data",
         "description": "Loescht alle gemerkten Chats und persoenlichen Fakten restlos vom PC.",
         "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "start_it_guide",
+        "description": "Nutze dies, wenn der Nutzer wissen will, WO/WIE er etwas in einem Programm oder in Windows findet, einstellt oder klickt.",
+        "parameters": {"type": "object", "properties": {
+            "question": {"type": "string", "description": "Die technische Frage oder das Ziel des Nutzers, z. B. 'Wo ändere ich in Word die Formatvorlage?'."}},
+            "required": ["question"]},
     },
 ]
 

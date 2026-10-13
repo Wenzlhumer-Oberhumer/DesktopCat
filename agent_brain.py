@@ -350,6 +350,10 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
     if re.search(r"\b(ip-?adresse|wie\s*ist\s*(?:meine\s*)?ip|netzwerk\s*status|wlan\s*status|bin\s*ich\s*online|internet\s*status|habe?\s*ich\s*internet)\b", n):
         return Plan("network_info")
 
+    # IT-Guide / Klick-Anleitung
+    if re.search(r"\b(klick-?anleitung|it-?guide|zeig\s*mir\s*wie|wie\s*(?:stelle|ändere|aendere|mache|finde)\s*ich)\b", n):
+        return Plan("start_it_guide", {"question": raw})
+
     # 1. Undo
     if re.search(r"ruckgangig|\bundo\b", n):
         return Plan("undo_organize_desktop")
@@ -656,6 +660,8 @@ class AgentWorker(QObject):
         self.pending = pending                 # (tool, args) aus der letzten Rueckfrage, falls vorhanden
         self.new_pending: Optional[tuple[str, dict]] = None   # gesetzt, wenn jetzt eine Rueckfrage gestellt wird
         self.results: list[ToolResult] = []
+        self.action: Optional[str] = None
+        self.action_data: Optional[dict] = None
 
     @property
     def user_name(self) -> str:
@@ -747,6 +753,8 @@ class AgentWorker(QObject):
 
         # Offline / Fallback
         plan = parse_offline(self.text, self.user_name, self.character_id)
+        if plan.tool == "start_it_guide":
+            return True, "Für die Klick-Anleitung brauche ich meinen Gemini-Key 🔑", ""
         if plan.tool in DANGEROUS_TOOLS:
             return True, self._ask_confirmation(plan.tool, plan.args), ""
         if plan.tool:
@@ -875,6 +883,12 @@ class AgentWorker(QObject):
                 })
                 continue
 
+            if tool_name == "start_it_guide":
+                self.action = "it_guide"
+                q = str(tool_args.get("question", "")).strip() or self.text
+                self.action_data = {"question": q}
+                return say_text or "IT-Support-Modus aktiviert! 🕶️ Ich zeig's dir Schritt für Schritt."
+
             if tool_name in DANGEROUS_TOOLS:
                 return self._ask_confirmation(tool_name, tool_args)
 
@@ -897,6 +911,7 @@ class AgentWorker(QObject):
 class AgentBrain(QObject):
     started = pyqtSignal(str)                # Aufgabe begonnen (-> Pet: WORKING)
     finished = pyqtSignal(bool, str, str)    # ok, Nachricht, Benachrichtigungstitel
+    it_guide_requested = pyqtSignal(str)     # Frage fuer Klick-Anleitung
 
     def __init__(self, cfg, parent=None):
         super().__init__(parent)
@@ -950,8 +965,11 @@ class AgentBrain(QObject):
     @pyqtSlot(bool, str, str)
     def _on_done(self, ok: bool, message: str, notify: str) -> None:
         self._busy = False
+        guide_q = None
         if self._worker is not None:
             self.pending_action = self._worker.new_pending
+            if getattr(self._worker, "action", None) == "it_guide" and getattr(self._worker, "action_data", None):
+                guide_q = self._worker.action_data.get("question", self._current_text)
             self._worker = None
         self._history.append(("user", self._current_text))
         self._history.append(("assistant", message))
@@ -970,6 +988,8 @@ class AgentBrain(QObject):
             logger.warning(f"Konnte Chat nicht speichern: {exc}")
 
         self.finished.emit(ok, message, notify)
+        if guide_q:
+            self.it_guide_requested.emit(guide_q)
 
     @pyqtSlot()
     def _reap_threads(self) -> None:

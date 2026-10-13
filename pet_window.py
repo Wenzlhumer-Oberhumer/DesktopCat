@@ -96,6 +96,7 @@ class PetWindow(QWidget):
     character_changed = pyqtSignal(str)
     treat_given = pyqtSignal()
     arrived = pyqtSignal()
+    error_doctor_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -814,6 +815,7 @@ class PetWindow(QWidget):
             menu.addAction("🔑  Gemini-Key eintragen").triggered.connect(self.settings_requested.emit)
             menu.addSeparator()
         menu.addAction("💬  Befehl eingeben").triggered.connect(self.input_requested.emit)
+        menu.addAction("🩺  Was heißt dieser Fehler?").triggered.connect(self.error_doctor_requested.emit)
         menu.addAction("📚  Meine Chats").triggered.connect(self.chats_requested.emit)
         menu.addAction("🔒  Meine Daten").triggered.connect(self.data_requested.emit)
         menu.addSeparator()

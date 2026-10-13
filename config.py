@@ -38,6 +38,7 @@ DEFAULTS: dict[str, Any] = {
     "first_run_done": False,
     "rename_intro_done": False,
     "hotkey": "ctrl+alt+p",
+    "hotkey_explain": "ctrl+alt+e",
     "wellbeing": {"breaks": True, "break_min": 60, "water": True},
     "battery_warn": True,
     "night_mode": True,

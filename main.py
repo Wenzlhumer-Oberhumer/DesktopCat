@@ -10,7 +10,7 @@ import random
 import sys
 import time
 import traceback
-from typing import Optional
+from typing import Callable, Optional
 
 from paths import APP_DIR, DATA_DIR, FROZEN, set_autostart
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_installer
@@ -74,9 +74,9 @@ except Exception:
 
 import gemini
 from PyQt6.QtCore import (
-    QAbstractNativeEventFilter, QBuffer, QObject, QThread, QTimer, pyqtSignal, pyqtSlot,
+    QAbstractNativeEventFilter, QBuffer, QObject, QPoint, QRect, QThread, QTimer, pyqtSignal, pyqtSlot,
 )
-from PyQt6.QtGui import QAction, QGuiApplication, QIcon
+from PyQt6.QtGui import QAction, QGuiApplication, QIcon, QScreen
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from agent_brain import AgentBrain, name_reaction
@@ -89,7 +89,7 @@ except ImportError:         # alte pet_sprites ohne Charakter-Registry
         return {}
 from pet_window import PetState, PetWindow, is_night, style_menu
 from settings_dialog import SettingsDialog
-from speech_bubble import BriefingCard, InputBar, SpeechBubble
+from speech_bubble import BriefingCard, ExplainCard, InputBar, SpeechBubble
 import tools
 from accessories import (
     calculate_cpu_percent,
@@ -98,6 +98,8 @@ from accessories import (
     seasonal_accessory,
     weather_accessories,
 )
+from guide_overlay import GuideOverlay
+from it_guide import GuideSession, GuideWorker, pixmap_to_b64
 
 class WeatherWorker(QThread):
     finished_with_result = pyqtSignal(object)
@@ -109,8 +111,68 @@ class WeatherWorker(QThread):
         except Exception:
             pass
 
+
+class ErrorDoctorWorker(QThread):
+    finished_with_result = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, image_b64: str):
+        super().__init__()
+        self.image_b64 = image_b64
+
+    def run(self) -> None:
+        try:
+            prompt = (
+                "Du bist ein geduldiger und kompetenter IT-Helfer. Schau dir den Screenshot an.\n"
+                "Findest du eine Fehlermeldung oder ein technisches Problem?\n"
+                "Erkläre die sichtbare Fehlermeldung in einfachen, verständlichen Worten auf Deutsch (2–3 Sätze).\n"
+                "Gib danach 1–3 konkrete Lösungsschritte an.\n"
+                "Wenn keine Fehlermeldung oder Problem sichtbar ist, erkläre freundlich, dass du keinen Fehler siehst."
+            )
+            ans = gemini.ask(prompt, timeout_s=45.0, image_b64=self.image_b64)
+            self.finished_with_result.emit(ans)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
+class ClipboardExplainWorker(QThread):
+    finished_with_result = pyqtSignal(str, str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, mode: str, text: str):
+        super().__init__()
+        self.mode = mode
+        self.text = text
+
+    def run(self) -> None:
+        try:
+            if self.mode == "explain":
+                title = "💡 Erklärung"
+                prompt = f"Erkläre folgenden Text einfach und verständlich auf Deutsch:\n\n{self.text}"
+            elif self.mode == "translate":
+                title = "🌍 Übersetzung"
+                prompt = (
+                    "Übersetze folgenden Text. Wenn er deutsch ist, übersetze auf Englisch. "
+                    f"Wenn er englisch oder in einer anderen Sprache ist, übersetze auf Deutsch:\n\n{self.text}"
+                )
+            elif self.mode == "summarize":
+                title = "📝 Zusammenfassung"
+                prompt = f"Fasse folgenden Text kurz und prägnant in Stichpunkten zusammen:\n\n{self.text}"
+            elif self.mode == "improve":
+                title = "✍️ Verbessert"
+                prompt = f"Verbessere folgenden Text stilistisch und grammatikalisch auf Deutsch:\n\n{self.text}"
+            else:
+                title = "💡 Text"
+                prompt = f"Erkläre folgenden Text:\n\n{self.text}"
+
+            ans = gemini.ask(prompt, timeout_s=40.0)
+            self.finished_with_result.emit(title, ans)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
 APP_ID = "MochiDesktopBuddy"
 HOTKEY_ID = 0xB0B0
+EXPLAIN_HOTKEY_ID = 0xB0B1
 WM_HOTKEY = 0x0312
 
 
@@ -229,32 +291,50 @@ def parse_hotkey(spec: str):
 
 
 class HotkeyFilter(QAbstractNativeEventFilter):
-    """Globales Tastenkuerzel (RegisterHotKey) - funktioniert auch, wenn ein anderes Programm den Fokus hat."""
+    """Globales Tastenkuerzel (RegisterHotKey) - unterstuetzt mehrere Hotkeys (z. B. Eingabeleiste & Kopieren/Erklaeren)."""
 
-    def __init__(self, callback):
+    def __init__(self, callback=None):
         super().__init__()
-        self._cb = callback
-        self.registered = False
+        self._cbs: dict[int, Callable] = {}
+        if callback is not None:
+            self._cbs[HOTKEY_ID] = callback
+        self.registered_ids: set[int] = set()
 
-    def register(self, spec: str) -> bool:
+    def register(self, spec: str, hotkey_id: int = HOTKEY_ID, callback=None) -> bool:
         parsed = parse_hotkey(spec)
         if not parsed:
             return False
         mods, vk = parsed
-        self.registered = bool(ctypes.windll.user32.RegisterHotKey(None, HOTKEY_ID, mods | 0x4000, vk))  # MOD_NOREPEAT
-        return self.registered
+        if callback is not None:
+            self._cbs[hotkey_id] = callback
+        try:
+            ok = bool(ctypes.windll.user32.RegisterHotKey(None, hotkey_id, mods | 0x4000, vk))  # MOD_NOREPEAT
+            if ok:
+                self.registered_ids.add(hotkey_id)
+            return ok
+        except Exception:
+            return False
 
-    def unregister(self) -> None:
-        if self.registered:
-            ctypes.windll.user32.UnregisterHotKey(None, HOTKEY_ID)
-            self.registered = False
+    def unregister(self, hotkey_id: Optional[int] = None) -> None:
+        try:
+            if hotkey_id is not None:
+                if hotkey_id in self.registered_ids:
+                    ctypes.windll.user32.UnregisterHotKey(None, hotkey_id)
+                    self.registered_ids.discard(hotkey_id)
+            else:
+                for hid in list(self.registered_ids):
+                    ctypes.windll.user32.UnregisterHotKey(None, hid)
+                self.registered_ids.clear()
+        except Exception:
+            pass
 
     def nativeEventFilter(self, eventType, message):
         try:
             if bytes(eventType) == b"windows_generic_MSG":
                 msg = ctypes.wintypes.MSG.from_address(int(message))
-                if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                    QTimer.singleShot(0, self._cb)
+                if msg.message == WM_HOTKEY and msg.wParam in self._cbs:
+                    cb = self._cbs[msg.wParam]
+                    QTimer.singleShot(0, cb)
         except Exception:
             pass
         return False, 0
@@ -342,6 +422,15 @@ class Buddy(QObject):
         self.input.closed.connect(self._on_input_closed)
         self.brain.started.connect(self._on_task_started)
         self.brain.finished.connect(self._on_task_finished)
+        self.brain.it_guide_requested.connect(self.start_it_guide)
+        self.pet.error_doctor_requested.connect(self.start_error_doctor)
+
+        self.explain_card = ExplainCard()
+        self.guide_overlay: Optional[GuideOverlay] = None
+        self._guide_session: Optional[GuideSession] = None
+        self._guide_workers: set[QThread] = set()
+        self._explain_workers: set[QThread] = set()
+        self._error_doctor_workers: set[QThread] = set()
 
         self._last_ambient_comment = ""
         self._mochi_asked_question = False
@@ -354,6 +443,11 @@ class Buddy(QObject):
         self.hotkey = HotkeyFilter(self._hotkey_pressed)
         self.app.installNativeEventFilter(self.hotkey)
         self._hotkey_ok = self.hotkey.register(cfg.get("hotkey", "ctrl+alt+p"))
+        self._hotkey_explain_ok = self.hotkey.register(
+            cfg.get("hotkey_explain", "ctrl+alt+e"),
+            EXPLAIN_HOTKEY_ID,
+            self._explain_hotkey_pressed,
+        )
 
         self._chatter = QTimer(self)
         self._chatter.setSingleShot(True)
@@ -402,6 +496,7 @@ class Buddy(QObject):
             self._act(self.tray_menu, "\U0001F511  Gemini-Key eintragen", self.open_settings)
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, "💬  Befehl eingeben", self.open_input)
+        self._act(self.tray_menu, "🩺  Was heißt dieser Fehler?", self.start_error_doctor)
         self._act(self.tray_menu, "📚  Meine Chats", self.open_chat_history)
         self._act(self.tray_menu, "🔒  Meine Daten", self.open_my_data)
         self._act(self.tray_menu, "\U0001F441\uFE0F  Bildschirm beobachten (Vision)", lambda: self._on_submit("was mache ich gerade"))
@@ -546,7 +641,11 @@ class Buddy(QObject):
         a = self.pet.head_anchor()
         self.bubble.anchor_to(a)
         self.briefing_card.anchor_to(a)
+        if hasattr(self, "explain_card") and self.explain_card.isVisible():
+            self.explain_card.anchor_to(a)
         self.input.anchor_to(a)
+        if getattr(self, "guide_overlay", None) and self.guide_overlay.isVisible():
+            self.guide_overlay.set_pet_pos(self.pet.pos())
 
     def _say(self, text: str, duration_ms=None, persistent: bool = False) -> None:
         if self.input.isVisible():
@@ -588,6 +687,11 @@ class Buddy(QObject):
     def _on_submit(self, text: str) -> None:
         self._mochi_asked_question = False
         self.input.hide_now()       # sofort weg, damit die "Ich bin dran"-Blase erscheinen darf
+
+        low_txt = text.strip().lower()
+        if any(k in low_txt for k in ("was bedeutet diese fehlermeldung", "was heißt dieser fehler", "was heisst dieser fehler", "fehlermeldung erklären", "fehlermeldung erklaeren")):
+            self.start_error_doctor()
+            return
 
         char_name = str(self.char_info().get("name", "Kylie"))
         nr = name_reaction(text, char_name, self.user_name())
@@ -934,6 +1038,7 @@ class Buddy(QObject):
         self._settings_open = True
         try:
             old_spec = str(self.cfg.get("hotkey", "ctrl+alt+p"))
+            old_ex_spec = str(self.cfg.get("hotkey_explain", "ctrl+alt+e"))
             dlg = SettingsDialog(self.cfg, hotkey_validator=lambda spec: parse_hotkey(spec) is not None)
             dlg.setWindowIcon(self.icon)
             if dlg.exec():
@@ -942,13 +1047,20 @@ class Buddy(QObject):
                 self._schedule_wellbeing()
                 spec = str(self.cfg.get("hotkey", "ctrl+alt+p"))
                 if spec != old_spec:
-                    self.hotkey.unregister()
-                    if not self.hotkey.register(spec):      # von anderem Programm belegt -> alten behalten
+                    self.hotkey.unregister(HOTKEY_ID)
+                    if not self.hotkey.register(spec, HOTKEY_ID, self._hotkey_pressed):
                         self.cfg.set("hotkey", old_spec)
                         self.cfg.save()
-                        self._hotkey_ok = self.hotkey.register(old_spec)
+                        self._hotkey_ok = self.hotkey.register(old_spec, HOTKEY_ID, self._hotkey_pressed)
                         self._say("Dieses Tastenk\u00fcrzel ist schon belegt \U0001F63F Ich behalte das alte.", 4500)
                         return
+                ex_spec = str(self.cfg.get("hotkey_explain", "ctrl+alt+e"))
+                if ex_spec != old_ex_spec:
+                    self.hotkey.unregister(EXPLAIN_HOTKEY_ID)
+                    if not self.hotkey.register(ex_spec, EXPLAIN_HOTKEY_ID, self._explain_hotkey_pressed):
+                        self.cfg.set("hotkey_explain", old_ex_spec)
+                        self.cfg.save()
+                        self.hotkey.register(old_ex_spec, EXPLAIN_HOTKEY_ID, self._explain_hotkey_pressed)
                 self._say("Gespeichert! \U0001F43E", 2000)
         finally:
             self._settings_open = False
@@ -970,6 +1082,276 @@ class Buddy(QObject):
         dlg = MyDataDialog(self.cfg)
         dlg.setWindowIcon(self.icon)
         dlg.exec()
+
+    # -- Phase 5: IT-Support, Klick-Guide, Fehler-Doktor & Kopieren/Erklären -----------
+    def _explain_hotkey_pressed(self) -> None:
+        text = QGuiApplication.clipboard().text().strip()
+        if not text:
+            self._say("Markier erst etwas und drück Strg+C 😺", 4000)
+            return
+        if len(text) > 4000:
+            text = text[:4000]
+
+        menu = style_menu(QMenu())
+        a_explain = menu.addAction("💡  Erklären")
+        a_translate = menu.addAction("🌍  Übersetzen (DE↔EN)")
+        a_summarize = menu.addAction("📝  Zusammenfassen")
+        a_improve = menu.addAction("✍️  Verbessern")
+
+        pos = self.pet.mapToGlobal(QPoint(self.pet.width() // 2, 0))
+        chosen = menu.exec(pos)
+        if not chosen:
+            return
+
+        if chosen == a_explain:
+            mode = "explain"
+        elif chosen == a_translate:
+            mode = "translate"
+        elif chosen == a_summarize:
+            mode = "summarize"
+        elif chosen == a_improve:
+            mode = "improve"
+        else:
+            return
+
+        self._run_clipboard_action(mode, text)
+
+    def _run_clipboard_action(self, mode: str, text: str) -> None:
+        if not gemini.has_key():
+            self._say("Für Erklärungen brauche ich meinen Gemini-Key 🔑", 4000)
+            return
+
+        self.pet.freeze(True)
+        self.pet.set_working()
+        self._say("Ich schau's mir an... 🐾", persistent=True)
+
+        worker = ClipboardExplainWorker(mode, text)
+        worker.finished_with_result.connect(self._on_explain_result)
+        worker.failed.connect(self._on_explain_failed)
+        worker.finished.connect(self._reap_explain_threads)
+        self._explain_workers.add(worker)
+        worker.start()
+
+    @pyqtSlot(str, str)
+    def _on_explain_result(self, title: str, result: str) -> None:
+        self.pet.freeze(False)
+        self.bubble.hide_now()
+        anchor = self.pet.head_anchor()
+        self.explain_card.show_result(title, result, anchor)
+
+    @pyqtSlot(str)
+    def _on_explain_failed(self, err: str) -> None:
+        self.pet.freeze(False)
+        self.bubble.hide_now()
+        self._say(f"Fehler: {err} 😿", 4500)
+
+    @pyqtSlot()
+    def _reap_explain_threads(self) -> None:
+        for t in [t for t in self._explain_workers if t.isFinished()]:
+            self._explain_workers.discard(t)
+            t.deleteLater()
+
+    # -- Fehler-Doktor -----------------------------------------------------------------
+    def start_error_doctor(self) -> None:
+        if not gemini.has_key():
+            self._say("Für den Fehlermeldungs-Doktor brauche ich meinen Gemini-Key 🔑", 4000)
+            return
+
+        self.pet.hide()
+        self.bubble.hide_now()
+        if self.guide_overlay:
+            self.guide_overlay.hide()
+        QTimer.singleShot(120, self._capture_and_diagnose_error)
+
+    def _capture_and_diagnose_error(self) -> None:
+        screen = self._get_active_screen()
+        pix = screen.grabWindow(0)
+        self.pet.show()
+        b64 = pixmap_to_b64(pix)
+
+        self.pet.set_accessory("hacker_glasses")
+        self.pet.freeze(True)
+        self.pet.set_working()
+        self._say("Ich untersuche den Bildschirm... 🩺", persistent=True)
+
+        worker = ErrorDoctorWorker(b64)
+        worker.finished_with_result.connect(self._on_error_doctor_result)
+        worker.failed.connect(self._on_error_doctor_failed)
+        worker.finished.connect(self._reap_error_doctor_threads)
+        self._error_doctor_workers.add(worker)
+        worker.start()
+
+    @pyqtSlot(str)
+    def _on_error_doctor_result(self, explanation: str) -> None:
+        self.pet.freeze(False)
+        self.bubble.hide_now()
+        self.pet.react_happy()
+
+        actions = [
+            ("Zeig's mir 🕶️", lambda: self.start_it_guide("Fehler beheben: " + explanation[:100])),
+            ("Schließen ✖", self._on_error_doctor_closed),
+        ]
+        self.bubble.show_with_actions(explanation, actions)
+
+    @pyqtSlot(str)
+    def _on_error_doctor_failed(self, err: str) -> None:
+        self.pet.freeze(False)
+        self.pet.remove_accessory("hacker_glasses")
+        self.bubble.hide_now()
+        self._say(f"Doktor-Fehler: {err} 😿", 4500)
+
+    def _on_error_doctor_closed(self) -> None:
+        self.pet.remove_accessory("hacker_glasses")
+        self.bubble.hide_now()
+
+    @pyqtSlot()
+    def _reap_error_doctor_threads(self) -> None:
+        for t in [t for t in self._error_doctor_workers if t.isFinished()]:
+            self._error_doctor_workers.discard(t)
+            t.deleteLater()
+
+    # -- IT-Support / Klick-Anleitung --------------------------------------------------
+    def start_it_guide(self, question: str) -> None:
+        if not gemini.has_key():
+            self._say("Für die Klick-Anleitung brauche ich meinen Gemini-Key 🔑", 4000)
+            return
+
+        self.pet.set_accessory("hacker_glasses")
+        self.pet.set_accessory("cloud")
+        self._say("IT-Support-Modus aktiviert! 🕶️ Ich zeig's dir Schritt für Schritt.", 3000)
+
+        cid = self.pet.character
+        self._guide_session = GuideSession(question, self.user_name(), cid)
+        if self.guide_overlay is None:
+            self.guide_overlay = GuideOverlay()
+
+        QTimer.singleShot(1500, self._guide_capture_and_step)
+
+    def _guide_capture_and_step(self) -> None:
+        if self._guide_session is None or self._guide_session.done:
+            self._guide_finish(celebrate=True)
+            return
+
+        target_screen = self._get_active_screen()
+        if self.guide_overlay:
+            self.guide_overlay.set_screen_geometry(target_screen.geometry())
+
+        self.pet.hide()
+        self.bubble.hide_now()
+        if self.guide_overlay:
+            self.guide_overlay.hide()
+
+        QTimer.singleShot(120, lambda: self._guide_take_screenshot(target_screen))
+
+    def _guide_take_screenshot(self, target_screen: QScreen) -> None:
+        pix = target_screen.grabWindow(0)
+        self.pet.show()
+        b64 = pixmap_to_b64(pix)
+
+        worker = GuideWorker(self._guide_session, b64, target_screen.geometry())
+        worker.step_ready.connect(self._guide_on_step_ready)
+        worker.failed.connect(self._guide_on_step_failed)
+        worker.finished.connect(self._reap_guide_threads)
+        self._guide_workers.add(worker)
+        worker.start()
+
+    @pyqtSlot(dict, object)
+    def _guide_on_step_ready(self, step_dict: dict, rect: Optional[QRect]) -> None:
+        if step_dict.get("done") or (self._guide_session and self._guide_session.done):
+            self._guide_finish(celebrate=True)
+            return
+
+        step_no = self._guide_session.step_no if self._guide_session else 1
+        total = self._guide_session.total_steps if self._guide_session else 3
+        say_text = f"Schritt {step_no} von ~{total}: {step_dict.get('say', '')}"
+
+        if rect is not None and self.guide_overlay:
+            screen_geo = self.guide_overlay.geometry()
+            self._guide_fly_near_target(rect, screen_geo)
+            self.guide_overlay.set_target(
+                rect,
+                self.pet.pos(),
+                step_dict.get("action", "left"),
+                step_dict.get("target", ""),
+            )
+            self.guide_overlay.show()
+        elif self.guide_overlay:
+            self.guide_overlay.hide_target()
+
+        actions = [
+            ("Weiter ▶", self._guide_capture_and_step),
+            ("Nochmal zeigen 🔁", lambda: self._guide_repeat(say_text, step_dict, rect)),
+            ("Fertig ✖", lambda: self._guide_finish(celebrate=False)),
+        ]
+        self.bubble.show_with_actions(say_text, actions)
+
+    def _guide_repeat(self, say_text: str, step_dict: dict, rect: Optional[QRect]) -> None:
+        if rect is not None and self.guide_overlay:
+            screen_geo = self.guide_overlay.geometry()
+            self._guide_fly_near_target(rect, screen_geo)
+            self.guide_overlay.set_target(
+                rect,
+                self.pet.pos(),
+                step_dict.get("action", "left"),
+                step_dict.get("target", ""),
+            )
+            self.guide_overlay.show()
+        actions = [
+            ("Weiter ▶", self._guide_capture_and_step),
+            ("Nochmal zeigen 🔁", lambda: self._guide_repeat(say_text, step_dict, rect)),
+            ("Fertig ✖", lambda: self._guide_finish(celebrate=False)),
+        ]
+        self.bubble.show_with_actions(say_text, actions)
+
+    @pyqtSlot(str)
+    def _guide_on_step_failed(self, err: str) -> None:
+        self._say(f"Konnte den nächsten Schritt nicht laden: {err} 😿", 4000)
+        self._guide_finish(celebrate=False)
+
+    def _guide_finish(self, celebrate: bool = False) -> None:
+        if self.guide_overlay:
+            self.guide_overlay.hide()
+            self.guide_overlay.hide_target()
+        self.pet.remove_accessory("cloud")
+        self.pet.remove_accessory("hacker_glasses")
+        self.pet.land()
+        self.bubble.hide_now()
+        if celebrate:
+            self._say("Geschafft! 🎉", 4000)
+            self.pet.celebrate()
+        else:
+            self._say("Klick-Anleitung beendet! 🐾", 3000)
+        self._guide_session = None
+
+    def _get_active_screen(self) -> QScreen:
+        try:
+            import win32gui
+            hwnd = win32gui.GetForegroundWindow()
+            if hwnd:
+                rect = win32gui.GetWindowRect(hwnd)
+                center = QPoint((rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2)
+                sc = QGuiApplication.screenAt(center)
+                if sc:
+                    return sc
+        except Exception:
+            pass
+        return QGuiApplication.screenAt(self.pet.pos()) or QGuiApplication.primaryScreen()
+
+    def _guide_fly_near_target(self, target_rect: QRect, screen_geo: QRect) -> None:
+        if target_rect.center().x() > screen_geo.x() + screen_geo.width() // 2:
+            fly_x = target_rect.left() - 140
+        else:
+            fly_x = target_rect.right() + 20
+        fly_y = target_rect.center().y() - 60
+        fly_x = max(screen_geo.left() + 10, min(fly_x, screen_geo.right() - 150))
+        fly_y = max(screen_geo.top() + 10, min(fly_y, screen_geo.bottom() - 150))
+        self.pet.fly_to(fly_x, fly_y)
+
+    @pyqtSlot()
+    def _reap_guide_threads(self) -> None:
+        for t in [t for t in self._guide_workers if t.isFinished()]:
+            self._guide_workers.discard(t)
+            t.deleteLater()
 
     # -- Intelligente Umgebungs- und Code-Beobachtung (Screen & Coding Companion) ---
     def _smart_ambient_comment(self) -> Optional[str]:
