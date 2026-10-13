@@ -8,8 +8,9 @@ import threading
 from pathlib import Path
 from typing import Any
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = BASE_DIR / "config.json"
+from paths import APP_DIR, DATA_DIR
+
+CONFIG_PATH = DATA_DIR / "config.json"
 
 DEFAULTS: dict[str, Any] = {
     "pet": {
@@ -36,8 +37,21 @@ DEFAULTS: dict[str, Any] = {
         "openai_base_url": "https://api.openai.com/v1",
         "timeout_s": 30,
     },
+    "autostart": True,
     "hotkey": "ctrl+alt+p",
 }
+
+
+def _clean_migrated_ai(data: dict) -> dict:
+    cleaned = copy.deepcopy(data)
+    if "ai" in cleaned and isinstance(cleaned["ai"], dict):
+        ai = cleaned["ai"]
+        ai.pop("gemini_api_key", None)
+        ai.pop("provider", None)
+        for k in list(ai.keys()):
+            if k.startswith("openai_"):
+                ai.pop(k, None)
+    return cleaned
 
 
 def _merge(base: dict, over: dict) -> dict:
@@ -68,6 +82,18 @@ class Config:
                 with self._lock:
                     self.data = _merge(DEFAULTS, loaded)
         except FileNotFoundError:
+            # Migration (einmalig): alte config.json neben Quellcode pruefen
+            old_cand = APP_DIR / "config.json"
+            if old_cand != self.path and old_cand.exists():
+                try:
+                    with open(old_cand, "r", encoding="utf-8") as fh:
+                        old_loaded = json.load(fh)
+                    if isinstance(old_loaded, dict):
+                        cleaned = _clean_migrated_ai(old_loaded)
+                        with self._lock:
+                            self.data = _merge(DEFAULTS, cleaned)
+                except (OSError, ValueError):
+                    pass
             self.save()
         except (OSError, ValueError) as exc:  # kaputte JSON -> mit Defaults weiterarbeiten
             print(f"[config] Konnte config.json nicht lesen ({exc}). Nutze Defaults.")

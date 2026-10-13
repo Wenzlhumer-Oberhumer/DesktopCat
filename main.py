@@ -10,14 +10,64 @@ import sys
 import traceback
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
-os.chdir(BASE_DIR)
+from paths import APP_DIR, DATA_DIR, set_autostart
+from version import __version__
+
+# Sicherstellen, dass Module aus APP_DIR importiert werden koennen, auch nach os.chdir(DATA_DIR)
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
+os.chdir(DATA_DIR)
 
 # Unter pythonw.exe gibt es keine Konsole -> stdout/stderr in Logdatei umleiten
-if sys.stdout is None or sys.stderr is None:
-    _log = open(BASE_DIR / "buddy.log", "a", encoding="utf-8", buffering=1)
-    sys.stdout = sys.stdout or _log
-    sys.stderr = sys.stderr or _log
+# Logdatei bei > 2 MB beim Start nach buddy.log.1 rotieren
+log_path = DATA_DIR / "buddy.log"
+try:
+    if log_path.exists() and log_path.stat().st_size > 2 * 1024 * 1024:
+        backup = DATA_DIR / "buddy.log.1"
+        if backup.exists():
+            backup.unlink()
+        log_path.rename(backup)
+except Exception:
+    pass
+
+class _TeeStream:
+    """Schreibt Ausgaben sowohl in die Konsole (falls vorhanden) als auch in buddy.log."""
+
+    def __init__(self, console_stream, log_file):
+        self._console = console_stream
+        self._file = log_file
+
+    def write(self, data):
+        if self._console:
+            try:
+                self._console.write(data)
+            except Exception:
+                pass
+        if self._file:
+            try:
+                self._file.write(data)
+            except Exception:
+                pass
+
+    def flush(self):
+        if self._console:
+            try:
+                self._console.flush()
+            except Exception:
+                pass
+        if self._file:
+            try:
+                self._file.flush()
+            except Exception:
+                pass
+
+try:
+    _log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+    sys.stdout = _TeeStream(sys.stdout, _log_file)
+    sys.stderr = _TeeStream(sys.stderr, _log_file)
+except Exception:
+    pass
 
 import requests
 from PyQt6.QtCore import (
@@ -203,7 +253,7 @@ class Buddy(QObject):
     def __init__(self, app: QApplication, cfg: Config):
         super().__init__()
         self.app, self.cfg = app, cfg
-        self.pet = PetWindow(cfg, BASE_DIR)
+        self.pet = PetWindow(cfg, APP_DIR)
         self.bubble = SpeechBubble(cfg)
         self.input = InputBar()
         self.brain = AgentBrain(cfg)
@@ -220,6 +270,7 @@ class Buddy(QObject):
         self._act(self.tray_menu, "\U0001F3E0  Zur Taskleiste zur\u00fccksetzen", self.pet.reset_to_taskbar)
         self.tray_menu.addSeparator()
         self._act(self.tray_menu, "\u2699\uFE0F  Einstellungen", self.open_settings)
+        self._act(self.tray_menu, f"\u2139\uFE0F  \u00dcber Mochi (v{__version__})", self._about)
         self._act(self.tray_menu, "\U0001F44B  Beenden", self.quit)
         self.tray.setContextMenu(self.tray_menu)
         self.tray.activated.connect(self._on_tray)
@@ -264,6 +315,7 @@ class Buddy(QObject):
 
     # -- Start / Ende ------------------------------------------------------------------
     def start(self) -> None:
+        set_autostart(bool(self.cfg.get("autostart", True)))
         self.pet.drop_in()
         hk = str(self.cfg.get("hotkey", "ctrl+alt+p")).upper().replace("CTRL", "Strg")
         hint = f"Hallo Boss! Ich bin {self.cfg.get('pet.name', 'Mochi')} \U0001F43E Doppelklick oder {hk} = Befehl"
@@ -272,6 +324,9 @@ class Buddy(QObject):
         QTimer.singleShot(1500, lambda: self._say(hint, 6000))
         self._schedule_chatter()
         self._schedule_vision(initial_delay_s=50)
+
+    def _about(self) -> None:
+        self._say(f"Mochi v{__version__} \U0001F43E\nDein KI-Desktop-Buddy!", 6000)
 
     def quit(self) -> None:
         self.hotkey.unregister()
@@ -524,7 +579,7 @@ def _single_instance():
     try:
         import win32api
         import win32event
-        mutex = win32event.CreateMutex(None, False, "Local\\MochiDesktopBuddy")
+        mutex = win32event.CreateMutex(None, False, "MochiDesktopPetMutex")
         if win32api.GetLastError() == 183:      # ERROR_ALREADY_EXISTS
             return None
         return mutex

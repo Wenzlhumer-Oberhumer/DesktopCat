@@ -126,6 +126,9 @@ class SettingsDialog(QDialog):
         self.chatter = QCheckBox("Gelegentlich etwas sagen")
         self.chatter.setChecked(bool(cfg.get("pet.chatter", True)))
         form2.addRow("", self.chatter)
+        self.autostart = QCheckBox("Mit Windows starten")
+        self.autostart.setChecked(bool(cfg.get("autostart", True)))
+        form2.addRow("", self.autostart)
         root.addLayout(form2)
 
         hk = QLabel(f"Tastenk\u00fcrzel zum Eingeben: {str(cfg.get('hotkey', 'ctrl+alt+p')).upper()} "
@@ -192,6 +195,9 @@ class SettingsDialog(QDialog):
         c.set("pet.scale", self.scale.value() / 100.0)
         c.set("pet.wander", self.wander.isChecked())
         c.set("pet.chatter", self.chatter.isChecked())
+        c.set("autostart", self.autostart.isChecked())
+        from paths import set_autostart
+        set_autostart(self.autostart.isChecked())
         c.save()
         self.accept()
 

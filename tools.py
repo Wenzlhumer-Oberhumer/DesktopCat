@@ -19,8 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-BASE_DIR = Path(__file__).resolve().parent
-LOG_FILE = BASE_DIR / "desktop_organize_log.json"
+import requests
+
+from paths import DATA_DIR
+
+LOG_FILE = DATA_DIR / "desktop_organize_log.json"
 
 
 @dataclass

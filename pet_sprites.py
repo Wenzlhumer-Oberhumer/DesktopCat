@@ -13,6 +13,8 @@ from PyQt6.QtGui import (
     QPixmap, QPolygonF, QRadialGradient,
 )
 
+from paths import DATA_DIR
+
 BASE = 160.0    # logische Zeichenflaeche (wird mit Fenster-Skalierung gestreckt)
 FLOOR = 148.0   # y-Position des Bodens in der Zeichenflaeche
 
@@ -78,7 +80,8 @@ class SpriteLibrary:
 
     def __init__(self, base_dir: Path, anim_cfg: dict):
         self.anims: dict[str, SpriteAnimation] = {}
-        assets = base_dir / "assets"
+        user_assets = DATA_DIR / "assets"
+        bundle_assets = base_dir / "assets"
         for key in STATE_KEYS:
             spec = anim_cfg.get(key) or ""
             frames = fps = None
@@ -88,12 +91,21 @@ class SpriteLibrary:
                 spec = spec.get("file", "")
             if spec:
                 cand = Path(spec)
-                path = cand if cand.is_absolute() else base_dir / cand
+                if cand.is_absolute() and cand.exists():
+                    path = cand
+                elif (user_assets / cand).exists():
+                    path = user_assets / cand
+                elif (base_dir / cand).exists():
+                    path = base_dir / cand
             else:
                 for ext in SPRITE_EXTS:
-                    cand = assets / f"{key}{ext}"
-                    if cand.exists():
-                        path = cand
+                    cand_user = user_assets / f"{key}{ext}"
+                    if cand_user.exists():
+                        path = cand_user
+                        break
+                    cand_bundle = bundle_assets / f"{key}{ext}"
+                    if cand_bundle.exists():
+                        path = cand_bundle
                         break
             if path and path.exists():
                 anim = load_animation(path, frames, fps)
