@@ -1023,60 +1023,11 @@ def inspect_screen(question: str = "") -> ToolResult:
     from PyQt6.QtCore import QBuffer
     import config
 
-    cfg = config.Config()
-    key = cfg.get("ai.gemini_api_key") or os.environ.get("GEMINI_API_KEY")
     ctx = get_active_window_context()
     top = ctx.get("top_window", "")
     apps_str = ", ".join(ctx.get("open_apps", []))
 
-    # Screenshot aufnehmen
-    app = QApplication.instance()
-    screen = QGuiApplication.primaryScreen() if app else None
-    b64_img = ""
-    if screen:
-        try:
-            pix = screen.grabWindow(0)
-            scaled = pix.scaled(1280, 720)
-            buf = QBuffer()
-            buf.open(QBuffer.OpenModeFlag.WriteOnly)
-            scaled.save(buf, "JPEG", 70)
-            b64_img = base64.b64encode(buf.data().data()).decode("utf-8")
-        except Exception:
-            pass
-
-    # Wenn Gemini Vision verfuegbar ist
-    if key and b64_img:
-        q_user = (question or "").strip()
-        prompt = (
-            f"Du bist Mochi, ein extrem süßer, smarter Katzen-Buddy auf dem Windows-Desktop des Nutzers ('Boss'). "
-            f"Aktive Fenster auf dem PC: {apps_str}. Oberstes Fenster: {top}.\n"
-            f"Schau dir den Screenshot genau an. "
-            + (f"Beantworte diese Frage des Nutzers: '{q_user}'. " if q_user else
-               "Erkläre in 1-2 kurzen Sätzen niedlich, was der Boss gerade auf dem Bildschirm macht (z. B. Programmiersprache/Framework wie Angular, Datei, Webseite) und gib einen kleinen süßen Tipp oder Kommentar dazu. ")
-            + "Antworte auf Deutsch, maximal 2 kurze Sätze, allerhöchstens ein Emoji."
-        )
-        payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt},
-                    {"inlineData": {"mimeType": "image/jpeg", "data": b64_img}}
-                ]
-            }]
-        }
-        for model in ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            try:
-                r = requests.post(url, headers={"x-goog-api-key": key, "Content-Type": "application/json"}, json=payload, timeout=12)
-                if r.status_code == 200:
-                    cand = r.json().get("candidates", [])
-                    if cand:
-                        text = cand[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if text:
-                            return ToolResult(True, text.strip())
-            except Exception:
-                continue
-
-    # Offline / Heuristischer Fallback anhand der Fenstertitel
+    # Heuristischer & Kontext-basierter Analysebericht anhand der Fenstertitel
     if top:
         top_low = top.lower()
         if "angular" in top_low:

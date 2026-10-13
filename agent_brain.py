@@ -1,7 +1,6 @@
+"""Gehirn des Buddys: Gemini CLI mit Tool-Calling plus regelbasierter Offline-Parser.
 
-"""Gehirn des Buddys: Cloud-KI mit Tool-Calling (Gemini / OpenAI) plus regelbasierter Offline-Parser.
-
-Alles Blockierende (HTTP, Dateioperationen, Dialoge) laeuft in einem QThread-Worker; der UI-Thread
+Alles Blockierende (CLI, Dateioperationen, Dialoge) laeuft in einem QThread-Worker; der UI-Thread
 bekommt nur Signale (started / finished).
 """
 from __future__ import annotations
@@ -315,6 +314,34 @@ def parse_offline(text: str) -> Plan:
 # ======================================================================================
 #  Gemini CLI Integration & Tool-Calling-Protokoll
 # ======================================================================================
+def parse_cli_response(raw_response: str) -> tuple[str, dict | None]:
+    """Extrahiert (say, tool_dict) aus der Rueckgabe der Gemini CLI.
+
+    Unterstuetzt reines JSON, in ```json```-Zaeunen verpacktes JSON
+    sowie Fallback auf reinen Freitext.
+    """
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = cleaned.strip()
+
+    start_idx = cleaned.find("{")
+    end_idx = cleaned.rfind("}")
+    if start_idx != -1 and end_idx > start_idx:
+        try:
+            data = json.loads(cleaned[start_idx : end_idx + 1])
+            if isinstance(data, dict):
+                say = str(data.get("say") or "").strip()
+                tool = data.get("tool")
+                tool_dict = tool if isinstance(tool, dict) and tool.get("name") else None
+                return say, tool_dict
+        except ValueError:
+            pass
+
+    return cleaned, None
+
+
 class AgentWorker(QObject):
     """Laeuft im QThread: Gemini-CLI (falls angemeldet) -> Fallback regelbasiert -> Tools ausfuehren."""
 
@@ -429,31 +456,9 @@ class AgentWorker(QObject):
             full_prompt = "\n".join(prompt_parts)
             raw_response = gemini_cli.ask(full_prompt, timeout_s=timeout, model=model)
 
-            # Markdown-Z\u00e4une entfernen
-            cleaned = raw_response.strip()
-            if cleaned.startswith("```"):
-                cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-                cleaned = re.sub(r"\s*```$", "", cleaned)
-                cleaned = cleaned.strip()
+            say_text, tool_call = parse_cli_response(raw_response)
 
-            # Erstes JSON-Objekt extrahieren
-            data = None
-            start_idx = cleaned.find("{")
-            end_idx = cleaned.rfind("}")
-            if start_idx != -1 and end_idx > start_idx:
-                try:
-                    data = json.loads(cleaned[start_idx : end_idx + 1])
-                except ValueError:
-                    pass
-
-            if not isinstance(data, dict):
-                # Nicht parsebar -> gesamten Text als say nehmen
-                return cleaned
-
-            tool_call = data.get("tool")
-            say_text = (data.get("say") or "").strip()
-
-            if not tool_call or not isinstance(tool_call, dict) or not tool_call.get("name"):
+            if not tool_call:
                 return say_text or (self.results[-1].message if self.results else "Miau! Alles erledigt \U0001F43E")
 
             tool_name = str(tool_call.get("name", "")).strip()
