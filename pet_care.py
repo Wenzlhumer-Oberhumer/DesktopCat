@@ -84,6 +84,8 @@ def get_care_stats(cfg) -> dict[str, int]:
     """Berechnet aktuelle Beduerfnis-Werte (0-100) unter Beruecksichtigung des Zeitverlaufs."""
     care = cfg.get("care", {}) if isinstance(cfg.get("care"), dict) else {}
     now = time.time()
+    if not care.get("last_updated") and hasattr(cfg, "set"):
+        cfg.set("care.last_updated", now)       # Startpunkt merken, sonst sinkt Hunger bis zur 1. Fuetterung nie
     last_update = float(care.get("last_updated") or now)
     elapsed_hours = max(0.0, (now - last_update) / 3600.0)
 

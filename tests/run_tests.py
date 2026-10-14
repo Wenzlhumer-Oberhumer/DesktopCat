@@ -47,6 +47,7 @@ def main():
         "test_throw",
         "test_startup",
         "test_v223_fixes",
+        "test_v301_fixes",
         "test_pet_care",
         "test_v240_features",
         "test_v250_features",

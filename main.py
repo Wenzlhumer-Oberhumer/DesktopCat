@@ -435,7 +435,8 @@ class Buddy(QObject):
     """Verdrahtet alle Module miteinander."""
 
     timer_expired = pyqtSignal(str, int, str)      # kommt aus einem Hintergrund-Thread (tools-Timer)
-    data_wiped = pyqtSignal()                      # "Alles vergessen" - evtl. aus dem Agent-Thread
+    data_wiped = pyqtSignal()
+    routine_message = pyqtSignal(str)              # aus dem Routinen-Thread -> Sprechblase im Main-Thread                      # "Alles vergessen" - evtl. aus dem Agent-Thread
 
     def __init__(self, app: QApplication, cfg: Config):
         super().__init__()
@@ -507,6 +508,7 @@ class Buddy(QObject):
         self.note_manager = StickyNoteManager(get_memory_store(), on_note_done_cb=self._on_note_completed)
         from memory_store import MemoryStore
         MemoryStore.on_wipe.append(self.data_wiped.emit)
+        self.routine_message.connect(self._on_routine_message)
         self.data_wiped.connect(self._on_data_wiped)
         self._quiz_session: Optional[dict] = None
         self._last_photo_folder: Optional[str] = None
@@ -562,7 +564,7 @@ class Buddy(QObject):
         self._ptt_poll_timer.timeout.connect(self._on_ptt_poll)
 
         tts = voice_tts.get_tts()
-        tts.speaking_started.connect(lambda: self.pet.set_speaking(True))
+        tts.speaking_started.connect(lambda: self.pet.set_speaking(bool(self.cfg.get("voice.lipsync", True))))
         tts.speaking_finished.connect(lambda: self.pet.set_speaking(False))
 
         self._hotkey_voice_ok = self.hotkey.register(
@@ -641,7 +643,7 @@ class Buddy(QObject):
         else:
             self._act(self.tray_menu, tr("menu.show_pet", name=cname), self.show_pet)
         self._act(self.tray_menu, tr("menu.focus_mode"), self.start_focus_mode)
-        is_home = bool(self.cfg.get("pet.is_at_home", True))
+        is_home = bool(self.cfg.get("pet.is_at_home", False))
         home_text = tr("home.outside") if is_home else tr("home.at_home")
         self._act(self.tray_menu, home_text, lambda: self.set_home_mode(not is_home))
         self.tray_menu.addSeparator()
@@ -747,6 +749,22 @@ class Buddy(QObject):
     def _on_data_wiped(self) -> None:
         self.brain.clear_history()          # sonst geht der alte Verlauf bei der naechsten KI-Frage noch mit
         self.note_manager.close_all()
+        # Auch die laufende Config zuruecksetzen - sonst ueberschreibt sie beim naechsten Speichern das Loeschen
+        c = self.cfg
+        c.set("profile", {"name": "", "pronouns": "", "uses": [], "interests": "", "tone": "", "city": ""})
+        c.set("onboarding_done", False)
+        c.set("care", {})
+        c.set("treats", 0)
+        c.set("fun.worn", "")
+        c.set("lively.prev_wallpaper", "")
+        try:
+            import pet_care
+            if not pet_care.is_character_unlocked(str(c.get("pet.character", "cat_mochi")))[0]:
+                c.set("pet.character", "cat_mochi")      # Freundschaft ist weg -> gesperrte Figur nicht behalten
+                self.pet.apply_config()
+        except Exception:
+            pass
+        c.save()
 
     def _about(self) -> None:
         self._say(tr("about.text", version=__version__), 6000)
@@ -971,7 +989,7 @@ class Buddy(QObject):
         self.bubble.hide_now()
         self._say(("Fertig! \u2728  " if ok and notify else "") + message)
         if bool(self.cfg.get("voice.read_answers", False)):
-            voice_tts.get_tts().speak(message, self.cfg.as_dict())
+            voice_tts.get_tts().speak(message, self.cfg.snapshot())
         if notify:
             self.tray.showMessage(notify, message, self.icon, 6000)
         if "?" in message:
@@ -1021,7 +1039,7 @@ class Buddy(QObject):
             store = get_memory_store()
         except Exception:
             store = None
-        pet_care.feed_pet(self.cfg, store)
+        pet_care.feed_pet(self.cfg, None)       # Punkte vergibt _award_friendship (sonst doppelt + kein Level-up-Jubel)
         n = int(self.cfg.get("treats", 0))
         ci = self.char_info()
         self._say(tr("say.treat_thanks", sound=ci.get('sound', 'Mjam!'), name=self.user_name(), n=n), 4000)
@@ -1038,7 +1056,7 @@ class Buddy(QObject):
             store = get_memory_store()
         except Exception:
             store = None
-        pet_care.wash_pet(self.cfg, store)
+        pet_care.wash_pet(self.cfg, None)       # Punkte vergibt _award_friendship (sonst doppelt)
         self.pet.wash_pet(4.5)
         self._play_pet_sound()
         if hasattr(self, "bubble_mgr") and self.bubble_mgr:
@@ -1520,7 +1538,14 @@ class Buddy(QObject):
                 store = get_memory_store()
             except Exception:
                 store = None
-            lively_wallpaper.apply_lively_wallpaper(self.cfg, store)
+            ok_lively, lively_msg = lively_wallpaper.apply_lively_wallpaper(self.cfg, store)
+            if not ok_lively:      # vorher stand trotzdem "Willkommen zuhause", obwohl nichts passierte
+                self.cfg.set("pet.is_at_home", False)
+                self.cfg.set("pet.room_mode", False)
+                self.cfg.save()
+                self._say(lively_msg, 6000)
+                self._update_tray_menu()
+                return
             if hasattr(self, "pet_bed") and self.pet_bed and bool(self.cfg.get("furniture.bed_visible", True)):
                 self.pet_bed.show()
             self._say(f"Willkommen zuhause, {self.user_name()}! Schnurr~ 🏠✨", 4500)
@@ -1566,8 +1591,13 @@ class Buddy(QObject):
                     msg = f"Routine \u201e{title}\u201c ausgeführt! 🐾 {first_line}"
                 else:
                     msg = f"Routine \u201e{title}\u201c erfolgreich abgeschlossen! 🐾✨"
-                QTimer.singleShot(0, lambda: self._say(msg, 6000))
+                self.routine_message.emit(msg)     # QTimer.singleShot aus threading.Thread kam nie an
+            else:
+                self.routine_message.emit(f"Routine „{title}“ hat nicht geklappt: {(res.get('error') or '')[:90]}")
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _on_routine_message(self, msg: str) -> None:
+        self._say(msg, 6000)
 
     # -- v2.4.0: Minispiele, Lively Wallpaper & Möbel ----------------------------------
     def start_bubble_game(self) -> None:
@@ -1909,6 +1939,12 @@ class Buddy(QObject):
             return
         if self._is_recording_voice or self._is_processing_voice:
             return
+        # Mikrofon nur, wenn die KI ueberhaupt an ist und ein Zugang existiert (Audio geht an Gemini)
+        if not self.cfg.get("ai.enabled", True) or not gemini.has_key():
+            self._say(tr("say.voice_needs_ai"), 4000)
+            return
+        parsed = parse_hotkey(str(self.cfg.get("hotkey_voice", "ctrl+alt+space")))
+        self._ptt_vk = parsed[1] if parsed else 0x20
 
         recorder = voice_recorder.get_recorder()
         if not recorder.start_recording():
@@ -1919,7 +1955,7 @@ class Buddy(QObject):
         self.pet.set_listening(True)
         self.pet.wake()
         self.pet.freeze(True)
-        self._say("🎙️ Ich höre dir zu… (Lass die Leertaste los zum Senden)", 30000)
+        self._say(tr("say.voice_listening"), 30000)
 
         # Polling Timer für Keyup der Leertaste (Push-to-Talk)
         self._ptt_poll_timer.start(30)
@@ -1929,8 +1965,8 @@ class Buddy(QObject):
             self._ptt_poll_timer.stop()
             return
 
-        # Prüfe ob Leertaste noch gedrückt ist (VK_SPACE = 0x20)
-        key_state = ctypes.windll.user32.GetAsyncKeyState(0x20)
+        # Ist die Haupttaste des eingestellten Sprach-Hotkeys noch gedrueckt? (vorher fest die Leertaste)
+        key_state = ctypes.windll.user32.GetAsyncKeyState(getattr(self, "_ptt_vk", 0x20))
         is_down = bool(key_state & 0x8000)
 
         recorder = voice_recorder.get_recorder()
@@ -1954,13 +1990,20 @@ class Buddy(QObject):
             return
 
         self._is_processing_voice = True
-        self._say("🤔 Ich denke nach…", 30000)
-
-        worker = VoiceWorker(audio_path, self.cfg.as_dict())
-        worker.finished_with_result.connect(self._on_voice_result)
-        worker.failed.connect(self._on_voice_failed)
-        self._voice_worker = worker
-        worker.start()
+        self._say(tr("say.voice_thinking"), 30000)
+        try:
+            worker = VoiceWorker(audio_path, self.cfg.snapshot())
+            worker.finished_with_result.connect(self._on_voice_result)
+            worker.failed.connect(self._on_voice_failed)
+            self._voice_workers = [w for w in getattr(self, "_voice_workers", []) if not w.isFinished()] + [worker]
+            worker.start()
+        except Exception as exc:              # sonst bliebe die Sprache bis zum Neustart blockiert
+            self._is_processing_voice = False
+            try:
+                os.remove(audio_path)         # Aufnahme der Stimme nicht im Temp-Ordner liegen lassen
+            except OSError:
+                pass
+            self._on_voice_failed(str(exc))
 
     def _on_voice_result(self, text: str) -> None:
         self._is_processing_voice = False
@@ -1970,7 +2013,7 @@ class Buddy(QObject):
         duration_ms = max(4500, min(16000, len(text) * 115))
         self._say(text, duration_ms)
         # Synchrone Sprachausgabe + Lip-Sync
-        voice_tts.get_tts().speak(text, self.cfg.as_dict())
+        voice_tts.get_tts().speak(text, self.cfg.snapshot())
 
     def _on_voice_failed(self, err: str) -> None:
         self._is_processing_voice = False
@@ -2337,12 +2380,16 @@ class Buddy(QObject):
                 self.pet.wake()
             import pet_care
             care_stats = pet_care.get_care_stats(self.cfg)
-            if care_stats["hunger"] < 35 and random.random() < 0.6:
-                self._say(f"Mein Bäuchlein knurrt ganz schön, {self.user_name()}... Hast du ein kleines Leckerli für mich? 🥣🐟", 6000)
+            # hoechstens alle 30 Min. betteln - vorher kam das alle 3-4 Minuten, bis man fuetterte
+            can_nag = time.monotonic() - getattr(self, "_last_care_nag", -1e9) > 1800
+            if can_nag and care_stats["hunger"] < 35 and random.random() < 0.6:
+                self._last_care_nag = time.monotonic()
+                self._say(tr("say.care_hungry", name=self.user_name()), 6000)
                 self._schedule_chatter()
                 return
-            if care_stats["hygiene"] < 35 and random.random() < 0.6:
-                self._say(f"Puh, mein Fell ist ganz staubig vom vielen Herumtollen! Magst du mich waschen & bürsten? 🧼✨", 6000)
+            if can_nag and care_stats["hygiene"] < 35 and random.random() < 0.6:
+                self._last_care_nag = time.monotonic()
+                self._say(tr("say.care_dirty"), 6000)
                 self._schedule_chatter()
                 return
             comment = self._smart_ambient_comment()

@@ -1484,6 +1484,26 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Klick! 📸 Wunderschön geworden! ✨",
         "en": "Click! 📸 It turned out beautifully! ✨",
     },
+    "say.care_hungry": {
+        "de": "Mein Bäuchlein knurrt ganz schön, {name}... Hast du ein kleines Leckerli für mich? 🥣🐟",
+        "en": "My tummy is rumbling, {name}... do you have a little treat for me? 🥣🐟",
+    },
+    "say.care_dirty": {
+        "de": "Puh, mein Fell ist ganz staubig vom vielen Herumtollen! Magst du mich waschen & bürsten? 🧼✨",
+        "en": "Phew, my fur is all dusty from playing around! Would you wash and brush me? 🧼✨",
+    },
+    "say.voice_needs_ai": {
+        "de": "🎙️ Zum Sprechen brauche ich die KI (Gemini-Key in den Einstellungen) 🔑",
+        "en": "🎙️ Voice needs the AI (Gemini key in settings) 🔑",
+    },
+    "say.voice_listening": {
+        "de": "🎙️ Ich höre dir zu… (Taste loslassen zum Senden)",
+        "en": "🎙️ I'm listening… (release the key to send)",
+    },
+    "say.voice_thinking": {
+        "de": "🤔 Ich denke nach…",
+        "en": "🤔 Let me think…",
+    },
     "say.photo_done_clip": {
         "de": "Klick! 📸 Wunderschön geworden! Liegt auch in der Zwischenablage ✨",
         "en": "Click! 📸 It turned out beautifully! It's in your clipboard too ✨",

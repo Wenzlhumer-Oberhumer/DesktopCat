@@ -892,7 +892,7 @@ def _draw_effects(p: QPainter, pose: Pose):
         bowl = QRectF(60, 137, 40, 11)
         p.drawRoundedRect(bowl, 5.0, 5.0)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#3B9EFF", 230))
+        p.setBrush(QColor(59, 158, 255, 230))
         p.drawRoundedRect(QRectF(63, 139, 34, 6), 3.0, 3.0)
         for i in range(3):
             age = (t_w * 1.6 + i * 0.33) % 1.0
@@ -916,7 +916,8 @@ def _draw_effects(p: QPainter, pose: Pose):
             col.setAlpha(int(240 * math.sin(math.pi * age)))
             p.setBrush(col)
             r = 1.6 + 0.8 * (1 - age)
-            p.restore()
+            p.drawEllipse(QPointF(cx, cy), r, r)
+        p.restore()
 
     if getattr(pose, "bubbles", None) is not None:
         t_b = pose.bubbles

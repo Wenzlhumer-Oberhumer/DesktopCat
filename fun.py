@@ -78,9 +78,11 @@ DAILY_LIMITS = {
     "pomodoro": 9999,
     "quiz": 9999,
     "curious": 9999,
+    "bubble": 15,       # Seifenblasen-Spiel: eigenes Limit, frisst nicht das Leckerli-Limit
 }
 
 POINTS_PER_EVENT = {
+    "bubble": 1,
     "chat": 1,
     "treat": 2,
     "wash": 3,

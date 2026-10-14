@@ -352,8 +352,19 @@ class SettingsDialog(QDialog):
 
         self.char_combo = QComboBox()
         cur_char = str(self.cfg.get("pet.character", "cat_mochi"))
+        try:
+            import pet_care
+            from memory_store import get_memory_store
+            _store = get_memory_store()
+            _unlocked = lambda c: pet_care.is_character_unlocked(c, _store)
+        except Exception:
+            _unlocked = lambda c: (True, 1, 0)
         for cid, ci in CHARACTERS.items():
-            self.char_combo.addItem(f"{ci.get('emoji', '🐾')}  {ci.get('name', cid)} ({ci.get('species', '')})", cid)
+            ok, lvl, _ = _unlocked(cid)
+            label = f"{ci.get('emoji', '🐾')}  {ci.get('name', cid)} ({ci.get('species', '')})"
+            self.char_combo.addItem(label if ok else f"🔒 {label} – ab Level {lvl}", cid)
+            if not ok:   # gesperrte Figuren nicht waehlbar (Freischalt-Baum nicht umgehen)
+                self.char_combo.model().item(self.char_combo.count() - 1).setEnabled(False)
         self.char_combo.setCurrentIndex(max(0, self.char_combo.findData(cur_char)))
         self.char_combo.setEnabled(bool(CHARACTERS))
         self.char_combo.currentIndexChanged.connect(self._update_character_preview)
@@ -631,7 +642,7 @@ class SettingsDialog(QDialog):
 
         v_cfg = self.cfg.get("voice", {}) if isinstance(self.cfg.get("voice"), dict) else {}
 
-        self.voice_enabled_chk = QCheckBox("Antworten mit Stimme vorlesen (Edge-TTS)")
+        self.voice_enabled_chk = QCheckBox("Antworten mit Stimme vorlesen")
         self.voice_enabled_chk.setChecked(bool(v_cfg.get("enabled", True)))
         voice_form.addRow("", self.voice_enabled_chk)
 
@@ -661,6 +672,12 @@ class SettingsDialog(QDialog):
         self.lipsync_chk = QCheckBox("Mundbewegungen (Lip-Sync) synchron beim Sprechen animieren")
         self.lipsync_chk.setChecked(bool(v_cfg.get("lipsync", True)))
         voice_form.addRow("", self.lipsync_chk)
+
+        self.voice_online_chk = QCheckBox("Natürliche Online-Stimme (Microsoft Edge)")
+        self.voice_online_chk.setToolTip("Klingt natürlicher, schickt aber jeden vorgelesenen Text an einen Microsoft-Dienst.\n"
+                                         "Aus = eingebaute Windows-Stimme, alles bleibt auf deinem PC.")
+        self.voice_online_chk.setChecked(bool(v_cfg.get("online", False)))
+        voice_form.addRow("", self.voice_online_chk)
 
         card_voice_lay.addLayout(voice_form)
         lay.addWidget(card_voice)
@@ -983,6 +1000,7 @@ class SettingsDialog(QDialog):
 
         # Voice & Lip-Sync Einstellungen
         c.set("voice.enabled", self.voice_enabled_chk.isChecked())
+        c.set("voice.online", self.voice_online_chk.isChecked())
         c.set("voice.name", str(self.voice_combo.currentData() or "de-DE-KatjaNeural"))
         c.set("voice.pitch", f"+{self.voice_pitch_slider.value()}%")
         c.set("voice.lipsync", self.lipsync_chk.isChecked())

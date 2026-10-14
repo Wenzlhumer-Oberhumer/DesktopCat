@@ -19,6 +19,8 @@ DEFAULTS: dict[str, Any] = {
     "pet": {
         "name": "Kylie",
         "character": "cat_mochi",
+        "room_mode": False,     # Regale/Fensterbrett nur im Lively-Katzenzimmer, sonst unsichtbare Ebenen
+        "is_at_home": False,
         "user_name": "Boss",    # Anrede durch den Buddy
         "speed": 90,            # Pixel pro Sekunde
         "scale": 1.0,
@@ -53,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "rate": "+0%",
         "lipsync": True,
         "read_answers": False,
+        "online": False,        # Online-Stimme (edge-tts) sendet den Text an Microsoft - nur auf Wunsch
     },
     "wellbeing": {"breaks": True, "break_min": 60, "water": True},
     "battery_warn": True,

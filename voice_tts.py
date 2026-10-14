@@ -118,7 +118,8 @@ class TTSManager(QObject):
 
         self._is_speaking = False
         self._current_file: Optional[str] = None
-        self._active_worker: Optional[_EdgeTtsWorker] = None
+        self._workers: list = []          # laufende Edge-Worker festhalten (sonst "Destroyed while running")
+        self._request = 0                 # nur die neueste Anfrage darf noch sprechen
         self._sapi_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -174,6 +175,13 @@ class TTSManager(QObject):
 
         self.stop()
         self._stop_event.clear()
+        self._request += 1
+
+        # Standard: eingebaute Windows-Stimme (offline, kein Text verlaesst den PC).
+        # Die Online-Stimme (edge-tts, inoffizieller Microsoft-Dienst) nur, wenn ausdruecklich eingeschaltet.
+        if not bool(voice_cfg.get("online", False)):
+            self._fallback_sapi(clean)
+            return
 
         # Konfiguration
         lang = str(cfg.get("language", "de")).lower()
@@ -183,14 +191,24 @@ class TTSManager(QObject):
         rate = str(voice_cfg.get("rate", "+0%"))
 
         # Versuche zuerst Edge-TTS
-        self._active_worker = _EdgeTtsWorker(clean, voice_id, pitch, rate)
-        self._active_worker.finished_file.connect(self._on_edge_success)
-        self._active_worker.failed.connect(lambda err: self._fallback_sapi(clean, err))
-        self._active_worker.start()
+        worker = _EdgeTtsWorker(clean, voice_id, pitch, rate)
+        worker.request_id = self._request
+        worker.text = clean
+        worker.finished_file.connect(self._on_edge_success)
+        worker.failed.connect(self._on_edge_failed)
+        self._workers = [w for w in self._workers if not w.isFinished()] + [worker]
+        worker.start()
+
+    @pyqtSlot(str)
+    def _on_edge_failed(self, err: str) -> None:
+        w = self.sender()
+        if w is not None and getattr(w, "request_id", -1) == self._request:
+            self._fallback_sapi(getattr(w, "text", ""), err)
 
     @pyqtSlot(str)
     def _on_edge_success(self, file_path: str) -> None:
-        if self._stop_event.is_set():
+        w = self.sender()
+        if self._stop_event.is_set() or (w is not None and getattr(w, "request_id", -1) != self._request):
             try:
                 os.remove(file_path)
             except OSError:

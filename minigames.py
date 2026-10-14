@@ -33,7 +33,8 @@ class BubbleWidget(QWidget):
     popped = pyqtSignal(int, int)
 
     def __init__(self, x: float, y: float, size: int = 56, parent: Optional[QWidget] = None):
-        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+                         | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -149,10 +150,11 @@ class BubblePopGameManager:
             self.active_bubbles.append(b)
 
     def _on_bubble_popped(self, x: int, y: int) -> None:
+        self.active_bubbles = [b for b in self.active_bubbles if b.isVisible()]   # zerplatzte nicht sammeln
         if self.store is not None:
             try:
                 # Punkte gutschreiben
-                add_friendship_points(self.store, "treat")
+                add_friendship_points(self.store, "bubble")
                 # Achievement-Fortschritt
                 record_achievement_event(self.store, "bubbles_popped", 1)
                 # Seasonal Quest Fortschritt

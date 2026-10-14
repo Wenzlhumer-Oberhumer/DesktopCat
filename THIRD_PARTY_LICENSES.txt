@@ -45,3 +45,9 @@ Desktop Cat verwendet folgende Open-Source-Bibliotheken und -Komponenten:
    Die Wetterdaten stammen laut wttr.in aus dessen angegebenen Quellen (dort
    genannt, z. B. Open-Meteo bzw. World Weather Online). Es gelten die
    Nutzungsbedingungen von wttr.in; die aktuellen Quellenangaben stehen auf wttr.in.
+
+7. edge-tts (optionale Online-Stimme)
+   Lizenz: GNU Lesser General Public License v3 (LGPLv3), https://github.com/rany2/edge-tts
+   Hinweis: Nur wenn in den Einstellungen "Natürliche Online-Stimme" eingeschaltet ist, wird der
+   vorzulesende Text an den (inoffiziellen) Vorlese-Dienst von Microsoft Edge gesendet.
+   Standard ist die eingebaute Windows-Stimme (SAPI) – dabei verlässt kein Text den PC.

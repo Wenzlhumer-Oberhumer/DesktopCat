@@ -218,7 +218,7 @@ class PetWindow(QWidget):
         self._pose = None
         self._last_sig = None
         self.pet_bed = None
-        self.room_mode = bool(cfg.get("pet.room_mode", True))
+        self.room_mode = bool(cfg.get("pet.room_mode", False))
         self._is_speaking = False
         self._is_listening = False
 
@@ -450,7 +450,7 @@ class PetWindow(QWidget):
         """Gibt die verfuegbaren Hoehenebenen im Raum zurueck (Boden, Bett, Fensterbrett, Wandregal)."""
         avail = self._avail()
         ground = self._ground_y()
-        if not bool(self.cfg.get("pet.room_mode", True)):
+        if not bool(self.cfg.get("pet.room_mode", False)):
             return [ground]
         h = float(avail.height())
         shelf = float(avail.top() + h * 0.22)
@@ -651,7 +651,7 @@ class PetWindow(QWidget):
             return
 
         # 2. Raum-Modus: 2D-Klettern & Springen auf andere Ebenen (ohne Wolke)
-        if bool(self.cfg.get("pet.room_mode", True)) and r < 0.48:
+        if bool(self.cfg.get("pet.room_mode", False)) and r < 0.48:
             levels = self._perch_levels()
             other_levels = [lvl for lvl in levels if abs(lvl - self._py) > 40]
             if other_levels:
@@ -706,6 +706,8 @@ class PetWindow(QWidget):
             self._walk(dt)
         elif s == PetState.FALLING:
             self._fall(dt)
+        elif s == PetState.FLY:                 # IT-Guide, Fehler-Doktor, Haftnotiz: Flug auf der Wolke
+            self._fly(dt)
         elif s != PetState.DRAGGED and not self._dragging:
             closest = self._closest_perch_y(self._py)
             if self._py < closest - 2.5:
@@ -1137,7 +1139,7 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.yarn_game")).triggered.connect(self.yarn_game_requested.emit)
         tricks.addAction(tr("menu.lively_wallpaper")).triggered.connect(self.wallpaper_requested.emit)
         tricks.addAction(tr("menu.pet_bed")).triggered.connect(self.pet_bed_requested.emit)
-        is_home = bool(self.cfg.get("pet.is_at_home", True))
+        is_home = bool(self.cfg.get("pet.is_at_home", False))
         home_action_text = tr("home.outside") if is_home else tr("home.at_home")
         tricks.addAction(home_action_text).triggered.connect(lambda: self.home_mode_toggled.emit(not is_home))
         tricks.addAction(tr("menu.sleep")).triggered.connect(lambda: self.set_state(PetState.SLEEP))

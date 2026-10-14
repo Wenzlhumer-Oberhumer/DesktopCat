@@ -494,7 +494,7 @@ class CharacterTreeDialog(QDialog):
         r_layout.addWidget(lbl_rw)
         r_layout.addWidget(lbl_rd)
 
-        is_at_home = bool(self.cfg.get("pet.is_at_home", True))
+        is_at_home = bool(self.cfg.get("pet.is_at_home", False))
         home_btn_text = "🏠  Katze ist ZU HAUSE im Zimmer (Klick: Rausgehen)" if is_at_home else "🌿  Katze ist DRAUSSEN auf dem Desktop (Klick: Nach Hause)"
         btn_home_mode = QPushButton(home_btn_text)
         btn_home_mode.setStyleSheet("background: #4ECCA3; color: #121316; font-weight: bold; border-radius: 6px; padding: 8px;" if is_at_home else "background: #3A3D46; color: #F2F3F5; font-weight: bold; border-radius: 6px; padding: 8px;")
@@ -502,7 +502,7 @@ class CharacterTreeDialog(QDialog):
         r_layout.addWidget(btn_home_mode)
 
         self.chk_auto_lively = QCheckBox(tr("lively.auto_sync_label"))
-        self.chk_auto_lively.setChecked(bool(self.cfg.get("lively.auto_sync", True)))
+        self.chk_auto_lively.setChecked(bool(self.cfg.get("lively.auto_sync", False)))
         self.chk_auto_lively.toggled.connect(self._on_auto_lively_toggled)
         r_layout.addWidget(self.chk_auto_lively)
 
@@ -613,7 +613,7 @@ class CharacterTreeDialog(QDialog):
         self.refresh_all()
 
     def _on_home_mode_clicked(self) -> None:
-        new_state = not bool(self.cfg.get("pet.is_at_home", True))
+        new_state = not bool(self.cfg.get("pet.is_at_home", False))
         self.cfg.set("pet.is_at_home", new_state)
         self.cfg.save()
         self.home_mode_toggled.emit(new_state)
