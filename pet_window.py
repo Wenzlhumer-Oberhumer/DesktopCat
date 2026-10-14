@@ -111,7 +111,7 @@ def throw_step(px, py, vx, vy, dt, lo, hi, top, ground, bounced, gravity):
         py = top
         vy = -vy * CEIL_BOUNCE
         event = "wall"
-    if py >= ground:
+    if py >= ground and vy >= 0:
         py = ground
         if not bounced and vy > 260:
             vy = -vy * FLOOR_BOUNCE

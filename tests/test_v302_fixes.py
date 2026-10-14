@@ -233,3 +233,23 @@ def test_on_bed_hidden_drops_cat():
     assert win.state == PetState.FALLING
     assert win._vy > 0
 
+
+def test_throw_step_upward_does_not_prematurely_land():
+    """Testet, dass eine aufwärts springende Katze (vy < 0) nicht fälschlicherweise landet."""
+    from pet_window import throw_step
+    # py >= ground aber vy < 0 (aufwärts)
+    px, py, vx, vy, bounced, event = throw_step(
+        px=100.0, py=505.0, vx=0.0, vy=-400.0, dt=0.01,
+        lo=0.0, hi=1000.0, top=0.0, ground=500.0,
+        bounced=False, gravity=2300.0,
+    )
+    # Event darf NICHT 'landed' sein, da Katze sich nach oben bewegt
+    assert event != "landed"
+    assert vy < 0
+
+
+def test_restore_wallpaper_tool_registered():
+    """Testet, dass das restore_wallpaper Tool registriert ist."""
+    from tools import TOOLS
+    assert "restore_wallpaper" in TOOLS
+
