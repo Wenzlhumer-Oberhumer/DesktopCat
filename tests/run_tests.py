@@ -50,6 +50,7 @@ def main():
         "test_pet_care",
         "test_v240_features",
         "test_v250_features",
+        "test_v300_features",
     ]
 
     total = 0

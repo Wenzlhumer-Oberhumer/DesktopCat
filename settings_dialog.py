@@ -7,15 +7,26 @@ import os
 import webbrowser
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
     QSlider, QTabWidget, QVBoxLayout, QWidget,
 )
 
 import gemini
+import auth_manager
+import voice_tts
 from paths import set_autostart
+
+
+class _OAuthCustomEvent(QEvent):
+    EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
+
+    def __init__(self, success: bool, error: str = ""):
+        super().__init__(self.EVENT_TYPE)
+        self.success = success
+        self.error = error
 
 try:
     from pet_sprites import CHARACTERS, get_character_info
@@ -500,22 +511,31 @@ class SettingsDialog(QDialog):
     # ==================================================================================
     #  Tab 3: 🤖 Gemini-KI & Sprache
     # ==================================================================================
+    # ==================================================================================
+    #  Tab 3: 🤖 Gemini-KI, Dual-Login & Voice
+    # ==================================================================================
     def _build_tab_ai(self) -> None:
         import i18n
         lay = self._create_scrollable_tab(i18n.tr("settings.tab_ai"))
 
+        # Card 1: Gemini KI-Verbindung (Option A & Option C)
         card_ai = QFrame()
         card_ai.setObjectName("card")
         ai_lay = QVBoxLayout(card_ai)
-        ai_lay.setSpacing(10)
+        ai_lay.setSpacing(12)
 
-        sec_lbl = QLabel("🧠  Google Gemini-Konto & KI-Funktionen")
+        sec_lbl = QLabel("🧠  Google Gemini-Konto & Dual-Login (Option A & C)")
         sec_lbl.setObjectName("section")
         ai_lay.addWidget(sec_lbl)
 
         self.status_lbl = QLabel()
         self.status_lbl.setObjectName("status")
         ai_lay.addWidget(self.status_lbl)
+
+        # -- Option C: 1-Klick Studio Key --
+        opt_c_lbl = QLabel("Option C: 1-Klick Studio Key (Empfohlen für schnellen Start)")
+        opt_c_lbl.setStyleSheet("font-weight: 600; color: #FF85A2;")
+        ai_lay.addWidget(opt_c_lbl)
 
         steps = QLabel("1. „Gratis-Key holen“ klicken & mit Google-Konto anmelden\n"
                        "2. „Create API key“ wählen & Key kopieren (Free Tier reicht vollkommen aus)\n"
@@ -541,26 +561,111 @@ class SettingsDialog(QDialog):
         self.save_key_btn.setEnabled(False)
         self.save_key_btn.clicked.connect(self._on_save_key)
         btn_box.addWidget(self.save_key_btn)
-
-        self.logout_btn = QPushButton("Key entfernen")
-        self.logout_btn.setObjectName("danger")
-        self.logout_btn.clicked.connect(self._on_logout_click)
-        btn_box.addWidget(self.logout_btn)
         ai_lay.addLayout(btn_box)
 
-        self.ai_enabled = QCheckBox("KI verwenden (Gemini für smarte Befehle & Chat)")
+        # Trennlinie
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: #353842;")
+        ai_lay.addWidget(sep)
+
+        # -- Option A: Google OAuth 2.0 Browser-Login --
+        opt_a_lbl = QLabel("Option A: Google-Konto Browser-Login (OAuth 2.0)")
+        opt_a_lbl.setStyleSheet("font-weight: 600; color: #79D279;")
+        ai_lay.addWidget(opt_a_lbl)
+
+        oauth_hint = QLabel("Melde dich mit 1 Klick im Browser mit deinem Google-Konto an.\n"
+                            "Lade deine heruntergeladene JSON-Datei oder trage die Client-ID ein:")
+        oauth_hint.setObjectName("hint")
+        ai_lay.addWidget(oauth_hint)
+
+        import_btn = QPushButton("📁  JSON-Datei importieren (client_secret…)")
+        import_btn.clicked.connect(self._on_import_oauth_json)
+        ai_lay.addWidget(import_btn)
+
+        oauth_form = QFormLayout()
+        oauth_form.setSpacing(8)
+
+        cur_oauth = auth_manager.get_auth_manager().get_oauth_data() or {}
+        self.oauth_client_id_edit = QLineEdit(cur_oauth.get("client_id", ""))
+        self.oauth_client_id_edit.setPlaceholderText("z. B. 123456...apps.googleusercontent.com")
+        oauth_form.addRow("Client-ID:", self.oauth_client_id_edit)
+
+        self.oauth_client_secret_edit = QLineEdit(cur_oauth.get("client_secret", ""))
+        self.oauth_client_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.oauth_client_secret_edit.setPlaceholderText("Client-Secret (optional)")
+        oauth_form.addRow("Client-Secret:", self.oauth_client_secret_edit)
+        ai_lay.addLayout(oauth_form)
+
+        oauth_btn_box = QHBoxLayout()
+        oauth_btn_box.setSpacing(10)
+        self.oauth_login_btn = QPushButton("Mit Google im Browser anmelden")
+        self.oauth_login_btn.setObjectName("primary")
+        self.oauth_login_btn.clicked.connect(self._on_oauth_login)
+        oauth_btn_box.addWidget(self.oauth_login_btn, 1)
+
+        self.logout_btn = QPushButton("Abmelden / Key löschen")
+        self.logout_btn.setObjectName("danger")
+        self.logout_btn.clicked.connect(self._on_logout_click)
+        oauth_btn_box.addWidget(self.logout_btn)
+        ai_lay.addLayout(oauth_btn_box)
+
+        self.ai_enabled = QCheckBox("KI verwenden (Gemini für smarte Befehle, Chat & Sprachinteraktion)")
         self.ai_enabled.setChecked(bool(self.cfg.get("ai.enabled", True)))
         ai_lay.addWidget(self.ai_enabled)
 
-        hint = QLabel("Der Key bleibt sicher in der Windows-Anmeldeinformationsverwaltung gespeichert. "
-                      "Ohne Key arbeitet Desktop Cat im schnellen Offline-Modus.")
-        hint.setObjectName("hint")
-        hint.setWordWrap(True)
-        ai_lay.addWidget(hint)
-
         lay.addWidget(card_ai)
 
-        # Card: Sprache & Persona
+        # Card 2: 🎙️ Sprachausgabe (TTS) & Lip-Sync (v3.0.0)
+        card_voice = QFrame()
+        card_voice.setObjectName("card")
+        card_voice_lay = QVBoxLayout(card_voice)
+        card_voice_lay.setSpacing(10)
+
+        voice_sec = QLabel("🎙️  Sprachausgabe (TTS) & Lip-Sync (v3.0.0)")
+        voice_sec.setObjectName("section")
+        card_voice_lay.addWidget(voice_sec)
+
+        voice_form = QFormLayout()
+        voice_form.setSpacing(10)
+
+        v_cfg = self.cfg.get("voice", {}) if isinstance(self.cfg.get("voice"), dict) else {}
+
+        self.voice_enabled_chk = QCheckBox("Antworten mit Stimme vorlesen (Edge-TTS)")
+        self.voice_enabled_chk.setChecked(bool(v_cfg.get("enabled", True)))
+        voice_form.addRow("", self.voice_enabled_chk)
+
+        self.voice_combo = QComboBox()
+        for key, p in voice_tts.VOICE_PRESETS.items():
+            self.voice_combo.addItem(p["name"], p["id"])
+
+        cur_voice = str(v_cfg.get("name", "de-DE-KatjaNeural"))
+        idx = self.voice_combo.findData(cur_voice)
+        if idx >= 0:
+            self.voice_combo.setCurrentIndex(idx)
+        voice_form.addRow("Stimme / Persona:", self.voice_combo)
+
+        # Kawaii Pitch Slider (+0% bis +40%)
+        cur_pitch_str = str(v_cfg.get("pitch", "+20%")).replace("+", "").replace("%", "").strip()
+        try:
+            cur_pitch_val = int(cur_pitch_str)
+        except ValueError:
+            cur_pitch_val = 20
+
+        self.voice_pitch_slider = QSlider(Qt.Orientation.Horizontal)
+        self.voice_pitch_slider.setRange(0, 40)
+        self.voice_pitch_slider.setValue(cur_pitch_val)
+        self.voice_pitch_lbl = QLabel()
+        voice_form.addRow("Niedliche Tonhöhe (Kawaii Pitch):", self._with_label(self.voice_pitch_slider, self.voice_pitch_lbl, " %"))
+
+        self.lipsync_chk = QCheckBox("Mundbewegungen (Lip-Sync) synchron beim Sprechen animieren")
+        self.lipsync_chk.setChecked(bool(v_cfg.get("lipsync", True)))
+        voice_form.addRow("", self.lipsync_chk)
+
+        card_voice_lay.addLayout(voice_form)
+        lay.addWidget(card_voice)
+
+        # Card 3: Sprache & Persona
         card_lang = QFrame()
         card_lang.setObjectName("card")
         card_lang_lay = QVBoxLayout(card_lang)
@@ -701,9 +806,13 @@ class SettingsDialog(QDialog):
         self.hotkey_explain_edit.setPlaceholderText("z. B. ctrl+alt+e")
         form_keys.addRow("Kopieren & Erklären:", self.hotkey_explain_edit)
 
+        self.hotkey_voice_edit = QLineEdit(str(self.cfg.get("hotkey_voice", "ctrl+alt+space")))
+        self.hotkey_voice_edit.setPlaceholderText("z. B. ctrl+alt+space")
+        form_keys.addRow("Push-to-Talk (Sprechen & Zuhören):", self.hotkey_voice_edit)
+
         card_keys_lay.addLayout(form_keys)
 
-        self.hotkey_hint = QLabel("Format: ctrl / alt / shift / win + Taste, z. B. ctrl+alt+p oder ctrl+alt+e")
+        self.hotkey_hint = QLabel("Format: ctrl / alt / shift / win + Taste, z. B. ctrl+alt+p, ctrl+alt+e oder ctrl+alt+space")
         self.hotkey_hint.setObjectName("hint")
         card_keys_lay.addWidget(self.hotkey_hint)
 
@@ -737,18 +846,22 @@ class SettingsDialog(QDialog):
         self.accept()
 
     # ==================================================================================
-    #  Auth & Key Handling
+    #  Auth & Key Handling (Dual-Login Option A & C)
     # ==================================================================================
     def _set_status(self, text: str, color: str) -> None:
         self.status_lbl.setText(text)
         self.status_lbl.setStyleSheet(f"color: {color};")
 
     def _refresh_auth_ui(self) -> None:
-        if gemini.has_key():
-            self._set_status("✅  Gemini-Key aktiv & sicher hinterlegt", "#79D279")
+        mode = auth_manager.get_auth_manager().get_auth_mode()
+        if mode == "oauth":
+            self._set_status("🟢  Angemeldet mit Google-Konto (OAuth 2.0)", "#79D279")
+            self.logout_btn.setVisible(True)
+        elif mode == "apikey":
+            self._set_status("🟢  Verbunden mit Google AI Studio Key (Option C)", "#79D279")
             self.logout_btn.setVisible(True)
         else:
-            self._set_status("❌  Noch kein Gemini-Key eingetragen", "#FF8F8F")
+            self._set_status("⚪  Offline-Modus (Noch kein Account oder Key verbunden)", "#A0A5B5")
             self.logout_btn.setVisible(False)
 
     def _on_save_key(self) -> None:
@@ -769,6 +882,61 @@ class SettingsDialog(QDialog):
         parent = self.parent()
         if parent and hasattr(parent, "celebrate"):
             parent.celebrate()
+
+    def _on_import_oauth_json(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "client_secret.json auswählen", "", "JSON-Dateien (*.json);;Alle Dateien (*.*)"
+        )
+        if not file_path:
+            return
+        try:
+            import json
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            client_info = data.get("installed") or data.get("web") or data
+            cid = str(client_info.get("client_id", "")).strip()
+            sec = str(client_info.get("client_secret", "")).strip()
+            if cid:
+                self.oauth_client_id_edit.setText(cid)
+            if sec:
+                self.oauth_client_secret_edit.setText(sec)
+            self._set_status("✅  Client-ID aus JSON erfolgreich geladen!", "#79D279")
+        except Exception as exc:
+            self._set_status(f"❌  Fehler beim Lesen der JSON-Datei: {exc}", "#FF8F8F")
+
+    def _on_oauth_login(self) -> None:
+        cid = self.oauth_client_id_edit.text().strip()
+        sec = self.oauth_client_secret_edit.text().strip()
+        if not cid:
+            self._set_status("❌  Bitte zuerst eine Google Client-ID eingeben (oder Option C nutzen)", "#FF8F8F")
+            return
+
+        self._set_status("🌐  Browser wird geöffnet… Bitte dort anmelden & Zugriff erlauben", "#FFD24D")
+        self.oauth_login_btn.setEnabled(False)
+
+        def _on_success():
+            QApplication.instance().postEvent(self, _OAuthCustomEvent(True))
+
+        def _on_err(err_msg: str):
+            QApplication.instance().postEvent(self, _OAuthCustomEvent(False, err_msg))
+
+        auth_manager.get_auth_manager().start_oauth_flow_async(
+            client_id=cid,
+            client_secret=sec,
+            on_success=_on_success,
+            on_error=_on_err,
+        )
+
+    def customEvent(self, event) -> None:
+        if isinstance(event, _OAuthCustomEvent):
+            self.oauth_login_btn.setEnabled(True)
+            if event.success:
+                self._refresh_auth_ui()
+                parent = self.parent()
+                if parent and hasattr(parent, "celebrate"):
+                    parent.celebrate()
+            else:
+                self._set_status(f"❌  Anmeldung fehlgeschlagen: {event.error}", "#FF8F8F")
 
     def _on_logout_click(self) -> None:
         gemini.clear_key()
@@ -802,9 +970,22 @@ class SettingsDialog(QDialog):
             self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
             self.tabs.setCurrentIndex(4)
             return
+        hotkey_voice = self.hotkey_voice_edit.text().strip().lower()
+        if not self._hotkey_ok(hotkey_voice):
+            self.hotkey_hint.setText("❌  Ungültiges Tastenkürzel für Push-to-Talk – Beispiel: ctrl+alt+space")
+            self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
+            self.tabs.setCurrentIndex(4)
+            return
 
         c.set("hotkey", hotkey)
         c.set("hotkey_explain", hotkey_ex)
+        c.set("hotkey_voice", hotkey_voice)
+
+        # Voice & Lip-Sync Einstellungen
+        c.set("voice.enabled", self.voice_enabled_chk.isChecked())
+        c.set("voice.name", str(self.voice_combo.currentData() or "de-DE-KatjaNeural"))
+        c.set("voice.pitch", f"+{self.voice_pitch_slider.value()}%")
+        c.set("voice.lipsync", self.lipsync_chk.isChecked())
 
         char = self.char_combo.currentData()
         if char:

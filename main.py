@@ -118,6 +118,8 @@ from accessories import (
 )
 from guide_overlay import GuideOverlay
 from it_guide import GuideSession, GuideWorker, pixmap_to_b64
+import voice_recorder
+import voice_tts
 
 class WeatherWorker(QThread):
     finished_with_result = pyqtSignal(object)
@@ -191,7 +193,43 @@ class ClipboardExplainWorker(QThread):
 APP_ID = "MochiDesktopBuddy"
 HOTKEY_ID = 0xB0B0
 EXPLAIN_HOTKEY_ID = 0xB0B1
+VOICE_HOTKEY_ID = 0xB0B2
 WM_HOTKEY = 0x0312
+
+
+class VoiceWorker(QThread):
+    """Verarbeitet Sprachaufnahmen multimodul per Gemini Flash in 16kHz WAV."""
+
+    finished_with_result = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, audio_path: str, cfg: dict):
+        super().__init__()
+        self.audio_path = audio_path
+        self.cfg = cfg
+
+    def run(self) -> None:
+        try:
+            user = str(self.cfg.get("pet", {}).get("user_name", "Boss")).strip() or "Boss"
+            cinfo = get_character_info(self.cfg.get("pet", {}).get("character", "cat_mochi"))
+            who = cinfo.get("ai_persona") or "Du bist Kylie, ein extrem neugieriger, süßer Katzen-Buddy."
+            prompt = (
+                f"{who} Der Nutzer ('{user}') spricht gerade direkt mit dir per Sprache. "
+                f"Höre dir die Audio-Aufnahme genau an. Verstehe die Frage, Bemerkung oder den Wunsch "
+                f"und antworte kurz, liebenswert und charmant auf Deutsch (maximal 1-3 Sätze). "
+                f"Nenne den Nutzer gerne '{user}'. "
+                f"Verwende keine langen Aufzählungen oder Formatierungen, da deine Antwort auch laut mit Stimme vorgelesen wird."
+            )
+            ans = gemini.ask_audio(self.audio_path, prompt=prompt, timeout_s=45.0)
+            self.finished_with_result.emit(ans)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        finally:
+            if os.path.exists(self.audio_path):
+                try:
+                    os.remove(self.audio_path)
+                except OSError:
+                    pass
 
 
 class AmbientVisionWorker(QObject):
@@ -515,6 +553,24 @@ class Buddy(QObject):
             self._explain_hotkey_pressed,
         )
 
+        # v3.0.0: Voice Interaktion, Lip-Sync & Push-to-Talk
+        self._is_recording_voice = False
+        self._is_processing_voice = False
+        self._voice_worker: Optional[QThread] = None
+
+        self._ptt_poll_timer = QTimer(self)
+        self._ptt_poll_timer.timeout.connect(self._on_ptt_poll)
+
+        tts = voice_tts.get_tts()
+        tts.speaking_started.connect(lambda: self.pet.set_speaking(True))
+        tts.speaking_finished.connect(lambda: self.pet.set_speaking(False))
+
+        self._hotkey_voice_ok = self.hotkey.register(
+            cfg.get("hotkey_voice", "ctrl+alt+space"),
+            VOICE_HOTKEY_ID,
+            self._voice_hotkey_pressed,
+        )
+
         self._chatter = QTimer(self)
         self._chatter.setSingleShot(True)
         self._chatter.timeout.connect(self._on_chatter)
@@ -604,6 +660,9 @@ class Buddy(QObject):
         self._act(self.tray_menu, tr("menu.watch_screen"), lambda: self._on_submit("was mache ich gerade"))
         self._act(self.tray_menu, tr("menu.create_word"), lambda: self._on_submit("erstelle ein word dokument am desktop"))
         self._act(self.tray_menu, tr("menu.reset_taskbar"), self.pet.reset_to_taskbar)
+        voice_on = bool(self.cfg.get("voice.enabled", True))
+        voice_text = "🔊 Sprachausgabe: Ein" if voice_on else "🔇 Sprachausgabe: Aus"
+        self._act(self.tray_menu, voice_text, self._toggle_voice_output)
         self.tray_menu.addSeparator()
         if getattr(self, "_pending_update", None):
             ver = self._pending_update.get("version", "")
@@ -911,6 +970,8 @@ class Buddy(QObject):
             self.pet.sad()
         self.bubble.hide_now()
         self._say(("Fertig! \u2728  " if ok and notify else "") + message)
+        if bool(self.cfg.get("voice.read_answers", False)):
+            voice_tts.get_tts().speak(message, self.cfg.as_dict())
         if notify:
             self.tray.showMessage(notify, message, self.icon, 6000)
         if "?" in message:
@@ -1334,6 +1395,7 @@ class Buddy(QObject):
         try:
             old_spec = str(self.cfg.get("hotkey", "ctrl+alt+p"))
             old_ex_spec = str(self.cfg.get("hotkey_explain", "ctrl+alt+e"))
+            old_voice_spec = str(self.cfg.get("hotkey_voice", "ctrl+alt+space"))
             dlg = SettingsDialog(self.cfg, hotkey_validator=lambda spec: parse_hotkey(spec) is not None)
             dlg.hide_pet_requested.connect(self.hide_pet)
             dlg.setWindowIcon(self.icon)
@@ -1357,6 +1419,14 @@ class Buddy(QObject):
                         self.cfg.set("hotkey_explain", old_ex_spec)
                         self.cfg.save()
                         self.hotkey.register(old_ex_spec, EXPLAIN_HOTKEY_ID, self._explain_hotkey_pressed)
+                voice_spec = str(self.cfg.get("hotkey_voice", "ctrl+alt+space"))
+                if voice_spec != old_voice_spec:
+                    self.hotkey.unregister(VOICE_HOTKEY_ID)
+                    if not self.hotkey.register(voice_spec, VOICE_HOTKEY_ID, self._voice_hotkey_pressed):
+                        self.cfg.set("hotkey_voice", old_voice_spec)
+                        self.cfg.save()
+                        self.hotkey.register(old_voice_spec, VOICE_HOTKEY_ID, self._voice_hotkey_pressed)
+                self._update_tray_menu()
                 self._say(tr("say.saved"), 2000)
         finally:
             self._settings_open = False
@@ -1832,6 +1902,87 @@ class Buddy(QObject):
     def _on_note_completed(self, _note_id: int) -> None:
         self.pet.react_happy()
         self._say(tr("say.done_great"), 3500)
+
+    # -- v3.0.0: Voice Interaktion, Push-to-Talk, Lip-Sync & TTS -----------------------
+    def _voice_hotkey_pressed(self) -> None:
+        if getattr(self, "_focus_mode", False):
+            return
+        if self._is_recording_voice or self._is_processing_voice:
+            return
+
+        recorder = voice_recorder.get_recorder()
+        if not recorder.start_recording():
+            self._say("⚠️ Mikrofon konnte nicht gestartet werden.", 3000)
+            return
+
+        self._is_recording_voice = True
+        self.pet.set_listening(True)
+        self.pet.wake()
+        self.pet.freeze(True)
+        self._say("🎙️ Ich höre dir zu… (Lass die Leertaste los zum Senden)", 30000)
+
+        # Polling Timer für Keyup der Leertaste (Push-to-Talk)
+        self._ptt_poll_timer.start(30)
+
+    def _on_ptt_poll(self) -> None:
+        if not self._is_recording_voice:
+            self._ptt_poll_timer.stop()
+            return
+
+        # Prüfe ob Leertaste noch gedrückt ist (VK_SPACE = 0x20)
+        key_state = ctypes.windll.user32.GetAsyncKeyState(0x20)
+        is_down = bool(key_state & 0x8000)
+
+        recorder = voice_recorder.get_recorder()
+        if not is_down or recorder.duration_seconds() > 30.0:
+            self._ptt_poll_timer.stop()
+            self._voice_hotkey_released()
+
+    def _voice_hotkey_released(self) -> None:
+        if not self._is_recording_voice:
+            return
+        self._is_recording_voice = False
+        self.pet.set_listening(False)
+        self.pet.freeze(False)
+
+        recorder = voice_recorder.get_recorder()
+        dur = recorder.duration_seconds()
+        audio_path = recorder.stop_recording()
+
+        if dur < 0.35 or not audio_path:
+            self._say("🐾 Zu kurz! Halte die Tasten gedrückt, während du sprichst.", 3500)
+            return
+
+        self._is_processing_voice = True
+        self._say("🤔 Ich denke nach…", 30000)
+
+        worker = VoiceWorker(audio_path, self.cfg.as_dict())
+        worker.finished_with_result.connect(self._on_voice_result)
+        worker.failed.connect(self._on_voice_failed)
+        self._voice_worker = worker
+        worker.start()
+
+    def _on_voice_result(self, text: str) -> None:
+        self._is_processing_voice = False
+        if not text:
+            self._say("🐾 Ich habe leider nichts gehört. Versuche es noch einmal!", 4000)
+            return
+        duration_ms = max(4500, min(16000, len(text) * 115))
+        self._say(text, duration_ms)
+        # Synchrone Sprachausgabe + Lip-Sync
+        voice_tts.get_tts().speak(text, self.cfg.as_dict())
+
+    def _on_voice_failed(self, err: str) -> None:
+        self._is_processing_voice = False
+        self._say(f"🐾 Miau, Fehler bei Sprachverarbeitung: {err}", 5000)
+
+    def _toggle_voice_output(self) -> None:
+        cur = bool(self.cfg.get("voice.enabled", True))
+        self.cfg.set("voice.enabled", not cur)
+        self.cfg.save()
+        self._update_tray_menu()
+        status = "aktiviert 🔊" if not cur else "deaktiviert 🔇"
+        self._say(f"Sprachausgabe wurde {status}.", 2500)
 
     # -- Phase 5: IT-Support, Klick-Guide, Fehler-Doktor & Kopieren/Erklären -----------
     def _explain_hotkey_pressed(self) -> None:

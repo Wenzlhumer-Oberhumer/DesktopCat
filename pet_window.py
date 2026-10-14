@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QGuiApplication, QPainter
+from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from i18n import tr
@@ -219,6 +219,8 @@ class PetWindow(QWidget):
         self._last_sig = None
         self.pet_bed = None
         self.room_mode = bool(cfg.get("pet.room_mode", True))
+        self._is_speaking = False
+        self._is_listening = False
 
         # Zubehoer & Fliegen (Phase 4)
         self._accessories: set[str] = set()
@@ -804,8 +806,26 @@ class PetWindow(QWidget):
             self.set_state(PetState.WALK_RIGHT if direction > 0 else PetState.WALK_LEFT)
 
     # ==================================================================================
-    #  Zeichnen
+    #  Zeichnen & Voice / Lip-Sync
     # ==================================================================================
+    def set_speaking(self, speaking: bool) -> None:
+        """Aktiviert oder deaktiviert die Mundbewegung (Lip-Sync) während Sprachausgabe."""
+        if self._is_speaking != bool(speaking):
+            self._is_speaking = bool(speaking)
+            self.update()
+
+    def is_speaking(self) -> bool:
+        return self._is_speaking
+
+    def set_listening(self, listening: bool) -> None:
+        """Zeigt ein Mikrofon-Badge an, während der Nutzer per Push-to-Talk spricht."""
+        if self._is_listening != bool(listening):
+            self._is_listening = bool(listening)
+            self.update()
+
+    def is_listening(self) -> bool:
+        return self._is_listening
+
     def _build_pose(self, now: float):
         # Abgelaufene temporaere Accessoires aufraeumen
         expired = [name for name, u in self._accessory_until.items() if now >= u]
@@ -824,7 +844,8 @@ class PetWindow(QWidget):
         if self.facing < 0:
             look = (-look[0], look[1])
         ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
-                          squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until)
+                          squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until,
+                          speaking=self._is_speaking)
         pose = compute_pose(ctx)
         if self.state == PetState.FALLING:          # im Flug in Wurfrichtung kippen
             pose.rot += max(-25.0, min(25.0, self._vx / 60.0)) * self.facing
@@ -891,6 +912,23 @@ class PetWindow(QWidget):
             if flip:
                 pose.zzz, pose.dots, pose.sparkles, pose.hearts, pose.confetti = effects
                 _draw_effects(p, pose)
+
+        # v3.0.0 Visueller Mikrofon-Indikator beim Push-to-Talk Zuhören
+        if self._is_listening:
+            p.save()
+            pulse = (math.sin((now - self._t0) * 8.0) + 1.0) * 0.5
+            p.setPen(Qt.PenStyle.NoPen)
+            # Pulsierender pink-roter Kreis
+            p.setBrush(QColor(255, 60, 110, int(180 + 75 * pulse)))
+            p.drawEllipse(QPointF(80, 24), 13 + 2.5 * pulse, 13 + 2.5 * pulse)
+            # Weißes Mikrofon-Emoji
+            f = QFont("Segoe UI Emoji")
+            f.setPixelSize(13)
+            p.setFont(f)
+            p.setPen(QColor("#FFFFFF"))
+            p.drawText(QRectF(68, 12, 24, 24), Qt.AlignmentFlag.AlignCenter, "🎙️")
+            p.restore()
+
         p.end()
 
     def _paint_sprite(self, p: QPainter, key: str, t: float, age: float, hop: float, flip: bool) -> None:

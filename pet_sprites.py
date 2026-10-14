@@ -211,6 +211,7 @@ class PoseContext:
     squash: float = 0.0          # Landungs-Squish 0..1
     hearts_age: Optional[float] = None
     happy: bool = False          # Klick-Freude
+    speaking: bool = False       # Mundbewegung beim Sprechen (v3.0.0 Lip-Sync)
 
 
 def _clamp(v, lo, hi):
@@ -420,6 +421,20 @@ def compute_pose(c: PoseContext) -> Pose:
         p.blush = 0.95
         p.tail = math.sin(t * 14) * 0.9
         p.dx += math.sin(t * 55) * 0.75   # Niedliche Schnurr-Vibration!
+
+    # v3.0.0 Lip-Sync beim Sprechen
+    if getattr(c, "speaking", False):
+        # Rhythmisches Öffnen/Schließen (~3.5 Hz)
+        cycle = (math.sin(t * 22.0) + 1.0) * 0.5
+        if cycle < 0.33:
+            p.mouth = "w"
+        elif cycle < 0.72:
+            p.mouth = "smile"
+        else:
+            p.mouth = "o"
+        # Sanftes Kopfwackeln beim Sprechen
+        p.head_dy += math.sin(t * 14.0) * 0.85
+
     if c.hop:
         p.dy -= c.hop
         p.shadow = _clamp(p.shadow - c.hop / 60, 0.4, 1)

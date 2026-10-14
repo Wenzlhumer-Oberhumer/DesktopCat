@@ -6,10 +6,13 @@ Der Key liegt in der Windows-Anmeldeinformationsverwaltung (nicht im Klartext in
 """
 from __future__ import annotations
 
+import base64
+from pathlib import Path
 from typing import Optional
 
 import requests
 
+import auth_manager
 from i18n import tr
 
 KEY_URL = "https://aistudio.google.com/app/apikey"
@@ -25,37 +28,22 @@ class LLMError(Exception):
     """Fehler beim Gemini-Aufruf mit benutzerfreundlicher Meldung."""
 
 
-# -- Key-Speicher ---------------------------------------------------------------------
+# -- Key- & Auth-Speicher -------------------------------------------------------------
 def get_key() -> str:
-    try:
-        import win32cred
-        cred = win32cred.CredRead(_CRED_TARGET, win32cred.CRED_TYPE_GENERIC)
-        return cred["CredentialBlob"].decode("utf-16-le").strip()
-    except Exception:  # noqa: BLE001 - kein Eintrag / kein pywin32
-        return ""
+    return auth_manager.get_auth_manager().get_api_key()
 
 
 def has_key() -> bool:
-    return bool(get_key())
+    return auth_manager.get_auth_manager().has_auth()
 
 
 def save_key(key: str) -> None:
-    import win32cred
-    win32cred.CredWrite({
-        "Type": win32cred.CRED_TYPE_GENERIC,
-        "TargetName": _CRED_TARGET,
-        "UserName": "Mochi",
-        "CredentialBlob": key.strip(),
-        "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
-    }, 0)
+    auth_manager.get_auth_manager().save_api_key(key)
 
 
 def clear_key() -> None:
-    try:
-        import win32cred
-        win32cred.CredDelete(_CRED_TARGET, win32cred.CRED_TYPE_GENERIC, 0)
-    except Exception:  # noqa: BLE001 - war schon weg
-        pass
+    auth_manager.get_auth_manager().clear_api_key()
+    auth_manager.get_auth_manager().clear_oauth_data()
 
 
 def validate_key(key: str) -> None:
@@ -91,15 +79,28 @@ def _key_invalid(resp: requests.Response) -> bool:
 
 
 def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
-        image_b64: Optional[str] = None, key: Optional[str] = None) -> str:
-    """Schickt einen Prompt (optional mit PNG-Screenshot) an Gemini und gibt den Antworttext zurueck."""
-    key = (key or get_key()).strip()
-    if not key:
+        image_b64: Optional[str] = None, key: Optional[str] = None,
+        audio_b64: Optional[str] = None, audio_mime: str = "audio/wav") -> str:
+    """Schickt einen Prompt (optional mit Bild oder Audio) an Gemini und gibt den Antworttext zurueck."""
+    if key:
+        headers = {"x-goog-api-key": key.strip()}
+    else:
+        auth_mgr = auth_manager.get_auth_manager()
+        if auth_mgr.is_oauth_configured():
+            headers = auth_mgr.get_auth_headers()
+        else:
+            k = get_key().strip()
+            headers = {"x-goog-api-key": k} if k else {}
+
+    if not headers:
         raise LLMError(tr("gemini.enter_key_first"))
 
     parts: list[dict] = [{"text": prompt}]
     if image_b64:
         parts.append({"inlineData": {"mimeType": "image/png", "data": image_b64}})
+    if audio_b64:
+        parts.append({"inlineData": {"mimeType": audio_mime, "data": audio_b64}})
+
     # minimales "Nachdenken": halbiert die Antwortzeit, reicht fuer Mochis kurze Antworten
     payload = {"contents": [{"role": "user", "parts": parts}],
                "generationConfig": {"thinkingConfig": {"thinkingLevel": "minimal"}}}
@@ -109,7 +110,7 @@ def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
     for m in dict.fromkeys(models):
         try:
             resp = requests.post(_API.format(model=m), json=payload, timeout=(6, timeout_s),
-                                 headers={"x-goog-api-key": key})
+                                 headers=headers)
         except requests.Timeout:
             last = tr("gemini.timeout")
             continue
@@ -130,4 +131,35 @@ def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
         out = cands[0].get("content", {}).get("parts") or []
         return "".join(p.get("text", "") for p in out if not p.get("thought")).strip()
     raise LLMError(last)
+
+
+def ask_audio(audio_source: str | bytes | Path, prompt: Optional[str] = None,
+              timeout_s: float = 60.0, model: Optional[str] = None) -> str:
+    """Sendet eine Audio-Datei (WAV) direkt an Gemini zur multimodalen Spracherkennung."""
+    if isinstance(audio_source, (str, Path)):
+        p = Path(audio_source)
+        if not p.exists():
+            raise LLMError(f"Audiodatei nicht gefunden: {p}")
+        with open(p, "rb") as f:
+            raw_bytes = f.read()
+    elif isinstance(audio_source, bytes):
+        raw_bytes = audio_source
+    else:
+        raise ValueError("audio_source muss ein Pfad oder bytes sein")
+
+    audio_b64 = base64.b64encode(raw_bytes).decode("ascii")
+
+    effective_prompt = prompt or (
+        "Du hörst eine Sprachaufnahme des Nutzers. "
+        "Verstehe genau, was der Nutzer sagt oder fragt, und antworte kurz, "
+        "charmant und liebenswert auf Deutsch (maximal 1-3 Sätze)."
+    )
+
+    return ask(
+        prompt=effective_prompt,
+        timeout_s=timeout_s,
+        model=model,
+        audio_b64=audio_b64,
+        audio_mime="audio/wav",
+    )
 
