@@ -1,8 +1,21 @@
-# 🐾 Mochi – Dein autonomer AI Desktop Buddy für Windows
+# 🐾 Desktop Cat – Kylie, deine KI-Katze für den Windows-Desktop
 
-**Mochi** ist ein vollfunktionsfähiges, extrem niedliches Desktop-Pet für Windows. Er läuft selbstständig auf deiner Taskleiste herum, reagiert auf Klicks & Drag-and-Drop und führt per **Gemini KI** oder **regelbasiertem Offline-Parser** echte Windows-Aktionen aus.
+**Desktop Cat** (früher „Mochi“) ist ein extrem niedliches Desktop-Haustier für Windows. **Kylie**, eine Calico-Glückskatze, läuft auf deiner Taskleiste herum, lässt sich herumwerfen, plaudert mit dir und hilft dir per **Gemini-KI** (kostenloser Key) oder **Offline-Parser** bei echten Windows-Aufgaben.
 
 ---
+
+## 🆕 Neu in v2.2
+
+- **Desktop Cat & Kylie:** neuer Name, Standard-Katze heißt Kylie und reagiert auf ihren Namen („Kylie!“ → spitzt die Ohren, wacht auf, „Kylie, wie spät ist es?“).
+- **✨ Kennenlernen beim ersten Start:** Kylie fragt dich in einem kleinen Chat nach Name, Spitzname, Hobbys, Stadt, gewünschtem Ton usw. Dein Profil geht kurz bei jeder KI-Frage mit, damit sie persönlich antwortet. Jederzeit wiederholbar und änderbar.
+- **📚 Meine Chats:** alle Gespräche lokal gespeichert, durchsuchbar, exportierbar, „Unterhaltung fortsetzen“.
+- **🔒 Meine Daten:** alles, was Kylie über dich weiß, ansehen, einzeln löschen oder „Alles vergessen“. Daten bleiben auf deinem PC; an Gemini gehen nur Frage, Profil, Fakten und höchstens 3 passende Chat-Ausschnitte (Hinweis zum kostenlosen Gemini-Zugang steht im Fenster).
+- **💬 Neugierig:** Kylie fragt ab und zu nach dir, merkt sich Termine und Geburtstage, Guten-Morgen-Briefing, Schlafenszeit-Erinnerung.
+- **🕶️ IT-Support:** bei Technikfragen setzt Kylie die Hackerbrille auf, fliegt auf ihrer Wolke zur richtigen Stelle und zeigt „Linksklick/Rechtsklick“ Schritt für Schritt – sie klickt nie selbst. Dazu Fehlermeldungs-Doktor und „Kopieren & Erklären“ (Hotkey).
+- **🎩 Outfits:** Saison (Halloween, Weihnachten, Silvester), Wetter (Schirm, Sonnenbrille, Schal), PC-Fieber (Fächer), Freundschafts-Level mit Belohnungen.
+- **📊 Fokus-Statistik, 📚 Lernkarten-Quiz, 📸 Fotobox, 📝 Haftnotizen.**
+- **🌍 Englisch-Modus** (Einstellungen ➜ Sprache).
+- **🤾 Werfen mit Schwung:** Figur packen und werfen – sie fliegt weiter, prallt an Wänden und Decke ab, hopst einmal am Boden und spaziert dann weiter.
 
 ## 🆕 Neu in v2.1
 
@@ -154,15 +167,15 @@ Mochi bringt ein vollständiges Build-System mit:
 Das Skript:
 1. Baut das Multi-Size-Icon (`assets/mochi.ico`).
 2. Erzeugt das PyInstaller-Bundle (`dist\Mochi\`).
-3. Kompiliert das Inno-Setup-Installationsprogramm (`dist\Mochi-Setup-<version>.exe`) inklusive `.sha256`-Prüfsumme.
+3. Kompiliert das Inno-Setup-Installationsprogramm (`dist\DesktopCat-Setup-<version>.exe`) inklusive `.sha256`-Prüfsumme.
 
 ### Release auf GitHub veröffentlichen
 1. Version in `version.py` erhöhen (z. B. `"2.0.1"`).
 2. `.\build.ps1` ausführen.
 3. Release auf GitHub erstellen und die beiden Dateien aus `dist\` hochladen:
-   - `Mochi-Setup-2.0.1.exe`
-   - `Mochi-Setup-2.0.1.exe.sha256`
-   (oder via `gh release create v2.0.1 dist\Mochi-Setup-2.0.1.exe dist\Mochi-Setup-2.0.1.exe.sha256 --title "v2.0.1"`).
+   - `DesktopCat-Setup-2.0.1.exe`
+   - `DesktopCat-Setup-2.0.1.exe.sha256`
+   (oder via `gh release create v2.0.1 dist\DesktopCat-Setup-2.0.1.exe dist\DesktopCat-Setup-2.0.1.exe.sha256 --title "v2.0.1"`).
 
 ---
 
