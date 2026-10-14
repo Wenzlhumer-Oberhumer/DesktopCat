@@ -530,6 +530,10 @@ class Buddy(QObject):
         if bool(cfg.get("lively.auto_sync", False)):
             import lively_wallpaper
             lively_wallpaper.apply_lively_wallpaper(cfg, get_memory_store())
+        elif not bool(cfg.get("pet.is_at_home", False)):
+            # Sicherstellen, dass der normale Windows-Hintergrund aktiv und sichtbar ist
+            import lively_wallpaper
+            lively_wallpaper.restore_original_wallpaper(cfg)
 
         self.explain_card = ExplainCard()
         self.guide_overlay: Optional[GuideOverlay] = None
@@ -981,7 +985,7 @@ class Buddy(QObject):
         elif "🕶️" in message or "cool" in low:
             self.pet.be_cool(6.0)
         elif "💤" in message or "schlaf" in low:
-            self.pet.set_state(PetState.SLEEP)
+            self.pet.go_to_sleep()
         elif ok:
             self.pet.celebrate()
         else:

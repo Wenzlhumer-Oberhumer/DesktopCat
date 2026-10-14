@@ -42,43 +42,93 @@ def get_room_package_dir() -> Path:
     return APP_DIR / "assets" / "lively_room"
 
 
+def _find_fuzzy_existing_file(cand: str) -> Optional[str]:
+    """Findet existierende Dateien im selben Ordner bei Umlaut-/Zeichen-Varianten (z. B. s vs. ß)."""
+    try:
+        p = Path(cand)
+        if not p.parent.is_dir():
+            return None
+        target_clean = p.stem.lower().replace("ß", "s").replace("ss", "s")
+        for f in p.parent.iterdir():
+            if f.is_file():
+                f_clean = f.stem.lower().replace("ß", "s").replace("ss", "s")
+                if f_clean == target_clean:
+                    return str(f.resolve())
+    except Exception:
+        pass
+    return None
+
+
 def get_current_windows_wallpaper() -> str:
-    """Liest den aktuellen Windows-Wallpaper-Pfad aus der Registry aus."""
+    """Liest den aktuellen Windows-Wallpaper-Pfad aus der Registry oder dem System-Cache aus."""
+    cand = ""
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop") as key:
             val, _ = winreg.QueryValueEx(key, "Wallpaper")
-            return str(val)
+            cand = str(val).strip()
     except Exception:
-        return ""
+        pass
+
+    if cand and os.path.isfile(cand):
+        return cand
+
+    if cand:
+        fuzzy = _find_fuzzy_existing_file(cand)
+        if fuzzy and os.path.isfile(fuzzy):
+            return fuzzy
+
+    # Fallback: Windows interner Wallpaper-Cache (TranscodedWallpaper)
+    transcoded = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Themes" / "TranscodedWallpaper"
+    if transcoded.is_file():
+        return str(transcoded.resolve())
+
+    return cand
 
 
 def restore_windows_wallpaper(path: str) -> bool:
-    """Stellt das vorherige Windows-Hintergrundbild wieder her."""
-    if not path or not os.path.isfile(path):
+    """Stellt das vorherige Windows-Hintergrundbild wieder her (mit Datei-Pruefung und Cache-Fallback)."""
+    target = path
+    if not target or not os.path.isfile(target):
+        if target:
+            fuzzy = _find_fuzzy_existing_file(target)
+            if fuzzy and os.path.isfile(fuzzy):
+                target = fuzzy
+
+    if not target or not os.path.isfile(target):
+        transcoded = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Themes" / "TranscodedWallpaper"
+        if transcoded.is_file():
+            target = str(transcoded.resolve())
+
+    if not target or not os.path.isfile(target):
         return False
+
     try:
         import ctypes
-        return bool(ctypes.windll.user32.SystemParametersInfoW(20, 0, str(path), 3))
+        # SPI_SETDESKWALLPAPER = 20, SPIF_UPDATEINIFILE = 1, SPIF_SENDCHANGE = 2
+        return bool(ctypes.windll.user32.SystemParametersInfoW(20, 0, str(target), 3))
     except Exception:
         return False
 
 
 def close_lively_wallpaper() -> bool:
-    """Schliesst aktive Lively-Hintergruende."""
+    """Schliesst aktive Lively-Hintergruende zuverlaessig."""
     lively_exe = find_lively_exe()
     if not lively_exe:
         return False
     try:
-        subprocess.Popen(
-            [str(lively_exe), "close"],
+        # Lively CLI schliesst Hintergruende mit 'closewp -1'
+        subprocess.run(
+            [str(lively_exe), "closewp", "-1"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            timeout=5,
         )
         return True
     except Exception:
-        return False
+        pass
+    return False
 
 
 def apply_lively_wallpaper(cfg=None, store=None) -> tuple[bool, str]:
@@ -120,9 +170,8 @@ def restore_original_wallpaper(cfg) -> bool:
     """Stellt das urspruengliche Hintergrundbild wieder her, wenn Desktop Cat beendet wird."""
     prev_wp = cfg.get("lively.prev_wallpaper", "")
     close_lively_wallpaper()
-    if prev_wp:
-        res = restore_windows_wallpaper(prev_wp)
+    res = restore_windows_wallpaper(prev_wp)
+    if res and prev_wp:
         cfg.set("lively.prev_wallpaper", "")
         cfg.save()
-        return res
-    return True
+    return res

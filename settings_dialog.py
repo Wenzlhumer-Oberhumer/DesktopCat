@@ -526,7 +526,7 @@ class SettingsDialog(QDialog):
         ai_lay = QVBoxLayout(card_ai)
         ai_lay.setSpacing(12)
 
-        sec_lbl = QLabel("🧠  Gemini-KI (kostenloser Key)")
+        sec_lbl = QLabel("🧠  Google Gemini-KI (Gratis- oder Paid-Key)")
         sec_lbl.setObjectName("section")
         ai_lay.addWidget(sec_lbl)
 
@@ -534,13 +534,12 @@ class SettingsDialog(QDialog):
         self.status_lbl.setObjectName("status")
         ai_lay.addWidget(self.status_lbl)
 
-        # -- Option C: 1-Klick Studio Key --
-        opt_c_lbl = QLabel("So bekommst du deinen Gratis-Key (kein Bezahlkonto nötig):")
+        opt_c_lbl = QLabel("Gemini API-Schlüssel (Google AI Studio):")
         opt_c_lbl.setStyleSheet("font-weight: 600; color: #FF85A2;")
         ai_lay.addWidget(opt_c_lbl)
 
         steps = QLabel("1. „Gratis-Key holen“ klicken & mit Google-Konto anmelden\n"
-                       "2. „Create API key“ wählen & Key kopieren (Free Tier reicht vollkommen aus)\n"
+                       "2. „Create API key“ wählen & Key kopieren (sowohl Gratis- als auch Bezahl-Keys funktionieren!)\n"
                        "3. Hier einfügen → „Prüfen & speichern“")
         steps.setObjectName("hint")
         ai_lay.addWidget(steps)
@@ -821,10 +820,10 @@ class SettingsDialog(QDialog):
     def _refresh_auth_ui(self) -> None:
         mode = auth_manager.get_auth_manager().get_auth_mode()
         if mode == "apikey":
-            self._set_status("🟢  Verbunden mit deinem Gratis-Key (Google AI Studio)", "#79D279")
+            self._set_status("🟢  Verbunden mit Gemini-KI (Google AI Studio / API-Key)", "#79D279")
             self.logout_btn.setVisible(True)
         else:
-            self._set_status("⚪  Offline-Modus (Noch kein Account oder Key verbunden)", "#A0A5B5")
+            self._set_status("⚪  Offline-Modus (Kein API-Key hinterlegt)", "#A0A5B5")
             self.logout_btn.setVisible(False)
 
     def _on_save_key(self) -> None:

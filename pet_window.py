@@ -218,6 +218,7 @@ class PetWindow(QWidget):
         self._pose = None
         self._last_sig = None
         self.pet_bed = None
+        self._going_to_bed = False
         self.room_mode = bool(cfg.get("pet.room_mode", False))
         self._is_speaking = False
         self._is_listening = False
@@ -557,8 +558,28 @@ class PetWindow(QWidget):
             self._anim_timer.start(INTERVALS.get(self.state, 33))
 
     def wake(self) -> None:
+        self._going_to_bed = False
         if self.state == PetState.SLEEP:
             self.set_state(PetState.IDLE)
+
+    def go_to_sleep(self) -> None:
+        """Laesst die Katze zum Katzenbettchen spazieren und sich dort schlafen legen (ohne Teleport!)."""
+        if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+            bed_x, bed_y = self.pet_bed.get_dock_position()
+            dist_x = abs(self._px - bed_x)
+            dist_y = abs(self._py - bed_y)
+            # Falls die Katze noch nicht im Bettchen ist: gemuetlich hinlaufen!
+            if dist_x > 18 or dist_y > 22:
+                self.wake()
+                self._going_to_bed = True
+                self._walk_target = bed_x
+                direction = 1 if bed_x > self._px else -1
+                self.set_state(PetState.WALK_RIGHT if direction > 0 else PetState.WALK_LEFT)
+                return
+        # Falls kein Bett da ist oder sie schon dort steht: direkt schlafen
+        self._going_to_bed = False
+        self.set_state(PetState.SLEEP)
+        self._schedule_wander(random.uniform(14, 28))
 
     # -- oeffentliche API fuer den Controller ---------------------------------------------
     def set_working(self) -> None:
@@ -638,16 +659,9 @@ class PetWindow(QWidget):
             return
         r = random.random()
 
-        # 1. Schlafen: Bevorzugt im Katzenbett, falls aufgestellt
+        # 1. Schlafen: Bevorzugt im Katzenbett (zu Fuss hingehen statt Teleport)
         if (is_night(self.cfg) and r < 0.6) or (r < 0.28):
-            if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
-                bed_x, bed_y = self.pet_bed.get_dock_position()
-                if abs(self._px - bed_x) > 25 or abs(self._py - bed_y) > 25:
-                    self._leap_to_perch(bed_y)
-                    self._px, self._py = bed_x, bed_y
-                    self._apply_pos()
-            self.set_state(PetState.SLEEP)
-            self._schedule_wander(random.uniform(12, 25))
+            self.go_to_sleep()
             return
 
         # 2. Raum-Modus: 2D-Klettern & Springen auf andere Ebenen (ohne Wolke)
@@ -773,11 +787,28 @@ class PetWindow(QWidget):
         if abs(diff) <= step:
             self._px = self._walk_target
             self._apply_pos()
-            self.set_state(PetState.IDLE)
+            if self._going_to_bed:
+                self._going_to_bed = False
+                if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+                    _, bed_y = self.pet_bed.get_dock_position()
+                    self._py = bed_y
+                    self._apply_pos()
+                self.set_state(PetState.SLEEP)
+                self._schedule_wander(random.uniform(14, 28))
+            else:
+                self.set_state(PetState.IDLE)
             return
         self._px += math.copysign(step, diff)
         self._px = max(lo, min(hi, self._px))
-        self._py = self._closest_perch_y(self._py)
+
+        # Falls die Katze zum Bettchen laeuft und ein Hoehensprung noetig ist
+        if self._going_to_bed and getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+            _, bed_y = self.pet_bed.get_dock_position()
+            if abs(self._px - self._walk_target) < 60 and abs(self._py - bed_y) > 25 and self._vy == 0:
+                self._leap_to_perch(bed_y)
+        else:
+            self._py = self._closest_perch_y(self._py)
+
         self._apply_pos()
 
     def _fall(self, dt: float) -> None:
@@ -973,6 +1004,7 @@ class PetWindow(QWidget):
     #  Maus: Klick, Doppelklick, Drag & Drop, Kontextmenue
     # ==================================================================================
     def mousePressEvent(self, e) -> None:
+        self._going_to_bed = False
         if e.button() == Qt.MouseButton.LeftButton:
             self._pressed = True
             self._dragging = False
@@ -1142,7 +1174,7 @@ class PetWindow(QWidget):
         is_home = bool(self.cfg.get("pet.is_at_home", False))
         home_action_text = tr("home.outside") if is_home else tr("home.at_home")
         tricks.addAction(home_action_text).triggered.connect(lambda: self.home_mode_toggled.emit(not is_home))
-        tricks.addAction(tr("menu.sleep")).triggered.connect(lambda: self.set_state(PetState.SLEEP))
+        tricks.addAction(tr("menu.sleep")).triggered.connect(self.go_to_sleep)
         tricks.addAction(tr("menu.wake")).triggered.connect(self.wake)
 
         # Schnelle Tools
