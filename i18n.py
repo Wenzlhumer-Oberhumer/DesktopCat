@@ -180,6 +180,22 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "🛋️  Katzenbett anzeigen / verbergen",
         "en": "🛋️  Toggle Pet Bed",
     },
+    "menu.scripts": {
+        "de": "🤖  Eigene Skripte & Routinen",
+        "en": "🤖  Custom Scripts & Routines",
+    },
+    "menu.home_mode_toggle": {
+        "de": "🏠  Katze zu Hause (Zimmer)",
+        "en": "🏠  Cat at Home (Room Mode)",
+    },
+    "home.at_home": {
+        "de": "🏠  Zu Hause im Zimmer",
+        "en": "🏠  At Home in Room",
+    },
+    "home.outside": {
+        "de": "🌿  Draußen auf dem Desktop",
+        "en": "🌿  Outside on Desktop",
+    },
     "menu.sub_learn": {
         "de": "💖  Freundschaft & Lernen",
         "en": "💖  Friendship & Learning",

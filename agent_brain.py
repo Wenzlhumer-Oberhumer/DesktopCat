@@ -84,6 +84,8 @@ def system_prompt(name: str, user_name: str = "Boss", character_id: str = "cat_m
         "- Akku, Festplatte und System-Status prüfen (system_info)\n"
         "- Dateien auf dem PC suchen (find_files)\n"
         "- Web-Recherche für Wissensfragen (web_search)\n"
+        "- EIGENE PYTHON-SKRIPTE & ALLTAGS-ROUTINEN (create_custom_script, run_custom_script, list_custom_scripts, manage_custom_routines):\n"
+        "  Wenn der Nutzer besondere Wünsche hat, automatisierte Abläufe braucht, Web-Inhalte extrahieren, Dateien verarbeiten, APIs abfragen oder tägliche Routinen (z.B. Morgen-Briefing, Backups, Erinnerungen, Datenanalyse) erstellen möchte: Schreibe selbst ein sauberes, funktionierendes Python-Skript und speichere es mit 'create_custom_script'! Du kannst es direkt ausführen oder als Routine ('daily_09:00', 'startup', 'interval_60m') planen.\n"
         "\nDIALOG-REGELN & RÜCKFRAGEN:\n"
         f"1. KONTINUIERLICHER CHATVERLAUF: Du kennst die vorherigen Nachrichten. Wenn {user} kurz antwortet (z. B. 'ja', 'die erste', 'mach das', 'nein danke', 'Projekt.docx'), beziehe dich IMMER auf das zuvor Gesagte!\n"
         f"2. RÜCKFRAGEN ERLAUBT & ERWÜNSCHT: Wenn etwas unklar ist, mehrere Dateien gefunden werden oder du eine Entscheidung brauchst: FRAGE DEN NUTZER DIREKT ZURÜCK! Stelle eine kurze, liebenswerte Frage mit Optionen (z. B. 'Meinst du Dokument A oder B, {user}?').\n"
@@ -198,6 +200,7 @@ class Plan:
     args: dict = field(default_factory=dict)
     reply: Optional[str] = None
     ok: bool = True
+    data: Optional[dict] = None
 
 
 _PATH_RE = re.compile(r"""["']?([A-Za-z]:\\[^"'<>|?*\r\n]+?\.docx?)["']?""", re.IGNORECASE)
@@ -621,7 +624,23 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
         rep = "I'll open your chats for you! 📚" if i18n.lang() == "en" else "Ich öffne deine Chats für dich! 📚"
         return Plan(reply=rep, ok=True)
 
-    # 17. Konversation / Smalltalk
+    # 17. Eigene Python-Skripte & Routinen
+    if re.search(r"\b(zeig\w*\s*(?:mir\s*)?(?:meine\s*)?skripte|skripte|routinen|skript\s*manager|meine\s*routinen|[oö]ffne\s*skripte|scripts|custom\s*scripts)\b", n):
+        return Plan("list_custom_scripts", {})
+    m_run_script = re.search(r"\b(?:f[uü]hr\w*|start\w*|run)\s+(?:das\s+)?(?:skript|script)\s+([a-zA-Z0-9_\-\.]+)", raw, re.IGNORECASE)
+    if m_run_script:
+        sname = m_run_script.group(1).strip()
+        return Plan("run_custom_script", {"name": sname})
+
+    # 18. Katzen-Zuhause & Zimmer-Modus (Umschalten zwischen Zuhause und Draußen)
+    if re.search(r"\b(geh\w*\s*(?:nach\s*)?hause|ab\s*nach\s*hause|geh\w*\s*ins\s*zimmer|katze\s*zuhause|mach\s*(?:das\s*)?zimmer\s*an|go\s*home)\b", n):
+        rep = "Welcome home! 🏠✨" if i18n.lang() == "en" else f"Willkommen zuhause, {user}! Schnurr~ 🏠✨"
+        return Plan(reply=rep, ok=True, data={"home_mode": True})
+    if re.search(r"\b(geh\w*\s*raus|rausgehen|geh\w*\s*auf\s*den\s*desktop|katze\s*drau[sß]en|mach\s*(?:das\s*)?zimmer\s*aus|go\s*outside)\b", n):
+        rep = "Let's go outside on the desktop! 🌿🐾" if i18n.lang() == "en" else f"Juhu, wir gehen raus auf den Desktop! 🌿🐾"
+        return Plan(reply=rep, ok=True, data={"home_mode": False})
+
+    # 19. Konversation / Smalltalk
     if re.search(r"\b(hallo|hi|hey|moin|servus|huhu|hello|good (morning|day|evening)|guten (tag|morgen|abend))\b", n):
         return Plan(reply=_voice(character_id, "greet", user))
     if re.search(r"danke|thx|thanks|merci|thank\s*you", n):

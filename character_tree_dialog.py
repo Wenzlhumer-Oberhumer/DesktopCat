@@ -88,6 +88,8 @@ class CharacterTreeDialog(QDialog):
     yarn_game_requested = pyqtSignal()
     wallpaper_requested = pyqtSignal()
     bed_toggled = pyqtSignal(bool)
+    home_mode_toggled = pyqtSignal(bool)
+    scripts_requested = pyqtSignal()
 
     def __init__(self, cfg, store=None, pet=None, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -492,6 +494,13 @@ class CharacterTreeDialog(QDialog):
         r_layout.addWidget(lbl_rw)
         r_layout.addWidget(lbl_rd)
 
+        is_at_home = bool(self.cfg.get("pet.is_at_home", True))
+        home_btn_text = "🏠  Katze ist ZU HAUSE im Zimmer (Klick: Rausgehen)" if is_at_home else "🌿  Katze ist DRAUSSEN auf dem Desktop (Klick: Nach Hause)"
+        btn_home_mode = QPushButton(home_btn_text)
+        btn_home_mode.setStyleSheet("background: #4ECCA3; color: #121316; font-weight: bold; border-radius: 6px; padding: 8px;" if is_at_home else "background: #3A3D46; color: #F2F3F5; font-weight: bold; border-radius: 6px; padding: 8px;")
+        btn_home_mode.clicked.connect(self._on_home_mode_clicked)
+        r_layout.addWidget(btn_home_mode)
+
         self.chk_auto_lively = QCheckBox(tr("lively.auto_sync_label"))
         self.chk_auto_lively.setChecked(bool(self.cfg.get("lively.auto_sync", True)))
         self.chk_auto_lively.toggled.connect(self._on_auto_lively_toggled)
@@ -557,6 +566,24 @@ class CharacterTreeDialog(QDialog):
         bd_layout.addWidget(self.chk_bed)
         self.games_layout.addWidget(bed_card)
 
+        # 5. Eigene Skripte & Routinen
+        scripts_card = QFrame()
+        scripts_card.setObjectName("charCard")
+        sc_layout = QVBoxLayout(scripts_card)
+        sc_layout.setContentsMargins(12, 10, 12, 10)
+        sc_layout.setSpacing(6)
+        lbl_sct = QLabel("🤖  Eigene Python-Skripte & Routinen")
+        lbl_sct.setStyleSheet("font-weight: bold; color: #79C0FF; font-size: 10pt;")
+        lbl_scd = QLabel("Erstelle, bearbeite und plane eigene Python-Skripte und tägliche Alltags-Routinen.")
+        lbl_scd.setStyleSheet("color: #8D919B; font-size: 8pt;")
+        btn_open_scripts = QPushButton("🤖  Skripte & Routinen verwalten")
+        btn_open_scripts.setStyleSheet("background: #3A3D46; color: #F2F3F5; border-radius: 6px; padding: 6px;")
+        btn_open_scripts.clicked.connect(self.scripts_requested.emit)
+        sc_layout.addWidget(lbl_sct)
+        sc_layout.addWidget(lbl_scd)
+        sc_layout.addWidget(btn_open_scripts)
+        self.games_layout.addWidget(scripts_card)
+
         self.games_layout.addStretch()
 
     def _select_char(self, cid: str) -> None:
@@ -583,6 +610,13 @@ class CharacterTreeDialog(QDialog):
         pet_care.pet_pet(self.cfg, self.store)
         if self.pet is not None:
             self.pet.react_happy()
+        self.refresh_all()
+
+    def _on_home_mode_clicked(self) -> None:
+        new_state = not bool(self.cfg.get("pet.is_at_home", True))
+        self.cfg.set("pet.is_at_home", new_state)
+        self.cfg.save()
+        self.home_mode_toggled.emit(new_state)
         self.refresh_all()
 
     def _on_auto_lively_toggled(self, checked: bool) -> None:

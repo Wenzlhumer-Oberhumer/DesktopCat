@@ -49,6 +49,7 @@ def main():
         "test_v223_fixes",
         "test_pet_care",
         "test_v240_features",
+        "test_v250_features",
     ]
 
     total = 0

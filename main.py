@@ -457,6 +457,8 @@ class Buddy(QObject):
         self.pet.yarn_game_requested.connect(self.start_yarn_game)
         self.pet.wallpaper_requested.connect(self.activate_lively_wallpaper)
         self.pet.pet_bed_requested.connect(self.toggle_pet_bed)
+        self.pet.scripts_requested.connect(self.open_scripts_dialog)
+        self.pet.home_mode_toggled.connect(self.set_home_mode)
         self.pet.hide_requested.connect(self.hide_pet)
         self.pet.focus_mode_requested.connect(self.start_focus_mode)
         self.tray.messageClicked.connect(self._on_tray_message_clicked)
@@ -548,6 +550,14 @@ class Buddy(QObject):
         self._pc_fever_timer = QTimer(self)
         self._pc_fever_timer.timeout.connect(self._check_pc_fever)
 
+        # v2.5.0: Autonome Routinen-Engine
+        import custom_scripts
+        custom_scripts.init_default_scripts()
+        self._routines_timer = QTimer(self)
+        self._routines_timer.timeout.connect(self._check_custom_routines)
+        self._routines_timer.start(60 * 1000)
+        QTimer.singleShot(3000, self._check_startup_routines)
+
     def user_name(self) -> str:
         return str(self.cfg.get("pet.user_name", "Boss")).strip() or "Boss"
 
@@ -575,8 +585,13 @@ class Buddy(QObject):
         else:
             self._act(self.tray_menu, tr("menu.show_pet", name=cname), self.show_pet)
         self._act(self.tray_menu, tr("menu.focus_mode"), self.start_focus_mode)
+        is_home = bool(self.cfg.get("pet.is_at_home", True))
+        home_text = tr("home.outside") if is_home else tr("home.at_home")
+        self._act(self.tray_menu, home_text, lambda: self.set_home_mode(not is_home))
         self.tray_menu.addSeparator()
 
+        self._act(self.tray_menu, tr("menu.scripts"), self.open_scripts_dialog)
+        self._act(self.tray_menu, tr("menu.character_tree"), self.open_character_tree)
         self._act(self.tray_menu, tr("menu.friendship"), self.open_friendship_dialog)
         self._act(self.tray_menu, tr("menu.focus_stats"), self.open_focus_stats_dialog)
         self._act(self.tray_menu, tr("menu.flashcards"), self.open_flashcards_dialog)
@@ -827,6 +842,17 @@ class Buddy(QObject):
             self.open_flashcards_dialog()
             return
 
+        if any(k in low_txt for k in ("skripte", "routinen", "skript manager", "meine routinen", "zeige skripte", "öffne skripte", "custom scripts")):
+            self.open_scripts_dialog()
+            return
+
+        if any(k in low_txt for k in ("geh nach hause", "ab nach hause", "geh ins zimmer", "katze zuhause", "katze ins zimmer", "go home")):
+            self.set_home_mode(True)
+            return
+        elif any(k in low_txt for k in ("geh raus", "geh auf den desktop", "katze draußen", "katze draussen", "rausgehen", "go outside")):
+            self.set_home_mode(False)
+            return
+
         import re
         m_cards = re.search(r"(?:mach|erstelle)\s+(?:mir\s+)?(?:(\d+)\s+)?lernkarten\s+zu\s+(.+)", low_txt)
         if m_cards:
@@ -891,6 +917,12 @@ class Buddy(QObject):
             self._mochi_asked_question = True
         if "ich öffne deine chats" in low or "meine chats für dich" in low:
             QTimer.singleShot(600, self.open_chat_history)
+        if "ich öffne deine skripte" in low or "skripte-manager" in low or "skript-manager" in low:
+            QTimer.singleShot(600, self.open_scripts_dialog)
+        if "willkommen zuhause" in low or "mach das zimmer an" in low:
+            self.set_home_mode(True)
+        elif "raus auf den desktop" in low or "wir gehen raus" in low:
+            self.set_home_mode(False)
 
 
     def _on_timer_expired(self, label: str, duration_s: int, u_name: str) -> None:
@@ -1396,7 +1428,76 @@ class Buddy(QObject):
         dlg.yarn_game_requested.connect(self.start_yarn_game)
         dlg.wallpaper_requested.connect(self.activate_lively_wallpaper)
         dlg.bed_toggled.connect(self.toggle_pet_bed)
+        dlg.home_mode_toggled.connect(self.set_home_mode)
+        dlg.scripts_requested.connect(self.open_scripts_dialog)
         dlg.exec()
+
+    # -- v2.5.0: Autonome Skripte, Routinen & Katzen-Zuhause -----------------------------
+    def open_scripts_dialog(self) -> None:
+        from scripts_dialog import CustomScriptsDialog
+        dlg = CustomScriptsDialog()
+        dlg.script_executed.connect(lambda name, out: self._say(f"Skript \u201e{name}\u201c ausgeführt! 🐾", 3500))
+        dlg.exec()
+
+    def set_home_mode(self, at_home: bool) -> None:
+        self.cfg.set("pet.is_at_home", at_home)
+        self.cfg.set("pet.room_mode", at_home)
+        self.cfg.save()
+        if at_home:
+            import lively_wallpaper
+            from memory_store import get_memory_store
+            try:
+                store = get_memory_store()
+            except Exception:
+                store = None
+            lively_wallpaper.apply_lively_wallpaper(self.cfg, store)
+            if hasattr(self, "pet_bed") and self.pet_bed and bool(self.cfg.get("furniture.bed_visible", True)):
+                self.pet_bed.show()
+            self._say(f"Willkommen zuhause, {self.user_name()}! Schnurr~ 🏠✨", 4500)
+            self.pet.celebrate(3.0)
+        else:
+            import lively_wallpaper
+            lively_wallpaper.restore_original_wallpaper(self.cfg)
+            if hasattr(self, "pet_bed") and self.pet_bed:
+                self.pet_bed.hide()
+            self._say(f"Juhu! Wir gehen raus auf den Desktop! 🌿🐾", 4000)
+            self.pet.react_happy()
+        self._update_tray_menu()
+
+    def _check_startup_routines(self) -> None:
+        try:
+            import custom_scripts
+            due = custom_scripts.get_due_routines(is_startup=True)
+            for s in due:
+                self._run_routine_bg(s)
+        except Exception as exc:
+            print(f"[routines] Startup-Check Fehler: {exc}")
+
+    def _check_custom_routines(self) -> None:
+        try:
+            import custom_scripts
+            due = custom_scripts.get_due_routines()
+            for s in due:
+                self._run_routine_bg(s)
+        except Exception as exc:
+            print(f"[routines] Check Fehler: {exc}")
+
+    def _run_routine_bg(self, script_dict: dict) -> None:
+        sname = script_dict.get("name", "")
+        title = script_dict.get("title") or sname
+        import threading
+        def _worker():
+            import custom_scripts
+            res = custom_scripts.run_script(sname)
+            if res.get("ok"):
+                summary = (res.get("stdout") or "").strip()
+                if summary:
+                    first_line = summary.splitlines()[0][:90]
+                    msg = f"Routine \u201e{title}\u201c ausgeführt! 🐾 {first_line}"
+                else:
+                    msg = f"Routine \u201e{title}\u201c erfolgreich abgeschlossen! 🐾✨"
+                QTimer.singleShot(0, lambda: self._say(msg, 6000))
+        threading.Thread(target=_worker, daemon=True).start()
 
     # -- v2.4.0: Minispiele, Lively Wallpaper & Möbel ----------------------------------
     def start_bubble_game(self) -> None:

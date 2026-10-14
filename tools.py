@@ -32,7 +32,7 @@ from paths import DATA_DIR
 LOG_FILE = DATA_DIR / "desktop_organize_log.json"
 
 # Tools, die erst nach ausdruecklichem "ja" des Nutzers laufen duerfen (siehe agent_brain.AgentBrain.pending_action)
-DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell", "forget_facts", "wipe_my_data"}
+DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell", "forget_facts", "wipe_my_data", "run_custom_script"}
 
 
 @dataclass
@@ -1551,6 +1551,114 @@ def start_it_guide(question: str = "") -> ToolResult:
     )
 
 
+def create_custom_script(
+    name: str,
+    code: str,
+    title: str = "",
+    description: str = "",
+    schedule: str = "manual",
+) -> ToolResult:
+    """Erstellt ein autonomes Python-Skript oder eine Alltags-Routine."""
+    import custom_scripts
+    ok, msg, meta = custom_scripts.save_script(
+        name=name,
+        code=code,
+        title=title,
+        description=description,
+        is_routine=bool(schedule != "manual"),
+        schedule=schedule,
+        enabled=True,
+    )
+    if not ok:
+        return ToolResult(False, f"Konnte das Skript nicht anlegen: {msg}")
+
+    clean_name = meta.get("name", name) if meta else name
+    sched_info = f" (Geplant: {schedule})" if schedule != "manual" else ""
+    return ToolResult(
+        True,
+        f"Ich habe das Python-Skript \u201e{clean_name}\u201c für dich erstellt! \U0001F40D\u2728{sched_info} Du findest es im Skripte-Manager.",
+        data={"script_name": clean_name, "code": code, "schedule": schedule},
+    )
+
+
+def run_custom_script(name: str) -> ToolResult:
+    """Führt ein zuvor erstelltes Python-Skript aus."""
+    import custom_scripts
+    res = custom_scripts.run_script(name)
+    dur = res.get("duration_s", 0.0)
+    stdout = (res.get("stdout") or "").strip()
+    stderr = (res.get("stderr") or "").strip()
+    if res["ok"]:
+        summary = stdout if stdout else "Erfolgreich ohne Ausgabe beendet."
+        if len(summary) > 280:
+            summary = summary[:275] + "..."
+        return ToolResult(
+            True,
+            f"Skript \u201e{name}\u201c erfolgreich in {dur}s ausgeführt! \U0001F43E\n{summary}",
+            data={"result": res},
+        )
+    err = stderr if stderr else res.get("error", "Unbekannter Fehler")
+    return ToolResult(
+        False,
+        f"Fehler bei \u201e{name}\u201c (Code {res.get('exit_code')}): {err[:200]}",
+        data={"result": res},
+    )
+
+
+def list_custom_scripts() -> ToolResult:
+    """Listet alle vorhandenen Python-Skripte und Routinen auf."""
+    import custom_scripts
+    scripts = custom_scripts.list_scripts()
+    if not scripts:
+        return ToolResult(True, "Es sind noch keine eigenen Skripte gespeichert. Sag mir einfach, was ich für dich programmieren soll! \U0001F43E\U0001F40D")
+    items = []
+    for s in scripts[:5]:
+        sched = s.get("schedule", "manual")
+        badge = f" [{sched}]" if sched != "manual" else ""
+        items.append(f"• {s.get('title', s['name'])} ({s['name']}){badge}")
+    text = "Deine Skripte & Routinen:\n" + "\n".join(items)
+    if len(scripts) > 5:
+        text += f"\n... und {len(scripts) - 5} weitere im Skript-Manager!"
+    return ToolResult(True, text, data={"count": len(scripts)})
+
+
+def manage_custom_routines(action: str = "list", name: str = "", schedule: str = "manual", enabled: bool = True) -> ToolResult:
+    """Verwaltet Routinen: 'list', 'toggle', 'delete', 'schedule'."""
+    import custom_scripts
+    act = (action or "list").lower()
+    if act == "list":
+        return list_custom_scripts()
+    if not name:
+        return ToolResult(False, "Bitte gib den Namen des Skripts an.")
+    script = custom_scripts.get_script(name)
+    if not script:
+        return ToolResult(False, f"Das Skript \u201e{name}\u201c wurde nicht gefunden.")
+    if act == "delete":
+        custom_scripts.delete_script(name)
+        return ToolResult(True, f"Skript \u201e{name}\u201c wurde gelöscht! \U0001F5D1\uFE0F")
+    if act == "toggle":
+        new_state = not script.get("enabled", True) if enabled is None else enabled
+        custom_scripts.save_script(
+            name=name,
+            code=script["code"],
+            title=script.get("title", ""),
+            schedule=script.get("schedule", "manual"),
+            enabled=new_state,
+        )
+        status_str = "aktiviert \u2705" if new_state else "pausiert \u23F8\uFE0F"
+        return ToolResult(True, f"Routine \u201e{name}\u201c wurde {status_str}.")
+    if act == "schedule":
+        custom_scripts.save_script(
+            name=name,
+            code=script["code"],
+            title=script.get("title", ""),
+            schedule=schedule,
+            enabled=True,
+        )
+        return ToolResult(True, f"Routine \u201e{name}\u201c auf \u201e{schedule}\u201c gestellt! \u23F0")
+    return ToolResult(False, f"Unbekannte Aktion \u201e{action}\u201c.")
+
+
 # ======================================================================================
 #  Registry (fuer KI-Tool-Calling) + sicherer Aufruf
 # ======================================================================================
@@ -1585,6 +1693,10 @@ TOOLS: dict[str, Callable[..., ToolResult]] = {
     "forget_facts": forget_facts,
     "wipe_my_data": wipe_my_data,
     "start_it_guide": start_it_guide,
+    "create_custom_script": create_custom_script,
+    "run_custom_script": run_custom_script,
+    "list_custom_scripts": list_custom_scripts,
+    "manage_custom_routines": manage_custom_routines,
 }
 
 TOOL_SPECS: list[dict] = [
@@ -1801,6 +1913,51 @@ TOOL_SPECS: list[dict] = [
         "parameters": {"type": "object", "properties": {
             "question": {"type": "string", "description": "Die technische Frage oder das Ziel des Nutzers, z. B. 'Wo ändere ich in Word die Formatvorlage?'."}},
             "required": ["question"]},
+    },
+    {
+        "name": "create_custom_script",
+        "description": "Erstellt ein autonomes Python-Skript oder eine Alltags-Routine auf dem PC, um spezielle Aufgaben zu automatisieren, Dateien zu verarbeiten, Daten abzufragen oder dem Nutzer zu helfen.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Dateiname des Skripts (z. B. 'crypto_tracker.py', 'morgen_check.py')."},
+                "code": {"type": "string", "description": "Vollständiger, ausführbarer Python-Code."},
+                "title": {"type": "string", "description": "Kurzer, verständlicher Titel für das Skript."},
+                "description": {"type": "string", "description": "Was dieses Skript tut."},
+                "schedule": {"type": "string", "enum": ["manual", "startup", "daily_09:00", "daily_12:00", "daily_18:00", "interval_30m", "interval_60m"], "description": "Wann das Skript automatisch als Routine laufen soll (Standard: manual)."}
+            },
+            "required": ["name", "code"]
+        },
+    },
+    {
+        "name": "run_custom_script",
+        "description": "Führt ein gespeichertes Python-Skript aus und gibt das Ergebnis und die Terminal-Ausgabe zurück.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name des auszuführenden Skripts (z. B. 'morgen_check.py')."}
+            },
+            "required": ["name"]
+        },
+    },
+    {
+        "name": "list_custom_scripts",
+        "description": "Listet alle vorhandenen eigenen Python-Skripte und Routinen auf.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "manage_custom_routines",
+        "description": "Verwaltet Routinen: 'list', 'toggle' (aktivieren/pausieren), 'delete' (löschen), 'schedule' (Zeitplan ändern).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list", "toggle", "delete", "schedule"], "description": "Aktion."},
+                "name": {"type": "string", "description": "Name des Skripts."},
+                "schedule": {"type": "string", "description": "Neuer Zeitplan (z. B. 'daily_09:00', 'startup', 'manual', 'interval_60m')."},
+                "enabled": {"type": "boolean", "description": "Ob die Routine aktiv sein soll."}
+            },
+            "required": ["action"]
+        },
     },
 ]
 

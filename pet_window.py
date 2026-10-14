@@ -164,6 +164,8 @@ class PetWindow(QWidget):
     yarn_game_requested = pyqtSignal()
     wallpaper_requested = pyqtSignal()
     pet_bed_requested = pyqtSignal()
+    scripts_requested = pyqtSignal()
+    home_mode_toggled = pyqtSignal(bool)
 
 
     GRAVITY = 2300.0
@@ -1056,6 +1058,7 @@ class PetWindow(QWidget):
         tools_sub.addAction(tr("menu.error_doctor")).triggered.connect(self.error_doctor_requested.emit)
         tools_sub.addAction(tr("menu.chats")).triggered.connect(self.chats_requested.emit)
         tools_sub.addAction(tr("menu.data")).triggered.connect(self.data_requested.emit)
+        tools_sub.addAction(tr("menu.scripts")).triggered.connect(self.scripts_requested.emit)
         tools_sub.addAction(tr("menu.onboarding")).triggered.connect(self.onboarding_requested.emit)
         menu.addSeparator()
 
@@ -1096,6 +1099,9 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.yarn_game")).triggered.connect(self.yarn_game_requested.emit)
         tricks.addAction(tr("menu.lively_wallpaper")).triggered.connect(self.wallpaper_requested.emit)
         tricks.addAction(tr("menu.pet_bed")).triggered.connect(self.pet_bed_requested.emit)
+        is_home = bool(self.cfg.get("pet.is_at_home", True))
+        home_action_text = tr("home.outside") if is_home else tr("home.at_home")
+        tricks.addAction(home_action_text).triggered.connect(lambda: self.home_mode_toggled.emit(not is_home))
         tricks.addAction(tr("menu.sleep")).triggered.connect(lambda: self.set_state(PetState.SLEEP))
         tricks.addAction(tr("menu.wake")).triggered.connect(self.wake)
 
