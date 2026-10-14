@@ -43,6 +43,7 @@ def main():
         "test_i18n",
         "test_onboarding",
         "test_throw",
+        "test_startup",
     ]
 
     total = 0

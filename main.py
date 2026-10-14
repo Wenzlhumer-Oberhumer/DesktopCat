@@ -562,7 +562,7 @@ class Buddy(QObject):
         self.pet.drop_in()
 
         # Phase 10: Onboarding-Check
-        if not _is_test_mode() and not self.cfg.get("onboarding_done", False):
+        if not _is_test_mode and not self.cfg.get("onboarding_done", False):
             skips = int(self.cfg.get("onboarding_skips", 0))
             if skips < 3:
                 is_up = bool(self.cfg.get("first_run_done", False) or self.cfg.get("rename_intro_done", False))
