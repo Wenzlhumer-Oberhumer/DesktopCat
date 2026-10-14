@@ -5,12 +5,11 @@ from __future__ import annotations
 
 import os
 import webbrowser
-from typing import Optional
 
-from PyQt6.QtCore import QEvent, Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QFrame,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
+    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
     QSlider, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -19,14 +18,6 @@ import auth_manager
 import voice_tts
 from paths import set_autostart
 
-
-class _OAuthCustomEvent(QEvent):
-    EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
-
-    def __init__(self, success: bool, error: str = ""):
-        super().__init__(self.EVENT_TYPE)
-        self.success = success
-        self.error = error
 
 try:
     from pet_sprites import CHARACTERS, get_character_info
@@ -535,7 +526,7 @@ class SettingsDialog(QDialog):
         ai_lay = QVBoxLayout(card_ai)
         ai_lay.setSpacing(12)
 
-        sec_lbl = QLabel("🧠  Google Gemini-Konto & Dual-Login (Option A & C)")
+        sec_lbl = QLabel("🧠  Gemini-KI (kostenloser Key)")
         sec_lbl.setObjectName("section")
         ai_lay.addWidget(sec_lbl)
 
@@ -544,7 +535,7 @@ class SettingsDialog(QDialog):
         ai_lay.addWidget(self.status_lbl)
 
         # -- Option C: 1-Klick Studio Key --
-        opt_c_lbl = QLabel("Option C: 1-Klick Studio Key (Empfohlen für schnellen Start)")
+        opt_c_lbl = QLabel("So bekommst du deinen Gratis-Key (kein Bezahlkonto nötig):")
         opt_c_lbl.setStyleSheet("font-weight: 600; color: #FF85A2;")
         ai_lay.addWidget(opt_c_lbl)
 
@@ -574,52 +565,10 @@ class SettingsDialog(QDialog):
         btn_box.addWidget(self.save_key_btn)
         ai_lay.addLayout(btn_box)
 
-        # Trennlinie
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #353842;")
-        ai_lay.addWidget(sep)
-
-        # -- Option A: Google OAuth 2.0 Browser-Login --
-        opt_a_lbl = QLabel("Option A: Google-Konto Browser-Login (OAuth 2.0)")
-        opt_a_lbl.setStyleSheet("font-weight: 600; color: #79D279;")
-        ai_lay.addWidget(opt_a_lbl)
-
-        oauth_hint = QLabel("Melde dich mit 1 Klick im Browser mit deinem Google-Konto an.\n"
-                            "Lade deine heruntergeladene JSON-Datei oder trage die Client-ID ein:")
-        oauth_hint.setObjectName("hint")
-        ai_lay.addWidget(oauth_hint)
-
-        import_btn = QPushButton("📁  JSON-Datei importieren (client_secret…)")
-        import_btn.clicked.connect(self._on_import_oauth_json)
-        ai_lay.addWidget(import_btn)
-
-        oauth_form = QFormLayout()
-        oauth_form.setSpacing(8)
-
-        cur_oauth = auth_manager.get_auth_manager().get_oauth_data() or {}
-        self.oauth_client_id_edit = QLineEdit(cur_oauth.get("client_id", ""))
-        self.oauth_client_id_edit.setPlaceholderText("z. B. 123456...apps.googleusercontent.com")
-        oauth_form.addRow("Client-ID:", self.oauth_client_id_edit)
-
-        self.oauth_client_secret_edit = QLineEdit(cur_oauth.get("client_secret", ""))
-        self.oauth_client_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.oauth_client_secret_edit.setPlaceholderText("Client-Secret (optional)")
-        oauth_form.addRow("Client-Secret:", self.oauth_client_secret_edit)
-        ai_lay.addLayout(oauth_form)
-
-        oauth_btn_box = QHBoxLayout()
-        oauth_btn_box.setSpacing(10)
-        self.oauth_login_btn = QPushButton("Mit Google im Browser anmelden")
-        self.oauth_login_btn.setObjectName("primary")
-        self.oauth_login_btn.clicked.connect(self._on_oauth_login)
-        oauth_btn_box.addWidget(self.oauth_login_btn, 1)
-
-        self.logout_btn = QPushButton("Abmelden / Key löschen")
+        self.logout_btn = QPushButton("Key entfernen")
         self.logout_btn.setObjectName("danger")
         self.logout_btn.clicked.connect(self._on_logout_click)
-        oauth_btn_box.addWidget(self.logout_btn)
-        ai_lay.addLayout(oauth_btn_box)
+        btn_box.addWidget(self.logout_btn)
 
         self.ai_enabled = QCheckBox("KI verwenden (Gemini für smarte Befehle, Chat & Sprachinteraktion)")
         self.ai_enabled.setChecked(bool(self.cfg.get("ai.enabled", True)))
@@ -871,11 +820,8 @@ class SettingsDialog(QDialog):
 
     def _refresh_auth_ui(self) -> None:
         mode = auth_manager.get_auth_manager().get_auth_mode()
-        if mode == "oauth":
-            self._set_status("🟢  Angemeldet mit Google-Konto (OAuth 2.0)", "#79D279")
-            self.logout_btn.setVisible(True)
-        elif mode == "apikey":
-            self._set_status("🟢  Verbunden mit Google AI Studio Key (Option C)", "#79D279")
+        if mode == "apikey":
+            self._set_status("🟢  Verbunden mit deinem Gratis-Key (Google AI Studio)", "#79D279")
             self.logout_btn.setVisible(True)
         else:
             self._set_status("⚪  Offline-Modus (Noch kein Account oder Key verbunden)", "#A0A5B5")
@@ -900,62 +846,10 @@ class SettingsDialog(QDialog):
         if parent and hasattr(parent, "celebrate"):
             parent.celebrate()
 
-    def _on_import_oauth_json(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "client_secret.json auswählen", "", "JSON-Dateien (*.json);;Alle Dateien (*.*)"
-        )
-        if not file_path:
-            return
-        try:
-            import json
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            client_info = data.get("installed") or data.get("web") or data
-            cid = str(client_info.get("client_id", "")).strip()
-            sec = str(client_info.get("client_secret", "")).strip()
-            if cid:
-                self.oauth_client_id_edit.setText(cid)
-            if sec:
-                self.oauth_client_secret_edit.setText(sec)
-            self._set_status("✅  Client-ID aus JSON erfolgreich geladen!", "#79D279")
-        except Exception as exc:
-            self._set_status(f"❌  Fehler beim Lesen der JSON-Datei: {exc}", "#FF8F8F")
-
-    def _on_oauth_login(self) -> None:
-        cid = self.oauth_client_id_edit.text().strip()
-        sec = self.oauth_client_secret_edit.text().strip()
-        if not cid:
-            self._set_status("❌  Bitte zuerst eine Google Client-ID eingeben (oder Option C nutzen)", "#FF8F8F")
-            return
-
-        self._set_status("🌐  Browser wird geöffnet… Bitte dort anmelden & Zugriff erlauben", "#FFD24D")
-        self.oauth_login_btn.setEnabled(False)
-
-        def _on_success():
-            QApplication.instance().postEvent(self, _OAuthCustomEvent(True))
-
-        def _on_err(err_msg: str):
-            QApplication.instance().postEvent(self, _OAuthCustomEvent(False, err_msg))
-
-        auth_manager.get_auth_manager().start_oauth_flow_async(
-            client_id=cid,
-            client_secret=sec,
-            on_success=_on_success,
-            on_error=_on_err,
-        )
-
-    def customEvent(self, event) -> None:
-        if isinstance(event, _OAuthCustomEvent):
-            self.oauth_login_btn.setEnabled(True)
-            if event.success:
-                self._refresh_auth_ui()
-                parent = self.parent()
-                if parent and hasattr(parent, "celebrate"):
-                    parent.celebrate()
-            else:
-                self._set_status(f"❌  Anmeldung fehlgeschlagen: {event.error}", "#FF8F8F")
-
     def _on_logout_click(self) -> None:
+        if QMessageBox.question(self, "Key entfernen", "Gemini-Key wirklich entfernen? Danach arbeite ich offline.",
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return
         gemini.clear_key()
         self._refresh_auth_ui()
 

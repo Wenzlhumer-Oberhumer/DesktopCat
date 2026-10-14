@@ -113,34 +113,22 @@ class TestLipSyncMouthMovement(unittest.TestCase):
 
 
 class TestAuthManager(unittest.TestCase):
-    """Prüft Option A (OAuth 2.0) und Option C (AI Studio Key)."""
+    """Nur noch API-Key (OAuth entfernt: privates Google-Abo schaltet die Gemini-API nicht frei)."""
 
     def setUp(self):
         self.auth = auth_manager.AuthManager()
 
-    def test_build_oauth_url(self):
-        client_id = "test-desktop-client.apps.googleusercontent.com"
-        url = self.auth.build_oauth_url(client_id)
-        self.assertIn("accounts.google.com/o/oauth2/v2/auth", url)
-        self.assertIn("test-desktop-client", url)
-        self.assertIn("oauth2callback", url)
-        self.assertIn("generative-language", url)
+    def test_no_oauth_api_left(self):
+        for name in ("build_oauth_url", "start_oauth_flow_async", "get_oauth_data", "is_oauth_configured"):
+            self.assertFalse(hasattr(self.auth, name), name)
 
-    def test_get_auth_headers_with_oauth(self):
-        fake_data = {
-            "access_token": "ya29.test_oauth_token_xyz",
-            "expires_at": time.time() + 3600,
-            "client_id": "test_id",
-        }
-        with patch.object(self.auth, "get_oauth_data", return_value=fake_data):
-            headers = self.auth.get_auth_headers()
-            self.assertEqual(headers.get("Authorization"), "Bearer ya29.test_oauth_token_xyz")
-
-    def test_get_auth_headers_with_api_key_fallback(self):
-        with patch.object(self.auth, "get_oauth_data", return_value=None), \
-             patch.object(self.auth, "get_api_key", return_value="AIzaSyTestKey123"):
-            headers = self.auth.get_auth_headers()
-            self.assertEqual(headers.get("x-goog-api-key"), "AIzaSyTestKey123")
+    def test_get_auth_headers_with_api_key(self):
+        with patch.object(self.auth, "get_api_key", return_value="AIzaSyTestKey123"):
+            self.assertEqual(self.auth.get_auth_headers(), {"x-goog-api-key": "AIzaSyTestKey123"})
+            self.assertEqual(self.auth.get_auth_mode(), "apikey")
+        with patch.object(self.auth, "get_api_key", return_value=""):
+            self.assertEqual(self.auth.get_auth_headers(), {})
+            self.assertFalse(self.auth.has_auth())
 
 
 class TestGeminiAudioPayload(unittest.TestCase):
@@ -206,9 +194,8 @@ def test_lip_sync_mouth_movement_flow():
 def test_dual_auth_manager_flow():
     t = TestAuthManager()
     t.setUp()
-    t.test_build_oauth_url()
-    t.test_get_auth_headers_with_oauth()
-    t.test_get_auth_headers_with_api_key_fallback()
+    t.test_no_oauth_api_left()
+    t.test_get_auth_headers_with_api_key()
 
 
 def test_gemini_audio_payload_flow():

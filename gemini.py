@@ -43,7 +43,6 @@ def save_key(key: str) -> None:
 
 def clear_key() -> None:
     auth_manager.get_auth_manager().clear_api_key()
-    auth_manager.get_auth_manager().clear_oauth_data()
 
 
 def validate_key(key: str) -> None:
@@ -82,15 +81,8 @@ def ask(prompt: str, timeout_s: float = 60.0, model: Optional[str] = None,
         image_b64: Optional[str] = None, key: Optional[str] = None,
         audio_b64: Optional[str] = None, audio_mime: str = "audio/wav") -> str:
     """Schickt einen Prompt (optional mit Bild oder Audio) an Gemini und gibt den Antworttext zurueck."""
-    if key:
-        headers = {"x-goog-api-key": key.strip()}
-    else:
-        auth_mgr = auth_manager.get_auth_manager()
-        if auth_mgr.is_oauth_configured():
-            headers = auth_mgr.get_auth_headers()
-        else:
-            k = get_key().strip()
-            headers = {"x-goog-api-key": k} if k else {}
+    k = (key or get_key()).strip()
+    headers = {"x-goog-api-key": k} if k else {}
 
     if not headers:
         raise LLMError(tr("gemini.enter_key_first"))

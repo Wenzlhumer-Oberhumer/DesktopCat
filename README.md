@@ -4,6 +4,15 @@
 
 ---
 
+## 🆕 Neu in v3.0
+
+- **🎙️ Mit Kylie sprechen (Push-to-Talk):** Hotkey gedrückt halten, sprechen, loslassen. Die Aufnahme geht an Gemini (wie eine getippte Frage) und wird danach sofort gelöscht. Funktioniert nur mit Gemini-Key und eingeschalteter KI.
+- **🔊 Vorlesen mit Lip-Sync:** Standard ist die eingebaute Windows-Stimme – kein Text verlässt den PC. Optional eine natürlichere Online-Stimme (Microsoft Edge, Text wird dorthin gesendet) – nur wenn du sie in den Einstellungen einschaltest.
+- **🐍 Eigene Python-Skripte & Routinen:** Kylie kann dir kleine Skripte schreiben. **Sie laufen erst, wenn du den Code im Skripte-Manager angesehen und „Speichern & freigeben“ gedrückt hast** – auch als Zeitplan (Start, täglich, alle X Minuten). Ändert sich der Code, muss er neu freigegeben werden. Dafür muss Python installiert sein.
+- **🍖 Pflege (Füttern & Waschen), 15 Figuren mit Freischalt-Baum, Minispiele (Seifenblasen, Wollknäuel), Katzenbett.**
+- **🏠 Katzenzimmer-Modus** mit dem kostenlosen Programm *Lively Wallpaper* (optional).
+- **🔑 KI-Zugang:** weiterhin nur der kostenlose Gemini-Key. Ein „Mit Google-Konto/Abo anmelden“ gibt es bewusst nicht: Ein privates Google-Abo (Google One, AI Pro) schaltet die Gemini-API nicht frei.
+
 ## 🆕 Neu in v2.2
 
 - **Desktop Cat & Kylie:** neuer Name, Standard-Katze heißt Kylie und reagiert auf ihren Namen („Kylie!“ → spitzt die Ohren, wacht auf, „Kylie, wie spät ist es?“).
