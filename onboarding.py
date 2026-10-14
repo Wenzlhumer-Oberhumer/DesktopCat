@@ -32,6 +32,11 @@ FALLBACK_REACTIONS_EN = [
 ]
 
 
+def _btn_text(label: str) -> str:
+    """Qt macht aus '&' ein Tastenkuerzel und verschluckt es ('lieb & verspielt' -> 'lieb  verspielt')."""
+    return label.replace("&", "&&")
+
+
 def clean_free_text(text: str, max_len: int = 60) -> str:
     """Bereinigt Freitext-Eingaben: Whitespace trimmen, Zeilenumbrueche entfernen, Laenge begrenzen."""
     if not text:
@@ -886,32 +891,39 @@ class OnboardingDialog(QDialog):
 
     # -- UI-Generatoren fuer Eingabe-Elemente -------------------------------------------
     def _render_chips(self, chips: list[tuple[str, Any]], can_skip: bool = False) -> None:
-        chip_box = QHBoxLayout()
-        chip_box.setSpacing(8)
-
-        for label, val in chips:
-            btn = QPushButton(label)
+        # Raster statt einer Zeile: lange Chips ("🥰 lieb & verspielt") wurden sonst zusammengequetscht
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        cols = 2 if len(chips) > 2 else len(chips)
+        for i, (label, val) in enumerate(chips):
+            btn = QPushButton(_btn_text(label))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
                     background: #3A3C43; color: #F2F3F5; border-radius: 14px;
-                    padding: 8px 16px; font-size: 10pt; font-weight: 500; border: none;
+                    padding: 9px 16px; font-size: 10pt; font-weight: 500; border: none;
                 }
                 QPushButton:hover { background: #FF8FB1; color: #26282C; }
             """)
+            btn.setMinimumWidth(btn.sizeHint().width())
             btn.clicked.connect(lambda _=False, v=val, l=label: self._handle_answer(v, l))
-            chip_box.addWidget(btn)
-
-        chip_box.addStretch(1)
+            grid.addWidget(btn, i // cols, i % cols)
+        self.input_lay.addLayout(grid)
 
         if can_skip:
-            btn_skip = QPushButton(tr("onboarding.btn_skip"))
-            btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_skip.setStyleSheet("background: transparent; color: #8D919B; font-size: 9.5pt;")
-            btn_skip.clicked.connect(self._handle_skip)
-            chip_box.addWidget(btn_skip)
+            self.input_lay.addLayout(self._skip_row())
 
-        self.input_lay.addLayout(chip_box)
+    def _skip_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.addStretch(1)
+        btn_skip = QPushButton(tr("onboarding.btn_skip"))
+        btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_skip.setStyleSheet("background: transparent; color: #8D919B; font-size: 9.5pt; padding: 4px 8px;")
+        btn_skip.setMinimumWidth(btn_skip.sizeHint().width())
+        btn_skip.clicked.connect(self._handle_skip)
+        row.addWidget(btn_skip)
+        return row
 
     def _render_text_input(self, placeholder: str, default_text: str = "", can_skip: bool = False) -> None:
         row = QHBoxLayout()
@@ -937,11 +949,7 @@ class OnboardingDialog(QDialog):
         row.addWidget(btn_send)
 
         if can_skip:
-            btn_skip = QPushButton(tr("onboarding.btn_skip"))
-            btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_skip.setStyleSheet("background: transparent; color: #8D919B; font-size: 9.5pt;")
-            btn_skip.clicked.connect(self._handle_skip)
-            row.addWidget(btn_skip)
+            row.addLayout(self._skip_row())
 
         self.input_lay.addLayout(row)
         QTimer.singleShot(50, edit.setFocus)
@@ -961,7 +969,7 @@ class OnboardingDialog(QDialog):
         """)
 
         for label, val in chips:
-            btn = QPushButton(label)
+            btn = QPushButton(_btn_text(label))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
@@ -989,11 +997,7 @@ class OnboardingDialog(QDialog):
         row.addWidget(btn_send)
 
         if can_skip:
-            btn_skip = QPushButton(tr("onboarding.btn_skip"))
-            btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_skip.setStyleSheet("background: transparent; color: #8D919B; font-size: 9.5pt;")
-            btn_skip.clicked.connect(self._handle_skip)
-            row.addWidget(btn_skip)
+            row.addLayout(self._skip_row())
 
         self.input_lay.addLayout(row)
         QTimer.singleShot(50, edit.setFocus)
@@ -1004,7 +1008,7 @@ class OnboardingDialog(QDialog):
         selected_buttons: dict[str, QPushButton] = {}
 
         for i, opt in enumerate(options):
-            btn = QPushButton(opt)
+            btn = QPushButton(_btn_text(opt))
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
@@ -1016,6 +1020,7 @@ class OnboardingDialog(QDialog):
                     background: #FF8FB1; color: #26282C; font-weight: bold;
                 }
             """)
+            btn.setMinimumWidth(btn.sizeHint().width())
             selected_buttons[opt] = btn
             grid.addWidget(btn, i // 3, i % 3)
 
@@ -1034,11 +1039,7 @@ class OnboardingDialog(QDialog):
         btn_row.addWidget(btn_next)
         btn_row.addStretch(1)
 
-        btn_skip = QPushButton(tr("onboarding.btn_skip"))
-        btn_skip.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_skip.setStyleSheet("background: transparent; color: #8D919B; font-size: 9.5pt;")
-        btn_skip.clicked.connect(self._handle_skip)
-        btn_row.addWidget(btn_skip)
+        btn_row.addLayout(self._skip_row())
 
         self.input_lay.addLayout(btn_row)
 

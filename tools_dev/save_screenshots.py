@@ -465,6 +465,18 @@ def save_onboarding_screenshots(out_dir: Path) -> None:
     dlg2.close()
     print(f"UI-Screenshot gespeichert: {out_dir / 'ui_onboarding_2.png'}")
 
+    # Chips mit langen Texten (Tonfall, PC-Nutzung) - hier waren Texte abgeschnitten
+    for step, fname in ((8, "ui_onboarding_tone.png"), (6, "ui_onboarding_uses.png")):
+        dlg = OnboardingDialog(cfg)
+        dlg._clear_chat()
+        dlg.flow.step = step
+        dlg.flow.answers.update({"language": "de", "name": "Florian", "user_name": "Florian"})
+        dlg._add_user_bubble("coden; gaming; gym")
+        dlg._render_current_step()
+        _show_and_grab(dlg).save(str(out_dir / fname))
+        dlg.close()
+        print(f"UI-Screenshot gespeichert: {out_dir / fname}")
+
     # 3. Figur-Galerie (ui_onboarding_3.png)
     dlg3 = OnboardingDialog(cfg)
     dlg3._clear_chat()
