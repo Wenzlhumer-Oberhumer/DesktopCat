@@ -1661,6 +1661,21 @@ def manage_custom_routines(action: str = "list", name: str = "", schedule: str =
     return ToolResult(False, f"Unbekannte Aktion \u201e{action}\u201c.")
 
 
+def restore_wallpaper() -> ToolResult:
+    """Stellt das ursprüngliche Windows-Hintergrundbild wieder her."""
+    from config import Config
+    import lively_wallpaper
+    try:
+        cfg = Config()
+        ok = lively_wallpaper.restore_original_wallpaper(cfg)
+        if ok:
+            return ToolResult(True, "Ich habe dein Desktop-Hintergrundbild wiederhergestellt! 🖼️✨")
+        else:
+            return ToolResult(False, "Hintergrundbild konnte nicht automatisch gefunden werden. Überprüfe bitte deine Windows-Einstellungen. 🖼️")
+    except Exception as exc:
+        return ToolResult(False, f"Fehler beim Wiederherstellen des Hintergrunds: {exc}")
+
+
 # ======================================================================================
 #  Registry (fuer KI-Tool-Calling) + sicherer Aufruf
 # ======================================================================================
@@ -1699,6 +1714,7 @@ TOOLS: dict[str, Callable[..., ToolResult]] = {
     "run_custom_script": run_custom_script,
     "list_custom_scripts": list_custom_scripts,
     "manage_custom_routines": manage_custom_routines,
+    "restore_wallpaper": restore_wallpaper,
 }
 
 TOOL_SPECS: list[dict] = [

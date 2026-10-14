@@ -166,6 +166,7 @@ class PetWindow(QWidget):
     pet_bed_requested = pyqtSignal()
     scripts_requested = pyqtSignal()
     home_mode_toggled = pyqtSignal(bool)
+    restore_wallpaper_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -278,6 +279,8 @@ class PetWindow(QWidget):
             self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, always_on_top)
             if self.isVisible():
                 self.show()
+        if getattr(self, "pet_bed", None) and hasattr(self.pet_bed, "set_always_on_top"):
+            self.pet_bed.set_always_on_top(always_on_top)
         if self.isVisible():
             self._schedule_wander()
 
@@ -447,14 +450,16 @@ class PetWindow(QWidget):
         """y des Fensters, wenn das Pet direkt auf der Oberkante der Taskleiste steht."""
         return self._avail().bottom() + 1 - FLOOR * self.scale
 
-    def _perch_levels(self) -> list[float]:
+    def _perch_levels(self, x: Optional[float] = None) -> list[float]:
         """Gibt die verfuegbaren Hoehenebenen zurueck (Boden, Bett, und im Raum-Modus Wandregal / Fensterbrett)."""
         avail = self._avail()
         ground = self._ground_y()
         levels = [ground]
         if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
-            _, bed_y = self.pet_bed.get_dock_position()
-            levels.append(bed_y)
+            bed_x, bed_y = self.pet_bed.get_dock_position()
+            # Bettchen ist nur eine gueltige Ebene, wenn sich die Katze horizontal darauf befindet
+            if x is None or abs(x - bed_x) < 70.0:
+                levels.append(bed_y)
         if bool(self.cfg.get("pet.room_mode", False)):
             h = float(avail.height())
             shelf = float(avail.top() + h * 0.22)
@@ -462,12 +467,39 @@ class PetWindow(QWidget):
             levels.extend([window_sill, shelf])
         return sorted(set(levels))
 
-    def _closest_perch_y(self, y: float) -> float:
+    def _closest_perch_y(self, y: float, x: Optional[float] = None) -> float:
         """Findet die naechstgelegene Hoehenebene unterhalb oder nahe von y."""
-        levels = self._perch_levels()
+        check_x = self._px if x is None else x
+        levels = self._perch_levels(check_x)
         ground = self._ground_y()
         candidates = [lvl for lvl in levels if lvl >= y - 12]
         return min(candidates, key=lambda l: abs(l - y)) if candidates else ground
+
+    def on_bed_moved(self, bx: int, by: int) -> None:
+        """Wird aufgerufen, wenn das Katzenbettchen per Maus verschoben wird."""
+        if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+            dock_x, dock_y = self.pet_bed.get_dock_position()
+            if self.state == PetState.SLEEP:
+                self._px = dock_x
+                self._py = dock_y
+                self._apply_pos()
+            elif self._going_to_bed:
+                self._walk_target = dock_x
+                direction = 1 if dock_x > self._px else -1
+                self.facing = direction
+                self.set_state(PetState.WALK_RIGHT if direction > 0 else PetState.WALK_LEFT)
+
+    def on_bed_hidden(self) -> None:
+        """Wird aufgerufen, wenn das Katzenbettchen ausgeblendet wird."""
+        ground = self._ground_y()
+        if self.state == PetState.SLEEP:
+            if self._py < ground - 15:
+                self.wake()
+                self._vy = 40.0
+                self.set_state(PetState.FALLING)
+        elif self._going_to_bed:
+            self.wake()
+            self.set_state(PetState.IDLE)
 
     def _leap_to_perch(self, target_y: float) -> None:
         """Laesst die Katze mit einem agilen Katzensprung auf eine hoehere oder tiefere Ebene springen."""
@@ -734,8 +766,8 @@ class PetWindow(QWidget):
         elif s == PetState.FLY:                 # IT-Guide, Fehler-Doktor, Haftnotiz: Flug auf der Wolke
             self._fly(dt)
         elif s != PetState.DRAGGED and not self._dragging:
-            closest = self._closest_perch_y(self._py)
-            if self._py < closest - 2.5:
+            closest = self._closest_perch_y(self._py, self._px)
+            if self._py < closest - 15:
                 self._vx = self._vy = 0.0       # z. B. Ebene hat sich bewegt -> nachfallen
                 self.set_state(PetState.FALLING)
 
@@ -800,46 +832,68 @@ class PetWindow(QWidget):
 
         step = self.speed * dt
         diff = self._walk_target - self._px
+
+        # Falls die Katze zum Bettchen läuft: stufenloser 2D-Flug/Schritt direkt ins Bettchen
+        if self._going_to_bed and getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+            bed_x, bed_y = self.pet_bed.get_dock_position()
+            dist_x = abs(self._walk_target - self._px)
+            dy = bed_y - self._py
+
+            # Horizontaler Schritt
+            if dist_x <= step:
+                self._px = self._walk_target
+            else:
+                self._px += math.copysign(step, diff)
+                self._px = max(lo, min(hi, self._px))
+
+            # Vertikaler sanfter Schritt (stufenlos angepasst an die Restdistanz)
+            dist_to_bed = abs(self._px - self._walk_target)
+            if abs(dy) > 1.0:
+                time_rem = max(0.05, dist_to_bed / max(10.0, self.speed))
+                speed_y = max(60.0, abs(dy) / time_rem)
+                step_y = speed_y * dt
+                self._py += math.copysign(min(abs(dy), step_y), dy)
+            else:
+                self._py = bed_y
+
+            # Erst wenn X UND Y gleichzeitig und stufenlos angekommen sind: Einschlafen!
+            if abs(self._px - self._walk_target) <= 1.0 and abs(self._py - bed_y) <= 3.0:
+                self._px = self._walk_target
+                self._py = bed_y
+                self._going_to_bed = False
+                self._apply_pos()
+                self.set_state(PetState.SLEEP)
+                self._schedule_wander(random.uniform(14, 28))
+                return
+
+            self._apply_pos()
+            return
+
+        # Normales Wandern
         if abs(diff) <= step:
             self._px = self._walk_target
             self._apply_pos()
-            if self._going_to_bed:
-                self._going_to_bed = False
-                if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
-                    _, bed_y = self.pet_bed.get_dock_position()
-                    self._py = bed_y
-                    self._apply_pos()
-                self.set_state(PetState.SLEEP)
-                self._schedule_wander(random.uniform(14, 28))
-            else:
-                self.set_state(PetState.IDLE)
+            self.set_state(PetState.IDLE)
             return
+
         self._px += math.copysign(step, diff)
         self._px = max(lo, min(hi, self._px))
 
-        # Falls die Katze zum Bettchen laeuft: sanftes Einsteigen statt Sprung
-        if self._going_to_bed and getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
-            _, bed_y = self.pet_bed.get_dock_position()
-            dist_to_bed = abs(self._px - self._walk_target)
-            dy = bed_y - self._py
-            if dist_to_bed < 90.0 and abs(dy) > 1.0:
-                # Sanftes Hochsteigen/Hineinkuscheln ins Bettchen
-                step_y = max(40.0, self.speed * 0.9) * dt
-                self._py += math.copysign(min(abs(dy), step_y), dy)
-            elif dist_to_bed < 140.0 and abs(dy) > 45 and self._vy == 0:
-                # Bei grossen Hoehenunterschieden ein gezielter Sprung
-                self._leap_to_perch(bed_y)
-            else:
-                self._py = self._closest_perch_y(self._py)
+        closest = self._closest_perch_y(self._py, self._px)
+        if closest > self._py + 15:
+            # Über den Rand des Betts / Regals gelaufen -> fällt natürlich nach unten
+            self._vy = 40.0
+            self.set_state(PetState.FALLING)
+            return
         else:
-            self._py = self._closest_perch_y(self._py)
+            self._py = closest
 
         self._apply_pos()
 
     def _fall(self, dt: float) -> None:
         lo, hi = self._x_bounds()
         land_vx = self._vx
-        target_ground = self._closest_perch_y(self._py)
+        target_ground = self._closest_perch_y(self._py, self._px)
         self._px, self._py, self._vx, self._vy, self._bounced, event = throw_step(
             self._px, self._py, self._vx, self._vy, dt, lo, hi, float(self._avail().top()), target_ground,
             self._bounced, self.GRAVITY)
@@ -1195,6 +1249,7 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.bubble_game")).triggered.connect(self.bubble_game_requested.emit)
         tricks.addAction(tr("menu.yarn_game")).triggered.connect(self.yarn_game_requested.emit)
         tricks.addAction(tr("menu.lively_wallpaper")).triggered.connect(self.wallpaper_requested.emit)
+        tricks.addAction("🖼️  Hintergrund wiederherstellen").triggered.connect(self.restore_wallpaper_requested.emit)
         tricks.addAction(tr("menu.pet_bed")).triggered.connect(self.pet_bed_requested.emit)
         is_home = bool(self.cfg.get("pet.is_at_home", False))
         home_action_text = tr("home.outside") if is_home else tr("home.at_home")

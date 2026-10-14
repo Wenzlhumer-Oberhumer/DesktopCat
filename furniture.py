@@ -26,6 +26,8 @@ class PetBedWidget(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
         )
+        if bool(cfg.get("pet.always_on_top", True)):
+            flags |= Qt.WindowType.WindowStaysOnTopHint
         super().__init__(parent, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -39,6 +41,12 @@ class PetBedWidget(QWidget):
 
         # Position aus Config laden oder unten rechts platzieren
         self._restore_position()
+
+    def set_always_on_top(self, on: bool) -> None:
+        """Passt die Always-on-Top Eigenschaft synchron zur Katze an."""
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, on)
+        if self.isVisible():
+            self.show()
 
     def _restore_position(self) -> None:
         saved_pos = self.cfg.get("furniture.bed_pos")
@@ -71,7 +79,9 @@ class PetBedWidget(QWidget):
 
     def mouseMoveEvent(self, e) -> None:
         if self._dragging:
-            self.move(e.globalPosition().toPoint() - self._drag_start)
+            new_pos = e.globalPosition().toPoint() - self._drag_start
+            self.move(new_pos)
+            self.bed_moved.emit(new_pos.x(), new_pos.y())
 
     def mouseReleaseEvent(self, e) -> None:
         if e.button() == Qt.MouseButton.LeftButton and self._dragging:

@@ -495,6 +495,7 @@ class Buddy(QObject):
         self.pet.bubble_game_requested.connect(self.start_bubble_game)
         self.pet.yarn_game_requested.connect(self.start_yarn_game)
         self.pet.wallpaper_requested.connect(self.activate_lively_wallpaper)
+        self.pet.restore_wallpaper_requested.connect(self.restore_desktop_wallpaper)
         self.pet.pet_bed_requested.connect(self.toggle_pet_bed)
         self.pet.scripts_requested.connect(self.open_scripts_dialog)
         self.pet.home_mode_toggled.connect(self.set_home_mode)
@@ -517,6 +518,7 @@ class Buddy(QObject):
         from furniture import PetBedWidget
         self.pet_bed = PetBedWidget(cfg)
         self.pet.pet_bed = self.pet_bed
+        self.pet_bed.bed_moved.connect(self.pet.on_bed_moved)
         if bool(cfg.get("furniture.bed_visible", True)):
             self.pet_bed.show()
         else:
@@ -653,6 +655,7 @@ class Buddy(QObject):
         self.tray_menu.addSeparator()
 
         self._act(self.tray_menu, tr("menu.scripts"), self.open_scripts_dialog)
+        self._act(self.tray_menu, "🖼️ Hintergrundbild wiederherstellen", self.restore_desktop_wallpaper)
         self._act(self.tray_menu, tr("menu.character_tree"), self.open_character_tree)
         self._act(self.tray_menu, tr("menu.friendship"), self.open_friendship_dialog)
         self._act(self.tray_menu, tr("menu.focus_stats"), self.open_focus_stats_dialog)
@@ -1562,6 +1565,7 @@ class Buddy(QObject):
             lively_wallpaper.restore_original_wallpaper(self.cfg)
             if hasattr(self, "pet_bed") and self.pet_bed:
                 self.pet_bed.hide()
+                self.pet.on_bed_hidden()
             self._say(f"Juhu! Wir gehen raus auf den Desktop! 🌿🐾", 4000)
             self.pet.react_happy()
         self._update_tray_menu()
@@ -1654,11 +1658,21 @@ class Buddy(QObject):
         if ok:
             self.pet.celebrate_confetti(4.0)
 
+    def restore_desktop_wallpaper(self) -> None:
+        import lively_wallpaper
+        ok = lively_wallpaper.restore_original_wallpaper(self.cfg)
+        if ok:
+            self._say("🖼️ Dein Desktop-Hintergrundbild wurde erfolgreich wiederhergestellt!", 4000)
+            self.pet.celebrate(2.5)
+        else:
+            self._say("Hintergrundbild konnte nicht automatisch gefunden werden. Überprüfe bitte deine Windows-Einstellungen.", 5000)
+
     def toggle_pet_bed(self, visible: Optional[bool] = None) -> None:
         if not hasattr(self, "pet_bed") or not self.pet_bed:
             from furniture import PetBedWidget
             self.pet_bed = PetBedWidget(self.cfg)
             self.pet.pet_bed = self.pet_bed
+            self.pet_bed.bed_moved.connect(self.pet.on_bed_moved)
         new_vis = (not self.pet_bed.isVisible()) if visible is None else visible
         self.cfg.set("furniture.bed_visible", new_vis)
         self.cfg.save()
@@ -1667,6 +1681,7 @@ class Buddy(QObject):
             self._say("🛋️ Dein kuscheliges Katzenbett steht bereit! Du kannst es mit der Maus frei verschieben.", 4000)
         else:
             self.pet_bed.hide()
+            self.pet.on_bed_hidden()
 
     def open_friendship_dialog(self) -> None:
         from fun_dialogs import FriendshipDialog
@@ -2019,6 +2034,17 @@ class Buddy(QObject):
             return
         duration_ms = max(4500, min(16000, len(text) * 115))
         self._say(text, duration_ms)
+
+        low = text.lower()
+        if "💤" in text or "schlaf" in low or "gute nacht" in low or "ab ins bett" in low:
+            self.pet.go_to_sleep()
+        elif "💃" in text or "tanz" in low:
+            self.pet.dance(6.0)
+        elif "🕶️" in text or "cool" in low:
+            self.pet.be_cool(6.0)
+        elif "wach auf" in low or "guten morgen" in low or "aufstehen" in low:
+            self.pet.wake_with_stretch()
+
         # Synchrone Sprachausgabe + Lip-Sync
         voice_tts.get_tts().speak(text, self.cfg.snapshot())
 

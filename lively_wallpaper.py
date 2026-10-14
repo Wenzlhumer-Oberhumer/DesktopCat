@@ -129,18 +129,19 @@ def close_lively_wallpaper() -> bool:
         except Exception:
             pass
 
-    # Sicherheits-Cleanup: Falls Lively.Player.WebView2 noch den Desktop verdeckt
-    try:
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "Lively.Player.WebView2.exe"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            timeout=2,
-        )
-        closed = True
-    except Exception:
-        pass
+    # Sicherheits-Cleanup: Falls Lively Player (WebView2 oder CefSharp) noch den Desktop verdecken
+    for player_exe in ("Lively.Player.WebView2.exe", "Lively.Player.CefSharp.exe"):
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", player_exe],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=2,
+            )
+            closed = True
+        except Exception:
+            pass
 
     return closed
 
@@ -155,10 +156,10 @@ def apply_lively_wallpaper(cfg=None, store=None) -> tuple[bool, str]:
     if not room_dir.is_dir() or not (room_dir / "LivelyInfo.json").is_file():
         return False, f"Katzenzimmer-Paket nicht gefunden unter: {room_dir}"
 
-    # Vorherigen Hintergrund sichern
+    # Vorherigen Hintergrund sichern (nur wenn valide Datei und kein temporäres Lively-Paket)
     if cfg is not None and not cfg.get("lively.prev_wallpaper"):
         current_wp = get_current_windows_wallpaper()
-        if current_wp:
+        if current_wp and os.path.isfile(current_wp) and "lively_room" not in current_wp.lower():
             cfg.set("lively.prev_wallpaper", current_wp)
             cfg.save()
 
@@ -185,7 +186,6 @@ def restore_original_wallpaper(cfg) -> bool:
     prev_wp = cfg.get("lively.prev_wallpaper", "")
     close_lively_wallpaper()
     res = restore_windows_wallpaper(prev_wp)
-    if res and prev_wp:
-        cfg.set("lively.prev_wallpaper", "")
-        cfg.save()
+    # WICHTIG: prev_wallpaper bewusst NICHT löschen, damit das Originalbild dauerhaft
+    # als sichere Referenz erhalten bleibt und jederzeit wiederhergestellt werden kann!
     return res

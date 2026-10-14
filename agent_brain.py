@@ -604,6 +604,8 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
     if re.search(r"\b(wach\s*auf|aufstehen|aufwachen|wake\s*up)\b", n):
         rep = f"Good morning {user}! I'm wide awake and ready! ✨" if i18n.lang() == "en" else f"Guten Morgen {user}! Ich bin hellwach und einsatzbereit! ✨"
         return Plan(reply=rep, ok=True)
+    if re.search(r"\b(hintergrund\s*(?:bild)?\s*wiederherstellen|wallpaper\s*wiederherstellen|restore\s*wallpaper|mein\s*hintergrund\s*ist\s*weg)\b", n):
+        return Plan("restore_wallpaper", {})
 
     # 16b. Fakten, Quiz & Datenverwaltung
     if re.search(r"\b(quiz\s*starten|starte\s*(?:ein\s*)?quiz|start\s*quiz|start\s*a\s*quiz|quiz)\b", n):
