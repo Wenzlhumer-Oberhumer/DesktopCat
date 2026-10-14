@@ -69,6 +69,14 @@ DEFAULTS: dict[str, Any] = {
         "pc_fever": True,
         "worn": "",
     },
+    "care": {
+        "hunger": 100,
+        "hygiene": 100,
+        "happiness": 100,
+        "last_updated": 0.0,
+        "last_fed": 0.0,
+        "last_washed": 0.0,
+    },
     "profile": {
         "name": "",
         "pronouns": "",

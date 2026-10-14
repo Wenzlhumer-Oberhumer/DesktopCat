@@ -157,6 +157,8 @@ class PetWindow(QWidget):
     onboarding_requested = pyqtSignal()
     hide_requested = pyqtSignal()
     focus_mode_requested = pyqtSignal()
+    wash_requested = pyqtSignal()
+    character_tree_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -203,6 +205,8 @@ class PetWindow(QWidget):
         self._water_t: Optional[float] = None
         self._crumbs_until = 0.0
         self._crumbs_t: Optional[float] = None
+        self._bubbles_until = 0.0
+        self._bubbles_t: Optional[float] = None
         self._bounced = False
         self._pose = None
         self._last_sig = None
@@ -267,6 +271,17 @@ class PetWindow(QWidget):
 
     def set_character(self, char_id: str) -> None:
         if char_id in CHARACTERS and char_id != self.character:
+            from memory_store import get_memory_store
+            import pet_care
+            try:
+                store = get_memory_store()
+            except Exception:
+                store = None
+            unlocked, _, _ = pet_care.is_character_unlocked(char_id, store)
+            if not unlocked:
+                self.character_tree_requested.emit()
+                return
+
             self.character = char_id
             self.cfg.set("pet.character", char_id)
             self.cfg.save()
@@ -309,6 +324,18 @@ class PetWindow(QWidget):
         now = time.monotonic()
         self._crumbs_t = now
         self._crumbs_until = now + seconds
+        self._hearts_t = now
+        self._happy_until = now + seconds
+        self._restart_timer()
+        self._anim_timer.start(16)
+        self.update()
+
+    def wash_pet(self, seconds: float = 4.5) -> None:
+        """Laesst die Katze genussvoll ein Schaumbad nehmen mit schwebenden Seifenblasen."""
+        self.wake()
+        now = time.monotonic()
+        self._bubbles_t = now
+        self._bubbles_until = now + seconds
         self._hearts_t = now
         self._happy_until = now + seconds
         self._restart_timer()
@@ -762,6 +789,10 @@ class PetWindow(QWidget):
             pose.crumbs = now - self._crumbs_t
             pose.mouth = "smile"
             pose.eyes = "happy"
+        if now < self._bubbles_until and self._bubbles_t is not None:
+            pose.bubbles = now - self._bubbles_t
+            pose.mouth = "smile"
+            pose.eyes = "happy"
         return pose
 
     def paintEvent(self, _event) -> None:
@@ -939,6 +970,7 @@ class PetWindow(QWidget):
 
         menu.addAction(tr("menu.input")).triggered.connect(self.input_requested.emit)
         menu.addAction(tr("menu.feed_pet", name=cname)).triggered.connect(self.give_treat)
+        menu.addAction(tr("menu.wash_pet", name=cname)).triggered.connect(self.wash_requested.emit)
         menu.addAction(tr("menu.hide_pet", name=cname)).triggered.connect(self.hide_requested.emit)
         menu.addAction(tr("menu.focus_mode")).triggered.connect(self.focus_mode_requested.emit)
         menu.addSeparator()
@@ -946,6 +978,7 @@ class PetWindow(QWidget):
         # Freundschaft & Lernen Untermenü
         learn_menu = menu.addMenu(tr("menu.sub_learn"))
         style_menu(learn_menu)
+        learn_menu.addAction(tr("menu.character_tree")).triggered.connect(self.character_tree_requested.emit)
         learn_menu.addAction(tr("menu.friendship")).triggered.connect(self.friendship_requested.emit)
         learn_menu.addAction(tr("menu.focus_stats")).triggered.connect(self.focus_stats_requested.emit)
         learn_menu.addAction(tr("menu.flashcards")).triggered.connect(self.flashcards_requested.emit)
@@ -961,16 +994,27 @@ class PetWindow(QWidget):
         tools_sub.addAction(tr("menu.onboarding")).triggered.connect(self.onboarding_requested.emit)
         menu.addSeparator()
 
-        # Charakter-Auswahl (Live-Wechsel)
+        # Charakter-Auswahl (Live-Wechsel mit Freischalt-Prüfung)
         if CHARACTERS:
             char_menu = menu.addMenu(tr("menu.choose_char"))
             style_menu(char_menu)
+            from memory_store import get_memory_store
+            import pet_care
+            try:
+                store = get_memory_store()
+            except Exception:
+                store = None
             for cid in CHARACTERS:
-                check = "✔  " if cid == self.character else "    "
                 from pet_sprites import get_character_info
                 ci = get_character_info(cid)
-                char_menu.addAction(f"{check}{ci['emoji']}  {ci['name']} ({ci['species']})").triggered.connect(
-                    lambda _=False, c=cid: self.set_character(c))
+                unlocked, req_lvl, _ = pet_care.is_character_unlocked(cid, store)
+                if unlocked:
+                    check = "✔  " if cid == self.character else "    "
+                    char_menu.addAction(f"{check}{ci['emoji']}  {ci['name']} ({ci['species']})").triggered.connect(
+                        lambda _=False, c=cid: self.set_character(c))
+                else:
+                    char_menu.addAction(f"🔒  {ci['emoji']}  {ci['name']} (Lvl {req_lvl})").triggered.connect(
+                        self.character_tree_requested.emit)
             menu.addSeparator()
 
         # Coole Tricks & Animationen
@@ -982,6 +1026,7 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.push")).triggered.connect(lambda: self.push_animation(1.5))
         tricks.addAction(tr("menu.chase")).triggered.connect(lambda: self.chase_mouse(15.0))
         tricks.addAction(tr("menu.treat")).triggered.connect(self.give_treat)
+        tricks.addAction(tr("menu.wash_pet", name=name)).triggered.connect(self.wash_requested.emit)
         tricks.addAction(tr("menu.sleep")).triggered.connect(lambda: self.set_state(PetState.SLEEP))
         tricks.addAction(tr("menu.wake")).triggered.connect(self.wake)
 

@@ -32,6 +32,74 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "🐟  {name} füttern (Leckerli)",
         "en": "🐟  Feed {name} (Treat)",
     },
+    "menu.wash_pet": {
+        "de": "🧼  {name} waschen & bürsten",
+        "en": "🧼  Wash & groom {name}",
+    },
+    "menu.character_tree": {
+        "de": "🌳  Charakter-Baum & Tamagotchi",
+        "en": "🌳  Character Tree & Tamagotchi",
+    },
+    "care.hunger": {
+        "de": "Hunger & Appetit",
+        "en": "Hunger & Appetite",
+    },
+    "care.hygiene": {
+        "de": "Sauberkeit & Fellpflege",
+        "en": "Hygiene & Grooming",
+    },
+    "care.happiness": {
+        "de": "Laune & Zufriedenheit",
+        "en": "Happiness & Mood",
+    },
+    "care.feed_btn": {
+        "de": "🥣  Füttern",
+        "en": "🥣  Feed",
+    },
+    "care.wash_btn": {
+        "de": "🧼  Waschen",
+        "en": "🧼  Wash",
+    },
+    "care.pet_btn": {
+        "de": "💖  Streicheln",
+        "en": "💖  Pet",
+    },
+    "care.locked": {
+        "de": "🔒 Level {lvl} nötig",
+        "en": "🔒 Level {lvl} required",
+    },
+    "care.unlock_req": {
+        "de": "Freischaltung ab Level {lvl} ({pts} FP)",
+        "en": "Unlocks at Level {lvl} ({pts} FP)",
+    },
+    "care.activate": {
+        "de": "Auswählen",
+        "en": "Activate",
+    },
+    "care.active": {
+        "de": "✔ Aktiv",
+        "en": "✔ Active",
+    },
+    "care.tree_title": {
+        "de": "🌳 Charakter-Baum & Haustier-Pflege",
+        "en": "🌳 Character Tree & Pet Care",
+    },
+    "care.tree_subtitle": {
+        "de": "Pflege deine Katze, sammle Freundschaftspunkte und schalte alle 15 Gefährten frei!",
+        "en": "Care for your pet, earn friendship points, and unlock all 15 companions!",
+    },
+    "care.status_hungry": {
+        "de": "Ich habe ganz doll Hunger! 🐟",
+        "en": "I'm super hungry! 🐟",
+    },
+    "care.status_dirty": {
+        "de": "Mein Fell ist struppig... Magst du mich waschen? 🧼",
+        "en": "My fur is a bit scruffy... Would you wash me? 🧼",
+    },
+    "care.status_happy": {
+        "de": "Mir geht es wunderbar! Schnurr... 💖",
+        "en": "I'm feeling wonderful! Purr... 💖",
+    },
     "menu.sub_learn": {
         "de": "💖  Freundschaft & Lernen",
         "en": "💖  Friendship & Learning",

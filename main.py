@@ -451,6 +451,8 @@ class Buddy(QObject):
         self.pet.photobox_requested.connect(self.start_photobox)
         self.pet.new_note_requested.connect(lambda: self.create_sticky_note())
         self.pet.onboarding_requested.connect(lambda: self._open_onboarding(is_update=True))
+        self.pet.wash_requested.connect(self._on_wash)
+        self.pet.character_tree_requested.connect(self.open_character_tree)
         self.pet.hide_requested.connect(self.hide_pet)
         self.pet.focus_mode_requested.connect(self.start_focus_mode)
         self.tray.messageClicked.connect(self._on_tray_message_clicked)
@@ -892,10 +894,37 @@ class Buddy(QObject):
         self._say(tr("say.i_am", sound=ci.get('sound', ''), name=ci.get('name', 'Kylie'), emoji=ci.get('emoji', '')), 3000)
 
     def _on_treat(self) -> None:
+        import pet_care
+        from memory_store import get_memory_store
+        try:
+            store = get_memory_store()
+        except Exception:
+            store = None
+        pet_care.feed_pet(self.cfg, store)
         n = int(self.cfg.get("treats", 0))
         ci = self.char_info()
         self._say(tr("say.treat_thanks", sound=ci.get('sound', 'Mjam!'), name=self.user_name(), n=n), 4000)
         self._award_friendship("treat")
+
+    def _on_wash(self) -> None:
+        import pet_care
+        from memory_store import get_memory_store
+        try:
+            store = get_memory_store()
+        except Exception:
+            store = None
+        pet_care.wash_pet(self.cfg, store)
+        self.pet.wash_pet(4.5)
+        self._play_pet_sound()
+        ci = self.char_info()
+        cname = ci.get("name", "Kylie")
+        lines = [
+            f"Bubbly fresh! 🫧 {cname} glänzt wieder wie neu!",
+            f"Ooh wie das herrlich duftet! 🧼 Danke {self.user_name()}!",
+            f"Blubb blubb... Seifenblasen! 🫧 So sauber war ich noch nie!",
+        ]
+        self._say(random.choice(lines), 4500)
+        self._award_friendship("wash")
 
     # -- Phase 3: Alltag, Neugier, Briefing, Geburtstag, Schlafenszeit -----------------
     def _check_birthday_and_briefing(self) -> None:
@@ -1157,6 +1186,8 @@ class Buddy(QObject):
     def _on_petted(self) -> None:
         if self.brain.busy:
             return
+        import pet_care
+        pet_care.pet_pet(self.cfg)
         if bool(self.cfg.get("pet.sound_enabled", True)):
             try:
                 import winsound
@@ -1314,6 +1345,16 @@ class Buddy(QObject):
                 self.brain.record_assistant_message(msg)
         except Exception as exc:
             print(f"[friendship] Fehler beim Vergeben von Punkten: {exc}")
+
+    def open_character_tree(self) -> None:
+        from character_tree_dialog import CharacterTreeDialog
+        from memory_store import get_memory_store
+        try:
+            store = get_memory_store()
+        except Exception:
+            store = None
+        dlg = CharacterTreeDialog(self.cfg, store, self.pet)
+        dlg.exec()
 
     def open_friendship_dialog(self) -> None:
         from fun_dialogs import FriendshipDialog
@@ -1938,6 +1979,16 @@ class Buddy(QObject):
         if idle and not self.brain.busy and not self.input.isVisible() and not self.bubble.isVisible():
             if self.pet.state == PetState.SLEEP:
                 self.pet.wake()
+            import pet_care
+            care_stats = pet_care.get_care_stats(self.cfg)
+            if care_stats["hunger"] < 35 and random.random() < 0.6:
+                self._say(f"Mein Bäuchlein knurrt ganz schön, {self.user_name()}... Hast du ein kleines Leckerli für mich? 🥣🐟", 6000)
+                self._schedule_chatter()
+                return
+            if care_stats["hygiene"] < 35 and random.random() < 0.6:
+                self._say(f"Puh, mein Fell ist ganz staubig vom vielen Herumtollen! Magst du mich waschen & bürsten? 🧼✨", 6000)
+                self._schedule_chatter()
+                return
             comment = self._smart_ambient_comment()
             last = getattr(self, "_last_chatter", "")
             if comment and comment != last:

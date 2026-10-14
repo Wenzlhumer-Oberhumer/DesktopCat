@@ -194,6 +194,7 @@ class Pose:
     tear: Optional[float] = None
     water: Optional[float] = None
     crumbs: Optional[float] = None
+    bubbles: Optional[float] = None
     push_power: float = 0.0
     t: float = 0.0
     accessories: tuple[str, ...] = ()
@@ -900,7 +901,29 @@ def _draw_effects(p: QPainter, pose: Pose):
             col.setAlpha(int(240 * math.sin(math.pi * age)))
             p.setBrush(col)
             r = 1.6 + 0.8 * (1 - age)
-            p.drawEllipse(QPointF(cx, cy), r, r)
+            p.restore()
+
+    if getattr(pose, "bubbles", None) is not None:
+        t_b = pose.bubbles
+        p.save()
+        bubble_colors = [QColor("#A5F3FC"), QColor("#F472B6"), QColor("#DDD6FE"), QColor("#BAE6FD")]
+        for i in range(7):
+            age = (t_b * 1.4 + i * 0.14) % 1.0
+            cx = 80 + math.sin(t_b * 2.2 + i * 1.8) * 48 + (i - 3) * 10
+            cy = 135 - age * 85
+            alpha = int(220 * math.sin(math.pi * age))
+            col = QColor(bubble_colors[i % len(bubble_colors)])
+            col.setAlpha(alpha)
+            p.setPen(_pen(col, 1.4))
+            fill_col = QColor(col)
+            fill_col.setAlpha(int(alpha * 0.35))
+            p.setBrush(fill_col)
+            rad = 3.5 + 2.5 * math.sin(age * math.pi)
+            p.drawEllipse(QPointF(cx, cy), rad, rad)
+            # Glanzpunkt auf Blase
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(255, 255, 255, int(alpha * 0.8)))
+            p.drawEllipse(QPointF(cx - rad * 0.35, cy - rad * 0.35), rad * 0.3, rad * 0.3)
         p.restore()
 
 
@@ -2403,6 +2426,519 @@ def draw_animal_penguin(p: QPainter, pose: Pose):
     _draw_effects(p, pose)
 
 
+# ======================================================================================
+#  6 neue Tierchen: Haeschen, Fuchs, Roter Panda, Hamster, Waschbaer, Laubfrosch
+# ======================================================================================
+
+def draw_animal_bunny(p: QPainter, pose: Pose):
+    """Mimi das Schlappohr-Haeschen: weiss, flauschig, Schlappohren, Moehrchen."""
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose, width=76.0)
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    OUTLINE_BUN = QColor("#403028")
+    WHITE_BUN = QColor("#FCFAF7")
+    PINK_BUN = QColor("#FFA8BA")
+
+    # Stummelschwaenzchen
+    p.setPen(_pen(OUTLINE_BUN, 2.0))
+    p.setBrush(WHITE_BUN)
+    p.drawEllipse(QPointF(48, 126), 9.0, 9.0)
+
+    # Pfoetchen unten
+    p.drawEllipse(QRectF(62, 142 - pose.paw_l, 16, 10))
+    p.drawEllipse(QRectF(86, 142 - pose.paw_r, 16, 10))
+
+    # Plumper Haeschen-Koerper
+    p.setPen(_pen(OUTLINE_BUN, 2.4))
+    p.setBrush(WHITE_BUN)
+    p.drawEllipse(QRectF(52, 92, 58, 52))
+
+    # Moehrchen in der Pfote
+    p.save()
+    p.translate(88, 120)
+    p.rotate(-20)
+    p.setPen(_pen(QColor("#2E7D32"), 1.8))
+    p.drawLine(QPointF(0, 0), QPointF(5, -9))
+    p.drawLine(QPointF(0, 0), QPointF(0, -11))
+    p.drawLine(QPointF(0, 0), QPointF(-5, -8))
+    p.setPen(_pen(OUTLINE_BUN, 1.6))
+    p.setBrush(QColor("#FF7043"))
+    carrot = QPainterPath(QPointF(-4, 0))
+    carrot.lineTo(QPointF(4, 0))
+    carrot.lineTo(QPointF(0, 16))
+    carrot.closeSubpath()
+    p.drawPath(carrot)
+    p.restore()
+
+    # Pfoetchen vorn
+    p.setBrush(WHITE_BUN)
+    p.drawEllipse(QPointF(72, 118), 6.5, 5.5)
+    p.drawEllipse(QPointF(88, 118), 6.5, 5.5)
+
+    # Kopf
+    p.save()
+    p.translate(pose.head_dx, pose.head_dy)
+    p.drawEllipse(QRectF(54, 52, 54, 48))
+
+    # Schlappohren (schwingen dynamisch)
+    sway = math.sin(pose.t * 3.5) * 4.0
+    for ox, side in ((56, -1), (104, 1)):
+        p.save()
+        p.translate(ox, 60)
+        p.rotate(side * (18 + sway))
+        p.setPen(_pen(OUTLINE_BUN, 2.2))
+        p.setBrush(WHITE_BUN)
+        p.drawRoundedRect(QRectF(-6, 0, 12, 42), 6, 6)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(PINK_BUN)
+        p.drawRoundedRect(QRectF(-3.5, 6, 7, 30), 3.5, 3.5)
+        p.restore()
+
+    # Gesicht: Augen
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#2B1B17"))
+    if pose.eyes == "happy":
+        p.setPen(_pen(QColor("#2B1B17"), 2.2))
+        p.drawArc(QRectF(64, 70, 10, 8), 0, 180 * 16)
+        p.drawArc(QRectF(86, 70, 10, 8), 0, 180 * 16)
+    else:
+        p.drawEllipse(QPointF(69, 73), 4.2, 4.8)
+        p.drawEllipse(QPointF(91, 73), 4.2, 4.8)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(67.5, 71.5), 1.6, 1.6)
+        p.drawEllipse(QPointF(89.5, 71.5), 1.6, 1.6)
+
+    # Rosa Naeschen & Mund
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(PINK_BUN)
+    p.drawEllipse(QPointF(80, 78), 2.8, 2.2)
+    p.setPen(_pen(OUTLINE_BUN, 1.6))
+    p.drawLine(QPointF(80, 80), QPointF(80, 83))
+    p.drawArc(QRectF(74, 80, 6, 5), 0, -180 * 16)
+    p.drawArc(QRectF(80, 80, 6, 5), 0, -180 * 16)
+
+    # Wangenrot
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(255, 160, 180, 120))
+    p.drawEllipse(QPointF(63, 79), 4.5, 3.0)
+    p.drawEllipse(QPointF(97, 79), 4.5, 3.0)
+    p.restore()
+
+    p.restore()
+    _draw_effects(p, pose)
+
+
+def draw_animal_fox(p: QPainter, pose: Pose):
+    """Kitsune der Rotfuchs: orange, buschiger Schwanz mit weisser Spitze, Fuchsohren."""
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose, width=80.0)
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    OUTLINE_FOX = QColor("#2D1808")
+    FUR_ORANGE = QColor("#E65100")
+    WHITE_FOX = QColor("#FFFDF8")
+    DARK_FOX = QColor("#21140E")
+
+    # Buschiger Fuchsschwanz (links hochgeschwungen)
+    tail_wave = math.sin(pose.t * 3.0) * 6.0
+    p.setPen(_pen(OUTLINE_FOX, 2.4))
+    p.setBrush(FUR_ORANGE)
+    tail_path = QPainterPath(QPointF(58, 124))
+    tail_path.cubicTo(QPointF(20, 130), QPointF(15 + tail_wave, 80), QPointF(35 + tail_wave, 62))
+    tail_path.cubicTo(QPointF(52 + tail_wave, 70), QPointF(48, 110), QPointF(68, 126))
+    tail_path.closeSubpath()
+    p.drawPath(tail_path)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(WHITE_FOX)
+    p.drawEllipse(QPointF(35 + tail_wave, 64), 9.0, 9.0)
+
+    # Pfoten (schwarze Fuchssocken)
+    p.setPen(_pen(OUTLINE_FOX, 2.0))
+    p.setBrush(DARK_FOX)
+    p.drawEllipse(QRectF(64, 142 - pose.paw_l, 14, 9))
+    p.drawEllipse(QRectF(88, 142 - pose.paw_r, 14, 9))
+
+    # Koerper
+    p.setPen(_pen(OUTLINE_FOX, 2.4))
+    p.setBrush(FUR_ORANGE)
+    p.drawEllipse(QRectF(54, 94, 54, 50))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(WHITE_FOX)
+    p.drawEllipse(QRectF(62, 102, 36, 34))
+
+    # Kopf
+    p.save()
+    p.translate(pose.head_dx, pose.head_dy)
+    for ox, side in ((62, -1), (98, 1)):
+        p.setPen(_pen(OUTLINE_FOX, 2.2))
+        p.setBrush(DARK_FOX)
+        ear = QPainterPath(QPointF(ox - 10, 60))
+        ear.lineTo(QPointF(ox, 32))
+        ear.lineTo(QPointF(ox + 10, 60))
+        ear.closeSubpath()
+        p.drawPath(ear)
+        p.setBrush(QColor("#FFA8BA"))
+        ear_in = QPainterPath(QPointF(ox - 5, 58))
+        ear_in.lineTo(QPointF(ox, 40))
+        ear_in.lineTo(QPointF(ox + 5, 58))
+        ear_in.closeSubpath()
+        p.drawPath(ear_in)
+
+    p.setPen(_pen(OUTLINE_FOX, 2.4))
+    p.setBrush(FUR_ORANGE)
+    p.drawEllipse(QRectF(54, 54, 52, 46))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(WHITE_FOX)
+    p.drawEllipse(QRectF(52, 70, 24, 26))
+    p.drawEllipse(QRectF(84, 70, 24, 26))
+    p.drawEllipse(QRectF(68, 76, 24, 20))
+
+    # Bernsteinaugen
+    p.setBrush(QColor("#D97706"))
+    if pose.eyes == "happy":
+        p.setPen(_pen(OUTLINE_FOX, 2.2))
+        p.drawArc(QRectF(62, 70, 10, 7), 0, 180 * 16)
+        p.drawArc(QRectF(88, 70, 10, 7), 0, 180 * 16)
+    else:
+        p.drawEllipse(QPointF(67, 72), 3.8, 4.4)
+        p.drawEllipse(QPointF(93, 72), 3.8, 4.4)
+        p.setBrush(QColor("#1F1610"))
+        p.drawEllipse(QPointF(67, 72), 2.2, 2.6)
+        p.drawEllipse(QPointF(93, 72), 2.2, 2.6)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(66, 70.5), 1.4, 1.4)
+        p.drawEllipse(QPointF(92, 70.5), 1.4, 1.4)
+
+    # Feine schwarze Schnauze
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(DARK_FOX)
+    p.drawEllipse(QPointF(80, 85), 3.2, 2.4)
+    p.restore()
+
+    p.restore()
+    _draw_effects(p, pose)
+
+
+def draw_animal_panda(p: QPainter, pose: Pose):
+    """Pao der Rote Panda: rotbraun, Kringelschwanz, weisse Baeckchen, runde Baehroehrchen."""
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose, width=82.0)
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    OUTLINE_PANDA = QColor("#28160E")
+    RUST_RED = QColor("#BF360C")
+    DARK_PANDA = QColor("#261C14")
+    WHITE_PANDA = QColor("#FFFDF8")
+
+    sw = math.sin(pose.t * 2.8) * 5.0
+    p.setPen(_pen(OUTLINE_PANDA, 2.4))
+    p.setBrush(RUST_RED)
+    tail = QPainterPath(QPointF(58, 126))
+    tail.cubicTo(QPointF(25, 134), QPointF(12 + sw, 94), QPointF(28 + sw, 78))
+    tail.cubicTo(QPointF(42 + sw, 84), QPointF(44, 114), QPointF(68, 128))
+    tail.closeSubpath()
+    p.drawPath(tail)
+    p.setPen(_pen(DARK_PANDA, 3.2))
+    p.drawLine(QPointF(20 + sw, 102), QPointF(36 + sw, 100))
+    p.drawLine(QPointF(22 + sw, 116), QPointF(45, 114))
+
+    p.setPen(_pen(OUTLINE_PANDA, 2.0))
+    p.setBrush(DARK_PANDA)
+    p.drawEllipse(QRectF(64, 142 - pose.paw_l, 14, 9))
+    p.drawEllipse(QRectF(88, 142 - pose.paw_r, 14, 9))
+
+    p.setPen(_pen(OUTLINE_PANDA, 2.4))
+    p.setBrush(RUST_RED)
+    p.drawEllipse(QRectF(54, 92, 54, 52))
+
+    p.save()
+    p.translate(pose.head_dx, pose.head_dy)
+    for ox, side in ((60, -1), (100, 1)):
+        p.setPen(_pen(OUTLINE_PANDA, 2.0))
+        p.setBrush(DARK_PANDA)
+        p.drawEllipse(QPointF(ox, 52), 9.0, 9.0)
+        p.setBrush(WHITE_PANDA)
+        p.drawEllipse(QPointF(ox + side * 1.5, 52), 5.5, 5.5)
+
+    p.setPen(_pen(OUTLINE_PANDA, 2.4))
+    p.setBrush(RUST_RED)
+    p.drawEllipse(QRectF(52, 54, 56, 48))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(WHITE_PANDA)
+    p.drawEllipse(QRectF(54, 72, 20, 22))
+    p.drawEllipse(QRectF(86, 72, 20, 22))
+    p.drawEllipse(QRectF(70, 78, 20, 16))
+    p.drawEllipse(QPointF(68, 64), 2.8, 2.8)
+    p.drawEllipse(QPointF(92, 64), 2.8, 2.8)
+
+    p.setBrush(QColor("#24140E"))
+    if pose.eyes == "happy":
+        p.setPen(_pen(OUTLINE_PANDA, 2.2))
+        p.drawArc(QRectF(64, 70, 9, 7), 0, 180 * 16)
+        p.drawArc(QRectF(87, 70, 9, 7), 0, 180 * 16)
+    else:
+        p.drawEllipse(QPointF(68, 73), 3.8, 4.2)
+        p.drawEllipse(QPointF(92, 73), 3.8, 4.2)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(67, 71.5), 1.5, 1.5)
+        p.drawEllipse(QPointF(91, 71.5), 1.5, 1.5)
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(DARK_PANDA)
+    p.drawEllipse(QPointF(80, 83), 3.0, 2.2)
+    p.restore()
+
+    p.restore()
+    _draw_effects(p, pose)
+
+
+def draw_animal_hamster(p: QPainter, pose: Pose):
+    """Hamsti der Goldhamster: rund wie ein Ball, Pausbaeckchen, Sonnenblumenkern."""
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose, width=86.0)
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    OUTLINE_HAM = QColor("#3E2723")
+    GOLD_FUR = QColor("#FFA000")
+    CREAM_HAM = QColor("#FFF8E1")
+    PINK_HAM = QColor("#FF80AB")
+
+    p.setPen(_pen(OUTLINE_HAM, 1.8))
+    p.setBrush(PINK_HAM)
+    p.drawEllipse(QRectF(62, 144 - pose.paw_l, 14, 7))
+    p.drawEllipse(QRectF(88, 144 - pose.paw_r, 14, 7))
+
+    p.setPen(_pen(OUTLINE_HAM, 2.4))
+    p.setBrush(GOLD_FUR)
+    p.drawEllipse(QRectF(46, 76, 72, 70))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(CREAM_HAM)
+    p.drawEllipse(QRectF(58, 92, 48, 50))
+
+    p.setPen(_pen(OUTLINE_HAM, 2.0))
+    p.setBrush(GOLD_FUR)
+    p.drawEllipse(QRectF(42, 82, 26, 26))
+    p.drawEllipse(QRectF(96, 82, 26, 26))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(CREAM_HAM)
+    p.drawEllipse(QRectF(44, 84, 22, 22))
+    p.drawEllipse(QRectF(98, 84, 22, 22))
+
+    p.save()
+    p.translate(80, 114)
+    p.setPen(_pen(OUTLINE_HAM, 1.6))
+    p.setBrush(QColor("#4E342E"))
+    seed = QPainterPath(QPointF(0, -7))
+    seed.quadTo(QPointF(5, 0), QPointF(0, 7))
+    seed.quadTo(QPointF(-5, 0), QPointF(0, -7))
+    p.drawPath(seed)
+    p.setPen(_pen(QColor("#D7CCC8"), 1.2))
+    p.drawLine(QPointF(0, -5), QPointF(0, 5))
+    p.restore()
+
+    p.setPen(_pen(OUTLINE_HAM, 1.8))
+    p.setBrush(PINK_HAM)
+    p.drawEllipse(QPointF(74, 114), 4.5, 4.0)
+    p.drawEllipse(QPointF(86, 114), 4.5, 4.0)
+
+    for ox in (58, 102):
+        p.setPen(_pen(OUTLINE_HAM, 2.0))
+        p.setBrush(GOLD_FUR)
+        p.drawEllipse(QPointF(ox, 68), 7.0, 7.0)
+        p.setBrush(PINK_HAM)
+        p.drawEllipse(QPointF(ox, 68), 4.2, 4.2)
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#21140E"))
+    if pose.eyes == "happy":
+        p.setPen(_pen(OUTLINE_HAM, 2.2))
+        p.drawArc(QRectF(64, 76, 9, 7), 0, 180 * 16)
+        p.drawArc(QRectF(87, 76, 9, 7), 0, 180 * 16)
+    else:
+        p.drawEllipse(QPointF(68, 78), 4.0, 4.5)
+        p.drawEllipse(QPointF(92, 78), 4.0, 4.5)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(67, 76.5), 1.6, 1.6)
+        p.drawEllipse(QPointF(91, 76.5), 1.6, 1.6)
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(PINK_HAM)
+    p.drawEllipse(QPointF(80, 84), 2.6, 2.0)
+    p.restore()
+    _draw_effects(p, pose)
+
+
+def draw_animal_raccoon(p: QPainter, pose: Pose):
+    """Roki der kleine Waschbaer: graues Fell, schwarze Bandit-Maske, Ringelschwanz."""
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose, width=80.0)
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    OUTLINE_RAC = QColor("#1E293B")
+    GRAY_FUR = QColor("#64748B")
+    MASK_BLACK = QColor("#0F172A")
+    WHITE_RAC = QColor("#F8FAFC")
+
+    sw = math.sin(pose.t * 3.0) * 5.0
+    p.setPen(_pen(OUTLINE_RAC, 2.4))
+    p.setBrush(GRAY_FUR)
+    tail = QPainterPath(QPointF(58, 126))
+    tail.cubicTo(QPointF(24, 134), QPointF(14 + sw, 96), QPointF(30 + sw, 80))
+    tail.cubicTo(QPointF(44 + sw, 86), QPointF(46, 116), QPointF(68, 128))
+    tail.closeSubpath()
+    p.drawPath(tail)
+    p.setPen(_pen(MASK_BLACK, 3.2))
+    p.drawLine(QPointF(22 + sw, 104), QPointF(38 + sw, 102))
+    p.drawLine(QPointF(24 + sw, 118), QPointF(48, 116))
+
+    p.setPen(_pen(OUTLINE_RAC, 2.0))
+    p.setBrush(MASK_BLACK)
+    p.drawEllipse(QRectF(64, 142 - pose.paw_l, 14, 9))
+    p.drawEllipse(QRectF(88, 142 - pose.paw_r, 14, 9))
+
+    p.setPen(_pen(OUTLINE_RAC, 2.4))
+    p.setBrush(GRAY_FUR)
+    p.drawEllipse(QRectF(54, 92, 54, 52))
+
+    p.save()
+    p.translate(pose.head_dx, pose.head_dy)
+    for ox in (60, 100):
+        p.setPen(_pen(OUTLINE_RAC, 2.0))
+        p.setBrush(GRAY_FUR)
+        p.drawEllipse(QPointF(ox, 52), 8.5, 8.5)
+        p.setBrush(WHITE_RAC)
+        p.drawEllipse(QPointF(ox, 50), 4.0, 4.0)
+
+    p.setPen(_pen(OUTLINE_RAC, 2.4))
+    p.setBrush(GRAY_FUR)
+    p.drawEllipse(QRectF(52, 54, 56, 48))
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(MASK_BLACK)
+    p.drawRoundedRect(QRectF(56, 68, 48, 14), 7, 7)
+    p.setBrush(WHITE_RAC)
+    p.drawEllipse(QRectF(68, 77, 24, 18))
+
+    p.setBrush(QColor("#FFFFFF"))
+    if pose.eyes == "happy":
+        p.setPen(_pen(QColor("#FFFFFF"), 2.2))
+        p.drawArc(QRectF(64, 70, 9, 7), 0, 180 * 16)
+        p.drawArc(QRectF(87, 70, 9, 7), 0, 180 * 16)
+    else:
+        p.drawEllipse(QPointF(68, 74), 3.8, 4.4)
+        p.drawEllipse(QPointF(92, 74), 3.8, 4.4)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#0F172A"))
+        p.drawEllipse(QPointF(68, 74), 2.2, 2.4)
+        p.drawEllipse(QPointF(92, 74), 2.2, 2.4)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(67, 72.5), 1.2, 1.2)
+        p.drawEllipse(QPointF(91, 72.5), 1.2, 1.2)
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(MASK_BLACK)
+    p.drawEllipse(QPointF(80, 83), 3.2, 2.2)
+    p.restore()
+
+    p.restore()
+    _draw_effects(p, pose)
+
+
+def draw_animal_frog(p: QPainter, pose: Pose):
+    """Kero der Laubfrosch: smaragdgruen, Kulleraugen, Saugnapf-Zehen, entspannt."""
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    _draw_shadow(p, pose, width=74.0)
+    p.save()
+    p.translate(pose.dx, pose.dy)
+    px, py = pose.pivot
+    p.translate(px, py)
+    p.rotate(pose.rot)
+    p.scale(pose.sx, pose.sy)
+    p.translate(-px, -py)
+
+    OUTLINE_FROG = QColor("#14532D")
+    GREEN_FROG = QColor("#22C55E")
+    BELLY_FROG = QColor("#ECFCCB")
+
+    p.setPen(_pen(OUTLINE_FROG, 1.8))
+    p.setBrush(GREEN_FROG)
+    for bx, paw in ((58, pose.paw_l), (92, pose.paw_r)):
+        p.drawRoundedRect(QRectF(bx, 142 - paw, 18, 8), 4, 4)
+        p.drawEllipse(QPointF(bx - 1, 144 - paw), 2.4, 2.4)
+        p.drawEllipse(QPointF(bx + 9, 147 - paw), 2.4, 2.4)
+        p.drawEllipse(QPointF(bx + 19, 144 - paw), 2.4, 2.4)
+
+    p.setPen(_pen(OUTLINE_FROG, 2.4))
+    p.setBrush(GREEN_FROG)
+    p.drawEllipse(QRectF(52, 90, 56, 52))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(BELLY_FROG)
+    p.drawEllipse(QRectF(62, 100, 36, 40))
+
+    p.save()
+    p.translate(pose.head_dx, pose.head_dy)
+    for ox in (62, 98):
+        p.setPen(_pen(OUTLINE_FROG, 2.2))
+        p.setBrush(GREEN_FROG)
+        p.drawEllipse(QPointF(ox, 56), 11.0, 11.0)
+        p.setBrush(QColor("#FACC15"))
+        p.drawEllipse(QPointF(ox, 56), 7.5, 7.5)
+        p.setBrush(QColor("#0F172A"))
+        p.drawRoundedRect(QRectF(ox - 5, 54, 10, 4), 2, 2)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(ox - 2, 53), 1.8, 1.8)
+
+    p.setPen(_pen(OUTLINE_FROG, 2.4))
+    p.setBrush(GREEN_FROG)
+    p.drawEllipse(QRectF(50, 60, 60, 42))
+
+    p.setPen(_pen(OUTLINE_FROG, 2.0))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    smile = QPainterPath(QPointF(58, 82))
+    smile.quadTo(QPointF(80, 92), QPointF(102, 82))
+    p.drawPath(smile)
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(255, 120, 160, 140))
+    p.drawEllipse(QPointF(58, 84), 4.5, 3.0)
+    p.drawEllipse(QPointF(102, 84), 4.5, 3.0)
+    p.restore()
+
+    p.restore()
+    _draw_effects(p, pose)
+
+
 
 # ======================================================================================
 #  Charakter-Register
@@ -2814,6 +3350,266 @@ CHARACTERS: dict[str, dict] = {
                 "You are Pip, a small emperor penguin with a thick cozy red scarf. You say 'Noot noot! 🐧❄️', "
                 "flap your wings in excitement and waddle cheerfully across the desk. You value cool clarity "
                 "and warm companionship. You NEVER make cat or dog sounds!"
+            ),
+        },
+    },
+    "animal_bunny": {
+        "id": "animal_bunny",
+        "name": "Mimi",
+        "species": "Schlappohr-Häschen",
+        "emoji": "🐰",
+        "desc": "Schneeweißes Flausch-Häschen mit wippenden Schlappohren, rosa Näschen und Knusper-Möhrchen",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 74.0), "eye_dx": 17.0, "neck": (80.0, 100.0), "paw_r": (96.0, 138.0)},
+        "drawer": draw_animal_bunny,
+        "sound": "Mümmel~ 🥕",
+        "pet_sounds": [
+            "Mümmel~ 💖", "*wippt vergnügt mit den Schlappohren* 🐰", "Mimi macht einen Freudensprung! ✨",
+            "Kraulen hinter den langen Ohren ist das Beste! 🐾", "Nasen-Stupser von Mimi! 🥕",
+        ],
+        "ambient_lines": [
+            "Immer schön die Ohren spitzen! 🐰", "Möhrchen-Pause nicht vergessen! 🥕",
+            "Sanft und flauschig durch den Tag hüpfen 🌸", "Mimi passt mit ihren großen Ohren auf 🐾",
+        ],
+        "task_start": "Ich hoppel schon los! 🥕🐾",
+        "task_done": "Mümmel! Alles fertig erledigt! 🏆🐰",
+        "ai_persona": (
+            "Du bist Mimi, ein schneeweißes, sanftes Schlappohr-Häschen. Du sagst 'Mümmel~ 🥕', "
+            "wippst mit den langen Ohren, liebst Möhrchen und machst kleine Freudensprünge (Binkies). "
+            "Du bist liebenswert, aufmerksam und machst KEINE Hunde- oder Katzengeräusche!"
+        ),
+        "en": {
+            "species": "Lop-eared Bunny",
+            "desc": "Fluffy white bunny with swinging lop ears, pink nose and crunchy carrot",
+            "sound": "Nibble~ 🥕",
+            "pet_sounds": [
+                "Nibble~ 💖", "*wiggles floppy ears happily* 🐰", "Mimi does a joyful binky jump! ✨",
+                "Scritches behind long ears are the best! 🐾", "Nose-boop from Mimi! 🥕",
+            ],
+            "ambient_lines": [
+                "Always keep your ears perked! 🐰", "Don't forget a carrot break! 🥕",
+                "Hopping softly and fluffily through the day 🌸", "Mimi is watching over you with big ears 🐾",
+            ],
+            "task_start": "Hopping right to it! 🥕🐾",
+            "task_done": "Nibble! All done and completed! 🏆🐰",
+            "ai_persona": (
+                "You are Mimi, a fluffy white lop-eared bunny. You say 'Nibble~ 🥕', wiggle your long floppy ears, "
+                "love carrots and do happy little jumps (binkies). You are sweet, caring and NEVER make dog or cat sounds!"
+            ),
+        },
+    },
+    "animal_fox": {
+        "id": "animal_fox",
+        "name": "Kitsune",
+        "species": "Rotfuchs",
+        "emoji": "🦊",
+        "desc": "Eleganter Rotfuchs mit buschigem Schweif mit weißer Spitze, spitzen Ohren und Bernsteinaugen",
+        "anchors": {"head_top": (80.0, 46.0), "eyes": (80.0, 76.0), "eye_dx": 18.0, "neck": (80.0, 104.0), "paw_r": (96.0, 140.0)},
+        "drawer": draw_animal_fox,
+        "sound": "Yap! 🐾",
+        "pet_sounds": [
+            "Yap! 🦊✨", "*wedelt stolz mit dem buschigen Fuchsschwanz* 🧡", "Schlau wie ein Fuchs gekrault! 🐾",
+            "Fuchs-Grummeln vor Zufriedenheit ✨", "Yap yap! High-Five mit der Fuchstatze! 🐾",
+        ],
+        "ambient_lines": [
+            "Mit Scharfsinn und Eleganz an die Arbeit! 🦊", "Mein buschiger Schwanz hält mich warm 🍂",
+            "Kein Trick entgeht einem echten Fuchs! 🐾", "Schlau vorausdenken bringt den Erfolg 🌲",
+        ],
+        "task_start": "Schlau wie ein Fuchs zur Stelle! 🦊✨",
+        "task_done": "Yap! Meisterhaft erledigt! 🏆🦊",
+        "ai_persona": (
+            "Du bist Kitsune, ein eleganter, cleverer Wald-Rotfuchs mit buschigem Schwanz. Du sagst 'Yap! 🐾', "
+            "legst neugierig den Kopf schief und bist blitzgescheit und gewitzt bei deinen Ratschlägen. "
+            "Du machst KEINE Katzen-Geräusche!"
+        ),
+        "en": {
+            "species": "Red Fox",
+            "desc": "Elegant red fox with white-tipped bushy tail, pointed ears and amber eyes",
+            "sound": "Yap! 🐾",
+            "pet_sounds": [
+                "Yap! 🦊✨", "*wags bushy fox tail proudly* 🧡", "Clever scritches accepted! 🐾",
+                "Fox purr of satisfaction ✨", "Yap yap! High-five with the fox paw! 🐾",
+            ],
+            "ambient_lines": [
+                "Tackling work with wit and elegance! 🦊", "My bushy tail keeps me cozy 🍂",
+                "No trick escapes a clever fox! 🐾", "Thinking ahead always brings success 🌲",
+            ],
+            "task_start": "Clever as a fox on the case! 🦊✨",
+            "task_done": "Yap! Masterfully finished! 🏆🦊",
+            "ai_persona": (
+                "You are Kitsune, an elegant, clever forest red fox with a bushy tail. You say 'Yap! 🐾', "
+                "tilt your head curiously, and are sharp-witted and playful in your advice. You NEVER make cat sounds!"
+            ),
+        },
+    },
+    "animal_panda": {
+        "id": "animal_panda",
+        "name": "Pao",
+        "species": "Kleiner Roter Panda",
+        "emoji": "🐼",
+        "desc": "Kuscheliger Roter Panda mit Kringelschwanz, weißen Bäckchen und runden Bärenöhrchen",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 78.0), "eye_dx": 18.0, "neck": (80.0, 106.0), "paw_r": (96.0, 140.0)},
+        "drawer": draw_animal_panda,
+        "sound": "Squeak! ✨",
+        "pet_sounds": [
+            "Squeak! 🐾💖", "*stellt sich auf die Hinterbeinchen: Rawr!* 🐼", "Kringelschwanz wackelt vor Freude! ✨",
+            "Pao liebt Bambus-Snacks und Kraulen! 🎋", "Pfötchen-Umarmung von Pao! 💖",
+        ],
+        "ambient_lines": [
+            "Bambus schmeckt am besten in guter Gesellschaft 🎋", "Ein kleiner Tatzentanz für gute Laune! 🐼",
+            "Immer flauschig bleiben, auch bei viel Stress 🧡", "Pao wuselt gemütlich über deine Fenster 🐾",
+        ],
+        "task_start": "Pao rollt los! 🎋🐼",
+        "task_done": "Squeak! Mit Panda-Power geschafft! 🏆🐼",
+        "ai_persona": (
+            "Du bist Pao, ein verspielter Kleiner Roter Panda. Du sagst 'Squeak! ✨', liebst Bambus-Snacks "
+            "und stellst dich zur süßen Drohgebärde auf zwei Beinchen ('Rawr! 🐾'). Du bist gemütlich, herzlich und treu."
+        ),
+        "en": {
+            "species": "Red Panda",
+            "desc": "Cuddly red panda with ringed tail, white cheek tufts and rounded bear ears",
+            "sound": "Squeak! ✨",
+            "pet_sounds": [
+                "Squeak! 🐾💖", "*stands on hind legs: Rawr!* 🐼", "Ringed tail wiggles with joy! ✨",
+                "Pao loves bamboo snacks and cuddles! 🎋", "Paw hug from Pao! 💖",
+            ],
+            "ambient_lines": [
+                "Bamboo tastes best in good company 🎋", "A little paw dance for good vibes! 🐼",
+                "Stay fluffy, even when work gets busy 🧡", "Pao wanders warmly across your windows 🐾",
+            ],
+            "task_start": "Pao rolls in! 🎋🐼",
+            "task_done": "Squeak! Finished with panda power! 🏆🐼",
+            "ai_persona": (
+                "You are Pao, a playful little red panda. You say 'Squeak! ✨', love bamboo snacks, "
+                "and stand up on two paws in an adorable roar ('Rawr! 🐾'). You are gentle, warm-hearted and loyal."
+            ),
+        },
+    },
+    "animal_hamster": {
+        "id": "animal_hamster",
+        "name": "Hamsti",
+        "species": "Goldhamster",
+        "emoji": "🐹",
+        "desc": "Pausbäckiger, kugelrunder Goldhamster mit winzigen Pfötchen und Knusper-Sonnenblumenkern",
+        "anchors": {"head_top": (80.0, 52.0), "eyes": (80.0, 78.0), "eye_dx": 19.0, "neck": (80.0, 102.0), "paw_r": (96.0, 136.0)},
+        "drawer": draw_animal_hamster,
+        "sound": "Knusper~ 🌻",
+        "pet_sounds": [
+            "Knusper~ 💖", "*bläst die Pausbäckchen zufrieden auf* 🐹", "Sonnenblumenkerne geteilt = doppelte Freude! 🌻",
+            "Trippel-Schritte vor Glück! 🐾", "Hamsti rollt sich als Flauschball zusammen! ✨",
+        ],
+        "ambient_lines": [
+            "Gute Ideen sollte man hamstern! 🐹", "Kleine Schritte führen auch ans Ziel 🌻",
+            "Pausbäckchen voll mit Energie! 🐾", "Erst die Arbeit, dann der Knabberspaß 🌻",
+        ],
+        "task_start": "Auf ins Hamsterrad der Produktivität! 🐹🌻",
+        "task_done": "Knusper! In die Vorratskammer gebracht! 🏆🐹",
+        "ai_persona": (
+            "Du bist Hamsti, ein rundlicher, emsiger Goldhamster mit Pausbäckchen. Du sagst 'Knusper~ 🌻', "
+            "knabberst an Sonnenblumenkernen und hamsterst Ideen und Notizen. Du bist fleißig, niedlich und positiv."
+        ),
+        "en": {
+            "species": "Golden Hamster",
+            "desc": "Chubby-cheeked round golden hamster with tiny paws and sunflower seed",
+            "sound": "Crunch~ 🌻",
+            "pet_sounds": [
+                "Crunch~ 💖", "*puffs chubby cheeks contently* 🐹", "Sharing sunflower seeds = double the joy! 🌻",
+                "Pitter-patter happy steps! 🐾", "Hamsti curls into a ball of fluff! ✨",
+            ],
+            "ambient_lines": [
+                "Store away good ideas! 🐹", "Small steps lead straight to the goal 🌻",
+                "Chubby cheeks packed with energy! 🐾", "First focus, then snack time 🌻",
+            ],
+            "task_start": "Onto the productivity wheel! 🐹🌻",
+            "task_done": "Crunch! Safely stored in the pantry! 🏆🐹",
+            "ai_persona": (
+                "You are Hamsti, a round, busy golden hamster with puffy cheeks. You say 'Crunch~ 🌻', "
+                "munch on sunflower seeds and gather ideas and notes. You are hardworking, cute and cheerful."
+            ),
+        },
+    },
+    "animal_raccoon": {
+        "id": "animal_raccoon",
+        "name": "Roki",
+        "species": "Kleiner Waschbär",
+        "emoji": "🦝",
+        "desc": "Cleverer kleiner Waschbär mit schwarzer Bandit-Maske, gestreiftem Schwanz und geschickten Pfötchen",
+        "anchors": {"head_top": (80.0, 48.0), "eyes": (80.0, 76.0), "eye_dx": 18.0, "neck": (80.0, 104.0), "paw_r": (96.0, 140.0)},
+        "drawer": draw_animal_raccoon,
+        "sound": "Chitter! 🦝",
+        "pet_sounds": [
+            "Chitter! 🦝✨", "*wäscht imaginäre Schätze mit den Pfötchen* 🐾", "Räuber-Kuscheln erfolgreich! 💖",
+            "Glänzende Ideen ausgegraben! ✨", "Schlaues Augenzwinkern aus der Bandit-Maske 🦝",
+        ],
+        "ambient_lines": [
+            "Desktop-Chaos? Ein Waschbär räumt alles auf! 🦝", "Saubere Fenster, klarer Kopf 🧼",
+            "Glänzende Dinge ziehen mich magisch an ✨", "Geschickte Pfoten finden für alles eine Lösung 🐾",
+        ],
+        "task_start": "Pfötchen gewaschen, auf geht's! 🦝✨",
+        "task_done": "Chitter! Sauber erledigt und auf Hochglanz poliert! 🏆🦝",
+        "ai_persona": (
+            "Du bist Roki, ein frecher, genialer kleiner Waschbär mit schwarzer Bandit-Augenmaske. "
+            "Du sagst 'Chitter! 🦝', 'wäschst' gerne Dinge sauber und liebst glänzende Schätze und clevere Tricks."
+        ),
+        "en": {
+            "species": "Little Raccoon",
+            "desc": "Clever little raccoon with black bandit mask, ringed tail and nimble paws",
+            "sound": "Chitter! 🦝",
+            "pet_sounds": [
+                "Chitter! 🦝✨", "*washes imaginary treasures with tiny paws* 🐾", "Bandit cuddles successful! 💖",
+                "Sparkly ideas discovered! ✨", "Clever wink from behind the bandit mask 🦝",
+            ],
+            "ambient_lines": [
+                "Desktop clutter? A raccoon tidies it up! 🦝", "Clean windows, clear mind 🧼",
+                "Shiny things catch my eye every time ✨", "Deft paws find a way through anything 🐾",
+            ],
+            "task_start": "Paws washed, let's roll! 🦝✨",
+            "task_done": "Chitter! Neatly finished and polished to a shine! 🏆🦝",
+            "ai_persona": (
+                "You are Roki, a mischievous, ingenious little raccoon with a black bandit mask. "
+                "You say 'Chitter! 🦝', love to 'wash' things clean and enjoy shiny treasures and clever tricks."
+            ),
+        },
+    },
+    "animal_frog": {
+        "id": "animal_frog",
+        "name": "Kero",
+        "species": "Laubfrosch",
+        "emoji": "🐸",
+        "desc": "Smaragdgrüner Laubfrosch mit goldenen Kulleraugen, Saugnapf-Zehen und tiefer Zen-Gelassenheit",
+        "anchors": {"head_top": (80.0, 50.0), "eyes": (80.0, 68.0), "eye_dx": 22.0, "neck": (80.0, 102.0), "paw_r": (96.0, 138.0)},
+        "drawer": draw_animal_frog,
+        "sound": "Ribbit~ 🍃",
+        "pet_sounds": [
+            "Ribbit~ 🐸✨", "*bleibt mit Saugnapf-Füßchen kleben* 🍃", "Tiefe Frosch-Entspannung erreicht 🧘",
+            "Goldene Kulleraugen strahlen vor Ruhe ✨", "Kero meditiert zufrieden mit dir! 🌸",
+        ],
+        "ambient_lines": [
+            "In der Ruhe liegt die Kraft – wie auf dem Seerosenblatt 🍃", "Tief durchatmen und den Moment genießen 🐸",
+            "Alles bleibt kleben, wo es soll! 🐾", "Frische Feuchtigkeit tut gut – Wasser trinken! 💧",
+        ],
+        "task_start": "Mit einem eleganten Froschsprung ans Werk! 🐸🍃",
+        "task_done": "Ribbit! Auf den Punkt gelandet! 🏆🐸",
+        "ai_persona": (
+            "Du bist Kero, ein smaragdgrüner Laubfrosch mit Zen-Ruhe. Du sagst 'Ribbit~ 🍃', "
+            "meditierst gerne auf Seerosenblättern und haftest entspannt an Fenstern. Du strahlst Gelassenheit und Weisheit aus."
+        ),
+        "en": {
+            "species": "Tree Frog",
+            "desc": "Emerald green tree frog with golden cartoon eyes, suction toes and deep Zen serenity",
+            "sound": "Ribbit~ 🍃",
+            "pet_sounds": [
+                "Ribbit~ 🐸✨", "*sticks gently with suction cup toes* 🍃", "Deep frog relaxation achieved 🧘",
+                "Golden round eyes beam with calmness ✨", "Kero meditates peacefully with you! 🌸",
+            ],
+            "ambient_lines": [
+                "Strength lies in serenity – like on a lily pad 🍃", "Breathe deeply and savor the moment 🐸",
+                "Everything sticks right where it belongs! 🐾", "Fresh hydration is key – drink some water! 💧",
+            ],
+            "task_start": "Taking an elegant frog leap into action! 🐸🍃",
+            "task_done": "Ribbit! Landed right on target! 🏆🐸",
+            "ai_persona": (
+                "You are Kero, an emerald-green tree frog with Zen calm. You say 'Ribbit~ 🍃', "
+                "enjoy meditating on lily pads and stick comfortably to window edges. You radiate wisdom and peaceful focus."
             ),
         },
     },

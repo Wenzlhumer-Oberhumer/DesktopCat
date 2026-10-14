@@ -74,6 +74,7 @@ def get_level_reward(lvl: int) -> tuple[str, Optional[str]]:
 DAILY_LIMITS = {
     "chat": 20,
     "treat": 10,
+    "wash": 10,
     "pomodoro": 9999,
     "quiz": 9999,
     "curious": 9999,
@@ -82,6 +83,7 @@ DAILY_LIMITS = {
 POINTS_PER_EVENT = {
     "chat": 1,
     "treat": 2,
+    "wash": 3,
     "pomodoro": 5,
     "quiz": 3,
     "curious": 3,
