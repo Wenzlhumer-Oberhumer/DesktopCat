@@ -451,7 +451,10 @@ class Buddy(QObject):
         self.pet.photobox_requested.connect(self.start_photobox)
         self.pet.new_note_requested.connect(lambda: self.create_sticky_note())
         self.pet.onboarding_requested.connect(lambda: self._open_onboarding(is_update=True))
+        self.pet.hide_requested.connect(self.hide_pet)
+        self.pet.focus_mode_requested.connect(self.start_focus_mode)
         self.tray.messageClicked.connect(self._on_tray_message_clicked)
+        self._focus_mode: bool = False
 
         from sticky_notes import StickyNoteManager
         from memory_store import get_memory_store
@@ -529,14 +532,30 @@ class Buddy(QObject):
 
     def _update_tray_menu(self) -> None:
         self.tray_menu.clear()
+        cname = self.char_info().get("name", "Kylie")
+
+        if getattr(self, "_focus_mode", False):
+            self._act(self.tray_menu, tr("menu.end_focus_mode"), self.end_focus_mode)
+            self.tray_menu.addSeparator()
+            self._act(self.tray_menu, tr("menu.settings"), self.open_settings)
+            self._act(self.tray_menu, tr("menu.quit"), self.quit)
+            return
+
         if not gemini.has_key():
             self._act(self.tray_menu, tr("menu.enter_key"), self.open_settings)
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, tr("menu.input"), self.open_input)
+        self._act(self.tray_menu, tr("menu.feed_pet", name=cname), self.pet.give_treat)
+        if self.pet.isVisible():
+            self._act(self.tray_menu, tr("menu.hide_pet", name=cname), self.hide_pet)
+        else:
+            self._act(self.tray_menu, tr("menu.show_pet", name=cname), self.show_pet)
+        self._act(self.tray_menu, tr("menu.focus_mode"), self.start_focus_mode)
+        self.tray_menu.addSeparator()
+
         self._act(self.tray_menu, tr("menu.friendship"), self.open_friendship_dialog)
         self._act(self.tray_menu, tr("menu.focus_stats"), self.open_focus_stats_dialog)
         self._act(self.tray_menu, tr("menu.flashcards"), self.open_flashcards_dialog)
-        cname = self.char_info().get("name", "Kylie")
         self._act(self.tray_menu, tr("menu.photo", name=cname), self.start_photobox)
         self._act(self.tray_menu, tr("menu.new_note"), lambda: self.create_sticky_note())
         self._act(self.tray_menu, tr("menu.error_doctor"), self.start_error_doctor)
@@ -738,8 +757,11 @@ class Buddy(QObject):
             self.pet.freeze(False)
 
     def _hotkey_pressed(self) -> None:
+        if getattr(self, "_focus_mode", False):
+            self.end_focus_mode()
+            return
         if not self.pet.isVisible():
-            self.pet.show()
+            self.show_pet()
         self.open_input()
 
     def _on_submit(self, text: str) -> None:
@@ -1102,7 +1124,7 @@ class Buddy(QObject):
 
     def _on_wellbeing(self) -> None:
         wb = self.cfg.get("wellbeing", {}) or {}
-        if is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy or self.input.isVisible():
+        if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy or self.input.isVisible():
             return
         kinds = [k for k, on in (("break", wb.get("breaks", True)), ("water", wb.get("water", True))) if on]
         if not kinds:
@@ -1111,8 +1133,11 @@ class Buddy(QObject):
         kind = "water" if (self._wellbeing_water and "water" in kinds) or kinds == ["water"] else "break"
         ci = self.char_info()
         u = self.user_name()
-        text = (f"{ci.get('sound', '')} {u}, Wasser trinken \U0001F4A7" if kind == "water"
-                else f"{ci.get('sound', '')} {u}, kurz strecken? \U0001F938")
+        if kind == "water":
+            self.pet.drink_water(5.0)
+            text = f"{ci.get('sound', '')} {u}, Wasser trinken! 💧 Ich trinke auch gleich einen Schluck mit dir! *schlürf schlürf* 🥣💧"
+        else:
+            text = f"{ci.get('sound', '')} {u}, kurz strecken? 🤸"
         self.pet.wake()
         self._say(text.strip(), 7000)
 
@@ -1128,18 +1153,78 @@ class Buddy(QObject):
             self._say(tr("say.battery_low", pct=pct, name=self.user_name()), 9000)
             self.tray.showMessage("Akku fast leer", f"Nur noch {pct} % Akku.", self.icon, 7000)
 
-    # -- Interaktion -------------------------------------------------------------------------
+    # -- Interaktion & Sichtbarkeit -----------------------------------------------------------
     def _on_petted(self) -> None:
         if self.brain.busy:
             return
+        if bool(self.cfg.get("pet.sound_enabled", True)):
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONASTERISK)
+            except Exception:
+                pass
         u = self.user_name()
-        lines = self.char_info().get("pet_sounds") or CLICK_LINES + [f"Du bist der Beste, {u}! \U0001F496"]
+        lines = self.char_info().get("pet_sounds") or CLICK_LINES + [f"Du bist der Beste, {u}! 💖"]
         self._say(random.choice(lines), 2500)
+
+    def hide_pet(self) -> None:
+        self.pet.hide()
+        self.bubble.hide_now()
+        self.input.hide_now()
+        cname = self.char_info().get("name", "Kylie")
+        hotkey = str(self.cfg.get("hotkey", "ctrl+alt+p"))
+        self.tray.showMessage(
+            f"🙈 {cname} macht ein Päuschen",
+            tr("tray.pet_hidden_notify", name=cname, hotkey=hotkey),
+            self.icon,
+            5000,
+        )
+        self._update_tray_menu()
+
+    def show_pet(self) -> None:
+        if getattr(self, "_focus_mode", False):
+            self.end_focus_mode()
+            return
+        self.pet.show()
+        self.pet.wake()
+        self.pet.react_happy()
+        self._update_tray_menu()
+
+    def start_focus_mode(self) -> None:
+        self._focus_mode = True
+        self.pet.hide()
+        self.bubble.hide_now()
+        self.input.hide_now()
+        cname = self.char_info().get("name", "Kylie")
+        self.tray.setToolTip(f"{cname} – Fokus-Modus aktiv (Klicke zum Beenden)")
+        self.tray.showMessage(
+            "🎯 Fokus-Modus aktiviert",
+            f"{cname} hat sich schlafen gelegt, damit du ungestört arbeiten kannst. Klicke auf das Katzen-Icon in der Taskleiste (^), um den Fokus-Modus zu beenden!",
+            self.icon,
+            6000,
+        )
+        self._update_tray_menu()
+
+    def end_focus_mode(self) -> None:
+        self._focus_mode = False
+        self.tray.setToolTip(tr("tray.tooltip"))
+        self.pet.show()
+        self.pet.wake()
+        self.pet.react_happy()
+        self._update_tray_menu()
+        u = self.user_name()
+        self._say(f"🎯 Fokus-Modus beendet! Super konzentriert gearbeitet, {u}! ✨🐾", 4500)
+        self._award_friendship("pomodoro")
 
     def _on_tray(self, reason) -> None:
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
-            self.pet.show()
-            self.open_input()
+            if getattr(self, "_focus_mode", False):
+                self.end_focus_mode()
+                return
+            if not self.pet.isVisible():
+                self.show_pet()
+            else:
+                self.open_input()
 
     def open_settings(self) -> None:
         if self._settings_open:
@@ -1149,6 +1234,7 @@ class Buddy(QObject):
             old_spec = str(self.cfg.get("hotkey", "ctrl+alt+p"))
             old_ex_spec = str(self.cfg.get("hotkey_explain", "ctrl+alt+e"))
             dlg = SettingsDialog(self.cfg, hotkey_validator=lambda spec: parse_hotkey(spec) is not None)
+            dlg.hide_pet_requested.connect(self.hide_pet)
             dlg.setWindowIcon(self.icon)
             if dlg.exec():
                 self.pet.apply_config()
@@ -1845,7 +1931,7 @@ class Buddy(QObject):
             self._chatter.start(random.randint(90, 180) * 1000)
 
     def _on_chatter(self) -> None:
-        if is_night(self.cfg):
+        if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg):
             self._schedule_chatter()
             return
         idle = self.pet.state in (PetState.IDLE, PetState.SLEEP)
@@ -1870,7 +1956,7 @@ class Buddy(QObject):
             self._vision_timer.start(delay * 1000)
 
     def _on_autonomous_vision(self) -> None:
-        if is_night(self.cfg) or self.brain.busy or self.input.isVisible() or self.pet.state == PetState.WORKING:
+        if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg) or self.brain.busy or self.input.isVisible() or self.pet.state == PetState.WORKING:
             self._schedule_vision()
             return
 

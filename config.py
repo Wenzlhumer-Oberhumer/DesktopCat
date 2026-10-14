@@ -27,6 +27,9 @@ DEFAULTS: dict[str, Any] = {
         "wander_max_s": 10,
         "chatter": True,        # gelegentliche Zwischenrufe
         "bubble_seconds": 4.0,
+        "opacity": 1.0,         # Deckkraft (0.3 - 1.0)
+        "always_on_top": True,  # Immer im Vordergrund
+        "sound_enabled": True,  # Audio/Soundeffekte bei Aktionen
     },
     "animations": {
         "idle": "", "walk_right": "", "walk_left": "", "dragged": "", "falling": "",

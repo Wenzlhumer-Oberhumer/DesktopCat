@@ -1,107 +1,524 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
-"""Einstellungsdialog (Dark-Mode) - speichert direkt in config.json."""
+"""Einstellungsdialog (Dark/Kawaii-Mode mit Tabs & ScrollArea) - speichert direkt in config.json."""
 from __future__ import annotations
 
 import os
 import webbrowser
+from typing import Optional
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider,
-    QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
+    QSlider, QTabWidget, QVBoxLayout, QWidget,
 )
 
 import gemini
 from paths import set_autostart
 
 try:
-    from pet_sprites import CHARACTERS
-except ImportError:         # alte pet_sprites ohne Charakter-Registry
+    from pet_sprites import CHARACTERS, get_character_info
+except ImportError:
     CHARACTERS = {}
+    def get_character_info(cid):
+        return {"name": cid, "species": "", "desc": "", "sound": "Miau~", "emoji": "🐾"}
 
 STYLE = """
-QDialog { background: #26282C; }
-QLabel { color: #F2F3F5; font: 10pt "Segoe UI"; }
-QLabel#title { font: 600 15pt "Segoe UI"; color: #FF8FB1; }
-QLabel#section { font: 600 11pt "Segoe UI"; color: #FFB3C6; margin-top: 6px; }
-QLabel#hint { color: #8D919B; font: 9pt "Segoe UI"; }
-QLabel#status { font: 10pt "Segoe UI"; font-weight: bold; }
-QLineEdit, QComboBox { background: #33353B; color: #F2F3F5; border: 1px solid #55575F; border-radius: 8px;
-        padding: 6px 8px; font: 10pt "Segoe UI"; }
-QComboBox QAbstractItemView { background: #2B2D31; color: #F2F3F5; selection-background-color: #FF8FB1;
-        selection-color: #26282C; }
-QCheckBox { color: #F2F3F5; font: 10pt "Segoe UI"; spacing: 8px; }
-QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px; border: 1px solid #55575F; background: #33353B; }
-QCheckBox::indicator:checked { background: #FF8FB1; border: 1px solid #FF8FB1; }
-QSlider::groove:horizontal { height: 6px; background: #3D3F46; border-radius: 3px; }
-QSlider::sub-page:horizontal { background: #FF8FB1; border-radius: 3px; }
-QSlider::handle:horizontal { background: #FFFFFF; width: 16px; margin: -6px 0; border-radius: 8px; }
-QPushButton { background: #3A3C43; color: #F2F3F5; border: none; border-radius: 10px; padding: 9px 18px;
-        font: 10pt "Segoe UI"; }
-QPushButton:hover { background: #474A52; }
-QPushButton#google { background: #4285F4; color: #FFFFFF; font-weight: 600; padding: 10px 18px; }
-QPushButton#google:hover { background: #5393FF; }
-QPushButton#google:disabled { background: #384252; color: #88909D; }
-QPushButton#danger { background: #4A3338; color: #FF8FB1; }
-QPushButton#danger:hover { background: #5C3D44; }
-QPushButton#primary { background: #FF8FB1; color: #26282C; font-weight: 600; }
-QPushButton#primary:hover { background: #FFA5C0; }
-QGroupBox { font: 600 10pt "Segoe UI"; border: 1px solid #3E4148; border-radius: 10px; margin-top: 10px;
-        padding-top: 14px; background-color: #2B2D31; color: #FFB3C6; }
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; color: #FFB3C6; }
-QProgressBar { background-color: #33353B; border: 1px solid #3E4148; border-radius: 10px; }
-QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FF8FB1, stop:1 #FB7185);
-        border-radius: 9px; }
-QTableWidget { background: #26282C; color: #F2F3F5; border: 1px solid #3E4148; border-radius: 8px;
-        gridline-color: #33353B; alternate-background-color: #2E3036; selection-background-color: #FF8FB1;
-        selection-color: #26282C; font: 10pt "Segoe UI"; }
-QHeaderView::section { background-color: #33353B; color: #F2F3F5; padding: 6px; font: 600 10pt "Segoe UI";
-        border: none; border-bottom: 1px solid #3E4148; }
-QScrollArea { background: #26282C; border: 1px solid #3E4148; border-radius: 8px; }
-QScrollBar:vertical { background: #26282C; width: 10px; margin: 0; }
-QScrollBar::handle:vertical { background: #474A52; min-height: 20px; border-radius: 5px; }
-QScrollBar::handle:vertical:hover { background: #5A5D66; }
+QDialog {
+    background-color: #202226;
+    color: #F2F3F5;
+}
+QLabel {
+    color: #E2E4E9;
+    font: 10pt "Segoe UI";
+}
+QLabel#title {
+    font: 700 16pt "Segoe UI";
+    color: #FF8FB1;
+}
+QLabel#subtitle {
+    color: #9AA0A6;
+    font: 9pt "Segoe UI";
+}
+QLabel#section {
+    font: 700 11pt "Segoe UI";
+    color: #FFB3C6;
+    margin-top: 4px;
+}
+QLabel#hint {
+    color: #8D919B;
+    font: 9pt "Segoe UI";
+}
+QLabel#status {
+    font: 10pt "Segoe UI";
+    font-weight: bold;
+}
+QLineEdit, QComboBox {
+    background-color: #2D3036;
+    color: #F2F3F5;
+    border: 1px solid #484B54;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font: 10pt "Segoe UI";
+}
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #FF8FB1;
+    background-color: #33363D;
+}
+QComboBox QAbstractItemView {
+    background: #25272D;
+    color: #F2F3F5;
+    selection-background-color: #FF8FB1;
+    selection-color: #202226;
+    border: 1px solid #484B54;
+    border-radius: 6px;
+    padding: 4px;
+}
+QCheckBox {
+    color: #F2F3F5;
+    font: 10pt "Segoe UI";
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1px solid #4F525C;
+    background: #2D3036;
+}
+QCheckBox::indicator:checked {
+    background: #FF8FB1;
+    border: 1px solid #FF8FB1;
+}
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #383A42;
+    border-radius: 3px;
+}
+QSlider::sub-page:horizontal {
+    background: #FF8FB1;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: #FFFFFF;
+    width: 16px;
+    height: 16px;
+    margin: -5px 0;
+    border-radius: 8px;
+}
+QSlider::handle:horizontal:hover {
+    background: #FFE4EC;
+}
+QPushButton {
+    background-color: #353840;
+    color: #F2F3F5;
+    border: 1px solid #444750;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font: 10pt "Segoe UI";
+}
+QPushButton:hover {
+    background-color: #434650;
+    border-color: #555964;
+}
+QPushButton#google {
+    background-color: #4285F4;
+    color: #FFFFFF;
+    font-weight: 600;
+    border: none;
+    padding: 9px 16px;
+}
+QPushButton#google:hover {
+    background-color: #5393FF;
+}
+QPushButton#google:disabled {
+    background-color: #333C48;
+    color: #79828F;
+}
+QPushButton#danger {
+    background-color: #4A2E35;
+    color: #FF8FB1;
+    border: 1px solid #633640;
+}
+QPushButton#danger:hover {
+    background-color: #5A353E;
+}
+QPushButton#primary {
+    background-color: #FF8FB1;
+    color: #202226;
+    font-weight: 700;
+    border: none;
+    padding: 8px 20px;
+}
+QPushButton#primary:hover {
+    background-color: #FFA5C0;
+}
+QPushButton#hide_btn {
+    background-color: #383442;
+    color: #D8B4FE;
+    border: 1px solid #5B4875;
+}
+QPushButton#hide_btn:hover {
+    background-color: #493F5A;
+}
+QTabWidget::pane {
+    border: 1px solid #383B44;
+    background: #25282E;
+    border-radius: 12px;
+    padding: 4px;
+}
+QTabBar::tab {
+    background: #1C1E22;
+    color: #9AA0AA;
+    padding: 10px 18px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    margin-right: 4px;
+    font: 600 10pt "Segoe UI";
+}
+QTabBar::tab:selected {
+    background: #25282E;
+    color: #FF8FB1;
+    border: 1px solid #383B44;
+    border-bottom: none;
+}
+QTabBar::tab:hover:!selected {
+    background: #2B2E35;
+    color: #F2F3F5;
+}
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollBar:vertical {
+    background: #1C1E22;
+    width: 8px;
+    border-radius: 4px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical {
+    background: #474A54;
+    min-height: 24px;
+    border-radius: 4px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #FF8FB1;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QFrame#card {
+    background-color: #2B2E35;
+    border: 1px solid #3A3D46;
+    border-radius: 10px;
+    padding: 12px;
+}
 """
 
 
 class SettingsDialog(QDialog):
+    hide_pet_requested = pyqtSignal()
+
     def __init__(self, cfg, parent=None, hotkey_validator=None):
         super().__init__(parent)
         self.cfg = cfg
         self._hotkey_ok = hotkey_validator or (lambda spec: bool(spec.strip()))
 
-        self.setWindowTitle("Einstellungen")
+        import i18n
+        self.setWindowTitle(i18n.tr("settings.title"))
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setMinimumWidth(480)
+        self.resize(650, 560)
+        self.setMinimumSize(560, 460)
         self.setStyleSheet(STYLE)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 20)
+        root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
 
-        title = QLabel("\U0001F43E  Einstellungen")
+        # -- Header -------------------------------------------------------------------
+        top_bar = QHBoxLayout()
+        top_bar.setSpacing(12)
+
+        header_v = QVBoxLayout()
+        header_v.setSpacing(2)
+        title = QLabel("🐾  Desktop Cat – Einstellungen")
         title.setObjectName("title")
-        root.addWidget(title)
+        subtitle = QLabel("Passe deine Katze, Funktionen und Gemini-KI nach deinen Wünschen an.")
+        subtitle.setObjectName("subtitle")
+        header_v.addWidget(title)
+        header_v.addWidget(subtitle)
+        top_bar.addLayout(header_v, 1)
 
-        # -- Gemini-Konto -------------------------------------------------------------
-        sec_ai = QLabel("Gemini-KI")
-        sec_ai.setObjectName("section")
-        root.addWidget(sec_ai)
+        root.addLayout(top_bar)
 
-        ai_box = QWidget()
-        ai_lay = QVBoxLayout(ai_box)
-        ai_lay.setContentsMargins(0, 0, 0, 0)
-        ai_lay.setSpacing(8)
+        # -- Tab Widget ---------------------------------------------------------------
+        self.tabs = QTabWidget()
+        root.addWidget(self.tabs, 1)
 
-        # Status
+        # Erstelle Tabs
+        self._build_tab_appearance()
+        self._build_tab_behavior()
+        self._build_tab_ai()
+        self._build_tab_wellbeing()
+        self._build_tab_system()
+
+        # -- Footer Buttons -----------------------------------------------------------
+        footer = QHBoxLayout()
+        footer.setSpacing(10)
+
+        open_cfg_btn = QPushButton(i18n.tr("settings.open_cfg"))
+        open_cfg_btn.clicked.connect(self._open_cfg)
+        footer.addWidget(open_cfg_btn)
+
+        my_data_btn = QPushButton(i18n.tr("settings.my_data"))
+        my_data_btn.clicked.connect(self._open_my_data)
+        footer.addWidget(my_data_btn)
+
+        footer.addStretch(1)
+
+        cancel_btn = QPushButton(i18n.tr("settings.cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        footer.addWidget(cancel_btn)
+
+        save_btn = QPushButton(i18n.tr("settings.save"))
+        save_btn.setObjectName("primary")
+        save_btn.setDefault(True)
+        save_btn.clicked.connect(self._save)
+        footer.addWidget(save_btn)
+
+        root.addLayout(footer)
+
+        self._refresh_auth_ui()
+        self._update_character_preview()
+
+    # ==================================================================================
+    #  Helper fuer scrollbare Tabs
+    # ==================================================================================
+    def _create_scrollable_tab(self, tab_title: str) -> QVBoxLayout:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(14)
+        scroll.setWidget(container)
+        self.tabs.addTab(scroll, tab_title)
+        return layout
+
+    @staticmethod
+    def _with_label(slider: QSlider, label: QLabel, suffix: str) -> QWidget:
+        box = QWidget()
+        lay = QHBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        label.setMinimumWidth(64)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        slider.valueChanged.connect(lambda v: label.setText(f"{v}{suffix}"))
+        label.setText(f"{slider.value()}{suffix}")
+        lay.addWidget(slider, 1)
+        lay.addWidget(label)
+        return box
+
+    # ==================================================================================
+    #  Tab 1: 🎨 Aussehen & Style
+    # ==================================================================================
+    def _build_tab_appearance(self) -> None:
+        import i18n
+        lay = self._create_scrollable_tab(i18n.tr("settings.tab_appearance"))
+
+        # Card: Charakter-Wahl & Live-Preview
+        card_char = QFrame()
+        card_char.setObjectName("card")
+        card_char_lay = QVBoxLayout(card_char)
+        card_char_lay.setSpacing(10)
+
+        sec_lbl = QLabel("🎭  Charakter & Aussehen")
+        sec_lbl.setObjectName("section")
+        card_char_lay.addWidget(sec_lbl)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        self.char_combo = QComboBox()
+        cur_char = str(self.cfg.get("pet.character", "cat_mochi"))
+        for cid, ci in CHARACTERS.items():
+            self.char_combo.addItem(f"{ci.get('emoji', '🐾')}  {ci.get('name', cid)} ({ci.get('species', '')})", cid)
+        self.char_combo.setCurrentIndex(max(0, self.char_combo.findData(cur_char)))
+        self.char_combo.setEnabled(bool(CHARACTERS))
+        self.char_combo.currentIndexChanged.connect(self._update_character_preview)
+        form.addRow("Figur:", self.char_combo)
+
+        # Outfit / Zubehör
+        self.worn_combo = QComboBox()
+        outfit_options = [
+            ("", "Keines (Standard)"),
+            ("bow", "🎀  Schleife"),
+            ("bandana", "🧣  Halstuch"),
+            ("scarf", "🧣  Winterschal"),
+            ("party_hat", "🎉  Partyhut"),
+            ("sunglasses", "🕶️  Sonnenbrille"),
+            ("crown", "👑  Königliche Krone"),
+            ("hacker_glasses", "💻  Hacker-Brille"),
+            ("nightcap", "🌙  Schlafmütze"),
+            ("beanie", "🧢  Beanie-Mütze"),
+            ("umbrella", "☂️  Regenschirm"),
+            ("gold_sparkle", "✨  Goldener Glanz"),
+        ]
+        cur_worn = str(self.cfg.get("fun.worn", "")).strip()
+        for wid, wlabel in outfit_options:
+            self.worn_combo.addItem(wlabel, wid)
+        idx = self.worn_combo.findData(cur_worn)
+        self.worn_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        form.addRow(i18n.tr("settings.worn_accessory"), self.worn_combo)
+
+        card_char_lay.addLayout(form)
+
+        # Live-Vorschau Box
+        self.preview_box = QFrame()
+        self.preview_box.setStyleSheet("background-color: #212328; border: 1px dashed #4F525C; border-radius: 8px; padding: 10px;")
+        prev_lay = QVBoxLayout(self.preview_box)
+        prev_lay.setSpacing(4)
+        self.prev_title = QLabel()
+        self.prev_title.setStyleSheet("font-weight: bold; color: #FF8FB1; font-size: 11pt;")
+        self.prev_desc = QLabel()
+        self.prev_desc.setWordWrap(True)
+        self.prev_desc.setStyleSheet("color: #CCD0D9; font-size: 9pt;")
+        self.prev_sound = QLabel()
+        self.prev_sound.setStyleSheet("color: #FFB3C6; font-style: italic; font-size: 9pt;")
+        prev_lay.addWidget(self.prev_title)
+        prev_lay.addWidget(self.prev_desc)
+        prev_lay.addWidget(self.prev_sound)
+        card_char_lay.addWidget(self.preview_box)
+
+        lay.addWidget(card_char)
+
+        # Card: Visuelle Anpassungen (Transparenz & Größe)
+        card_vis = QFrame()
+        card_vis.setObjectName("card")
+        card_vis_lay = QVBoxLayout(card_vis)
+        card_vis_lay.setSpacing(10)
+
+        vis_title = QLabel("✨  Transparenz & Skalierung")
+        vis_title.setObjectName("section")
+        card_vis_lay.addWidget(vis_title)
+
+        form_vis = QFormLayout()
+        form_vis.setSpacing(10)
+
+        # Deckkraft / Transparenz
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(30, 100)
+        cur_op = int(float(self.cfg.get("pet.opacity", 1.0)) * 100)
+        self.opacity_slider.setValue(max(30, min(100, cur_op)))
+        self.opacity_lbl = QLabel()
+        form_vis.addRow(i18n.tr("settings.opacity"), self._with_label(self.opacity_slider, self.opacity_lbl, " %"))
+
+        # Größe
+        self.scale = QSlider(Qt.Orientation.Horizontal)
+        self.scale.setRange(60, 180)
+        self.scale.setValue(int(float(self.cfg.get("pet.scale", 1.0)) * 100))
+        self.scale_lbl = QLabel()
+        form_vis.addRow("Größe:", self._with_label(self.scale, self.scale_lbl, " %"))
+
+        # Wetter-Outfits
+        fun = self.cfg.get("fun", {}) if isinstance(self.cfg.get("fun"), dict) else {}
+        self.weather_outfits_chk = QCheckBox("Wetter-Outfits automatisch anziehen (Regenschirm, Sonnenbrille etc.)")
+        self.weather_outfits_chk.setChecked(bool(fun.get("weather_outfits", True)))
+        form_vis.addRow("", self.weather_outfits_chk)
+
+        card_vis_lay.addLayout(form_vis)
+        lay.addWidget(card_vis)
+        lay.addStretch(1)
+
+    def _update_character_preview(self) -> None:
+        cid = self.char_combo.currentData()
+        if not cid:
+            return
+        info = get_character_info(str(cid))
+        name = info.get("name", "Buddy")
+        emoji = info.get("emoji", "🐾")
+        species = info.get("species", "")
+        desc = info.get("desc", "")
+        sound = info.get("sound", "Miau~")
+        self.prev_title.setText(f"{emoji}  {name} – {species}")
+        self.prev_desc.setText(desc)
+        self.prev_sound.setText(f"Typischer Spruch: „{sound}“")
+
+    # ==================================================================================
+    #  Tab 2: 🐾 Verhalten & Katze
+    # ==================================================================================
+    def _build_tab_behavior(self) -> None:
+        import i18n
+        lay = self._create_scrollable_tab(i18n.tr("settings.tab_behavior"))
+
+        card_beh = QFrame()
+        card_beh.setObjectName("card")
+        card_beh_lay = QVBoxLayout(card_beh)
+        card_beh_lay.setSpacing(10)
+
+        sec_lbl = QLabel("🏃  Bewegung & Interaktion")
+        sec_lbl.setObjectName("section")
+        card_beh_lay.addWidget(sec_lbl)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        self.speed = QSlider(Qt.Orientation.Horizontal)
+        self.speed.setRange(30, 300)
+        self.speed.setValue(int(self.cfg.get("pet.speed", 90)))
+        self.speed_lbl = QLabel()
+        form.addRow("Laufgeschwindigkeit:", self._with_label(self.speed, self.speed_lbl, " px/s"))
+
+        # Sprechblasen-Dauer
+        self.bubble_slider = QSlider(Qt.Orientation.Horizontal)
+        self.bubble_slider.setRange(2, 10)
+        self.bubble_slider.setValue(int(float(self.cfg.get("pet.bubble_seconds", 4.0))))
+        self.bubble_lbl = QLabel()
+        form.addRow(i18n.tr("settings.bubble_seconds"), self._with_label(self.bubble_slider, self.bubble_lbl, " s"))
+
+        self.wander = QCheckBox("Selbstständig auf dem Desktop herumlaufen & dösen")
+        self.wander.setChecked(bool(self.cfg.get("pet.wander", True)))
+        form.addRow("", self.wander)
+
+        self.chatter = QCheckBox("Gelegentlich etwas sagen (Zwischenrufe & Gedanken)")
+        self.chatter.setChecked(bool(self.cfg.get("pet.chatter", True)))
+        form.addRow("", self.chatter)
+
+        self.sound_enabled_chk = QCheckBox(i18n.tr("settings.sound_enabled"))
+        self.sound_enabled_chk.setChecked(bool(self.cfg.get("pet.sound_enabled", True)))
+        form.addRow("", self.sound_enabled_chk)
+
+        fun = self.cfg.get("fun", {}) if isinstance(self.cfg.get("fun"), dict) else {}
+        self.pc_fever_chk = QCheckBox("PC-Fieber-Reaktion bei hoher CPU-/RAM-Auslastung")
+        self.pc_fever_chk.setChecked(bool(fun.get("pc_fever", True)))
+        form.addRow("", self.pc_fever_chk)
+
+        card_beh_lay.addLayout(form)
+        lay.addWidget(card_beh)
+        lay.addStretch(1)
+
+    # ==================================================================================
+    #  Tab 3: 🤖 Gemini-KI & Sprache
+    # ==================================================================================
+    def _build_tab_ai(self) -> None:
+        import i18n
+        lay = self._create_scrollable_tab(i18n.tr("settings.tab_ai"))
+
+        card_ai = QFrame()
+        card_ai.setObjectName("card")
+        ai_lay = QVBoxLayout(card_ai)
+        ai_lay.setSpacing(10)
+
+        sec_lbl = QLabel("🧠  Google Gemini-Konto & KI-Funktionen")
+        sec_lbl.setObjectName("section")
+        ai_lay.addWidget(sec_lbl)
+
         self.status_lbl = QLabel()
         self.status_lbl.setObjectName("status")
         ai_lay.addWidget(self.status_lbl)
 
-        steps = QLabel("1. „Gratis-Key holen“ klicken und mit Google anmelden\n"
-                       "2. „Create API key“ → Key kopieren (Free Tier reicht, KEIN Bezahlkonto nötig –\n"
-                       "    Angebote für Billing, Firebase oder Guthaben einfach überspringen)\n"
+        steps = QLabel("1. „Gratis-Key holen“ klicken & mit Google-Konto anmelden\n"
+                       "2. „Create API key“ wählen & Key kopieren (Free Tier reicht vollkommen aus)\n"
                        "3. Hier einfügen → „Prüfen & speichern“")
         steps.setObjectName("hint")
         ai_lay.addWidget(steps)
@@ -131,175 +548,219 @@ class SettingsDialog(QDialog):
         btn_box.addWidget(self.logout_btn)
         ai_lay.addLayout(btn_box)
 
-        # Checkbox KI verwenden
-        self.ai_enabled = QCheckBox("KI verwenden (Gemini)")
-        self.ai_enabled.setChecked(bool(cfg.get("ai.enabled", True)))
+        self.ai_enabled = QCheckBox("KI verwenden (Gemini für smarte Befehle & Chat)")
+        self.ai_enabled.setChecked(bool(self.cfg.get("ai.enabled", True)))
         ai_lay.addWidget(self.ai_enabled)
 
-        root.addWidget(ai_box)
-
-        hint = QLabel("Der Key ist kostenlos und bleibt sicher in der Windows-Anmeldeinformationsverwaltung. "
-                      "Ohne Key arbeitet Desktop Cat im Offline-Modus.")
+        hint = QLabel("Der Key bleibt sicher in der Windows-Anmeldeinformationsverwaltung gespeichert. "
+                      "Ohne Key arbeitet Desktop Cat im schnellen Offline-Modus.")
         hint.setObjectName("hint")
         hint.setWordWrap(True)
-        root.addWidget(hint)
+        ai_lay.addWidget(hint)
 
-        # -- Katze / Verhalten --------------------------------------------------------
-        sec_pet = QLabel("Verhalten & Aussehen")
-        sec_pet.setObjectName("section")
-        root.addWidget(sec_pet)
+        lay.addWidget(card_ai)
 
-        form2 = QFormLayout()
-        form2.setSpacing(10)
+        # Card: Sprache & Persona
+        card_lang = QFrame()
+        card_lang.setObjectName("card")
+        card_lang_lay = QVBoxLayout(card_lang)
+        card_lang_lay.setSpacing(10)
 
-        self.char_combo = QComboBox()
-        cur_char = str(cfg.get("pet.character", "cat_mochi"))
-        for cid, ci in CHARACTERS.items():
-            self.char_combo.addItem(f"{ci['emoji']}  {ci['name']} ({ci['species']})", cid)
-        self.char_combo.setCurrentIndex(max(0, self.char_combo.findData(cur_char)))
-        self.char_combo.setEnabled(bool(CHARACTERS))
-        form2.addRow("Charakter", self.char_combo)
+        lang_sec = QLabel("🗣️  Sprache & Anrede")
+        lang_sec.setObjectName("section")
+        card_lang_lay.addWidget(lang_sec)
+
+        form = QFormLayout()
+        form.setSpacing(10)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItem("Deutsch", "de")
         self.lang_combo.addItem("English", "en")
-        cur_lang = str(cfg.get("language", "de")).lower()
+        cur_lang = str(self.cfg.get("language", "de")).lower()
         self.lang_combo.setCurrentIndex(1 if cur_lang.startswith("en") else 0)
-        form2.addRow("Sprache / Language", self.lang_combo)
+        form.addRow("Sprache / Language:", self.lang_combo)
 
-        self.user_name_edit = QLineEdit(str(cfg.get("pet.user_name", "Boss")))
+        self.user_name_edit = QLineEdit(str(self.cfg.get("pet.user_name", "Boss")))
         self.user_name_edit.setPlaceholderText("Boss (Standard)")
-        form2.addRow("Dein Name / Anrede", self.user_name_edit)
+        form.addRow("Dein Name / Anrede:", self.user_name_edit)
 
-        self.speed = QSlider(Qt.Orientation.Horizontal)
-        self.speed.setRange(30, 300)
-        self.speed.setValue(int(cfg.get("pet.speed", 90)))
-        self.speed_lbl = QLabel()
-        form2.addRow("Laufgeschwindigkeit", self._with_label(self.speed, self.speed_lbl, " px/s"))
+        card_lang_lay.addLayout(form)
+        lay.addWidget(card_lang)
+        lay.addStretch(1)
 
-        self.scale = QSlider(Qt.Orientation.Horizontal)
-        self.scale.setRange(60, 180)
-        self.scale.setValue(int(float(cfg.get("pet.scale", 1.0)) * 100))
-        self.scale_lbl = QLabel()
-        form2.addRow("Gr\u00f6\u00dfe", self._with_label(self.scale, self.scale_lbl, " %"))
+    # ==================================================================================
+    #  Tab 4: 🌿 Wohlbefinden & Alltag
+    # ==================================================================================
+    def _build_tab_wellbeing(self) -> None:
+        import i18n
+        lay = self._create_scrollable_tab(i18n.tr("settings.tab_wellbeing"))
 
-        self.wander = QCheckBox("Selbstst\u00e4ndig herumlaufen & schlafen")
-        self.wander.setChecked(bool(cfg.get("pet.wander", True)))
-        form2.addRow("", self.wander)
+        card = QFrame()
+        card.setObjectName("card")
+        card_lay = QVBoxLayout(card)
+        card_lay.setSpacing(10)
 
-        self.chatter = QCheckBox("Gelegentlich etwas sagen")
-        self.chatter.setChecked(bool(cfg.get("pet.chatter", True)))
-        form2.addRow("", self.chatter)
+        sec_lbl = QLabel("💧  Gesundheit, Pausen & Erinnerungen")
+        sec_lbl.setObjectName("section")
+        card_lay.addWidget(sec_lbl)
 
-        self.autostart = QCheckBox("Mit Windows starten")
-        self.autostart.setChecked(bool(cfg.get("autostart", True)))
-        form2.addRow("", self.autostart)
+        form = QFormLayout()
+        form.setSpacing(10)
 
-        self.auto_update = QCheckBox("Automatisch nach Updates suchen")
-        self.auto_update.setChecked(bool(cfg.get("update.auto", True)))
-        form2.addRow("", self.auto_update)
+        self.breaks = QCheckBox("Erinnerung: kurz strecken & Augen entspannen")
+        self.breaks.setChecked(bool(self.cfg.get("wellbeing.breaks", True)))
+        form.addRow("", self.breaks)
 
-        self.breaks = QCheckBox("Erinnerung: kurz strecken")
-        self.breaks.setChecked(bool(cfg.get("wellbeing.breaks", True)))
-        form2.addRow("", self.breaks)
-
-        self.water = QCheckBox("Erinnerung: Wasser trinken")
-        self.water.setChecked(bool(cfg.get("wellbeing.water", True)))
-        form2.addRow("", self.water)
+        self.water = QCheckBox("Erinnerung: Schluck Wasser trinken")
+        self.water.setChecked(bool(self.cfg.get("wellbeing.water", True)))
+        form.addRow("", self.water)
 
         self.break_min = QSlider(Qt.Orientation.Horizontal)
         self.break_min.setRange(10, 180)
-        self.break_min.setValue(int(cfg.get("wellbeing.break_min", 60)))
+        self.break_min.setValue(int(self.cfg.get("wellbeing.break_min", 60)))
         self.break_min_lbl = QLabel()
-        form2.addRow("Erinnerung alle", self._with_label(self.break_min, self.break_min_lbl, " Min."))
+        form.addRow("Erinnerungs-Intervall:", self._with_label(self.break_min, self.break_min_lbl, " Min."))
 
-        self.battery_warn = QCheckBox("Akku-Warnung unter 15 %")
-        self.battery_warn.setChecked(bool(cfg.get("battery_warn", True)))
-        form2.addRow("", self.battery_warn)
+        self.battery_warn = QCheckBox("Akku-Warnung unter 15 % anzeigen")
+        self.battery_warn.setChecked(bool(self.cfg.get("battery_warn", True)))
+        form.addRow("", self.battery_warn)
 
-        self.night_mode = QCheckBox("Nachtmodus (23\u20137 Uhr: ruhig & m\u00fcde)")
-        self.night_mode.setChecked(bool(cfg.get("night_mode", True)))
-        form2.addRow("", self.night_mode)
+        self.night_mode = QCheckBox("Nachtmodus (23–7 Uhr: ruhig, schläfrig & unaufdringlich)")
+        self.night_mode.setChecked(bool(self.cfg.get("night_mode", True)))
+        form.addRow("", self.night_mode)
 
-        daily = cfg.get("daily", {}) if isinstance(cfg.get("daily"), dict) else {}
-        self.briefing_chk = QCheckBox("Guten-Morgen-Briefing anzeigen")
+        daily = self.cfg.get("daily", {}) if isinstance(self.cfg.get("daily"), dict) else {}
+        self.briefing_chk = QCheckBox("Guten-Morgen-Briefing beim ersten Tagesstart")
         self.briefing_chk.setChecked(bool(daily.get("briefing", True)))
-        form2.addRow("", self.briefing_chk)
+        form.addRow("", self.briefing_chk)
 
-        self.curious_chk = QCheckBox("Gelegentlich neugierige Fragen stellen")
+        self.curious_chk = QCheckBox("Gelegentlich neugierige Alltags-Fragen stellen")
         self.curious_chk.setChecked(bool(daily.get("curious", True)))
-        form2.addRow("", self.curious_chk)
+        form.addRow("", self.curious_chk)
 
         self.bedtime_edit = QLineEdit(str(daily.get("bedtime", "23:00")))
         self.bedtime_edit.setPlaceholderText("z. B. 23:00 (leer = aus)")
-        form2.addRow("Schlafenszeit", self.bedtime_edit)
+        form.addRow("Schlafenszeit:", self.bedtime_edit)
 
-        fun = cfg.get("fun", {}) if isinstance(cfg.get("fun"), dict) else {}
-        self.weather_outfits_chk = QCheckBox("Wetter-Outfits (Regenschirm, Sonnenbrille etc.)")
-        self.weather_outfits_chk.setChecked(bool(fun.get("weather_outfits", True)))
-        form2.addRow("", self.weather_outfits_chk)
+        card_lay.addLayout(form)
+        lay.addWidget(card)
+        lay.addStretch(1)
 
-        self.pc_fever_chk = QCheckBox("PC-Fieber-Reaktion bei hoher CPU-/RAM-Last")
-        self.pc_fever_chk.setChecked(bool(fun.get("pc_fever", True)))
-        form2.addRow("", self.pc_fever_chk)
+    # ==================================================================================
+    #  Tab 5: ⚙️ System & Hotkeys
+    # ==================================================================================
+    def _build_tab_system(self) -> None:
+        import i18n
+        lay = self._create_scrollable_tab(i18n.tr("settings.tab_system"))
 
-        self.hotkey_edit = QLineEdit(str(cfg.get("hotkey", "ctrl+alt+p")))
+        card_sys = QFrame()
+        card_sys.setObjectName("card")
+        card_sys_lay = QVBoxLayout(card_sys)
+        card_sys_lay.setSpacing(10)
+
+        sec_lbl = QLabel("💻  System & Startverhalten")
+        sec_lbl.setObjectName("section")
+        card_sys_lay.addWidget(sec_lbl)
+
+        form_sys = QFormLayout()
+        form_sys.setSpacing(10)
+
+        self.autostart = QCheckBox("Automatisch mit Windows starten")
+        self.autostart.setChecked(bool(self.cfg.get("autostart", True)))
+        form_sys.addRow("", self.autostart)
+
+        self.auto_update = QCheckBox("Automatisch nach neuen Updates suchen")
+        self.auto_update.setChecked(bool(self.cfg.get("update.auto", True)))
+        form_sys.addRow("", self.auto_update)
+
+        self.always_on_top_chk = QCheckBox(i18n.tr("settings.always_on_top"))
+        self.always_on_top_chk.setChecked(bool(self.cfg.get("pet.always_on_top", True)))
+        form_sys.addRow("", self.always_on_top_chk)
+
+        card_sys_lay.addLayout(form_sys)
+        lay.addWidget(card_sys)
+
+        # Card: Tastenkürzel
+        card_keys = QFrame()
+        card_keys.setObjectName("card")
+        card_keys_lay = QVBoxLayout(card_keys)
+        card_keys_lay.setSpacing(10)
+
+        keys_lbl = QLabel("⌨️  Globale Tastenkürzel (Hotkeys)")
+        keys_lbl.setObjectName("section")
+        card_keys_lay.addWidget(keys_lbl)
+
+        form_keys = QFormLayout()
+        form_keys.setSpacing(10)
+
+        self.hotkey_edit = QLineEdit(str(self.cfg.get("hotkey", "ctrl+alt+p")))
         self.hotkey_edit.setPlaceholderText("z. B. ctrl+alt+p")
-        form2.addRow("Tastenk\u00fcrzel", self.hotkey_edit)
+        form_keys.addRow("Befehlseingabe / Katze rufen:", self.hotkey_edit)
 
-        self.hotkey_explain_edit = QLineEdit(str(cfg.get("hotkey_explain", "ctrl+alt+e")))
+        self.hotkey_explain_edit = QLineEdit(str(self.cfg.get("hotkey_explain", "ctrl+alt+e")))
         self.hotkey_explain_edit.setPlaceholderText("z. B. ctrl+alt+e")
-        form2.addRow("Kopieren & Erkl\u00e4ren", self.hotkey_explain_edit)
-        root.addLayout(form2)
+        form_keys.addRow("Kopieren & Erklären:", self.hotkey_explain_edit)
+
+        card_keys_lay.addLayout(form_keys)
 
         self.hotkey_hint = QLabel("Format: ctrl / alt / shift / win + Taste, z. B. ctrl+alt+p oder ctrl+alt+e")
         self.hotkey_hint.setObjectName("hint")
-        root.addWidget(self.hotkey_hint)
+        card_keys_lay.addWidget(self.hotkey_hint)
 
-        # -- Dialog-Buttons -----------------------------------------------------------
-        btns = QHBoxLayout()
-        open_cfg = QPushButton("config.json \u00f6ffnen")
-        open_cfg.clicked.connect(self._open_cfg)
-        btns.addWidget(open_cfg)
-        my_data_btn = QPushButton("🔒  Meine Daten")
-        my_data_btn.clicked.connect(self._open_my_data)
-        btns.addWidget(my_data_btn)
-        btns.addStretch(1)
+        lay.addWidget(card_keys)
 
-        cancel = QPushButton("Abbrechen")
-        cancel.clicked.connect(self.reject)
-        save = QPushButton("Speichern")
-        save.setObjectName("primary")
-        save.setDefault(True)
-        save.clicked.connect(self._save)
-        btns.addWidget(cancel)
-        btns.addWidget(save)
-        root.addLayout(btns)
+        # Card: Schnelle Aktionen (z. B. Katze ausblenden)
+        card_act = QFrame()
+        card_act.setObjectName("card")
+        card_act_lay = QVBoxLayout(card_act)
+        card_act_lay.setSpacing(8)
 
-        self._refresh_auth_ui()
+        act_lbl = QLabel("⚡  Schnell-Aktionen")
+        act_lbl.setObjectName("section")
+        card_act_lay.addWidget(act_lbl)
 
+        hide_btn = QPushButton(i18n.tr("settings.hide_pet_btn"))
+        hide_btn.setObjectName("hide_btn")
+        hide_btn.clicked.connect(self._on_hide_pet_click)
+        card_act_lay.addWidget(hide_btn)
+
+        hide_hint = QLabel("Tipp: Du kannst die Katze jederzeit per Klick auf das Taskleisten-Icon oder per Tastenkürzel wieder aufwecken.")
+        hide_hint.setObjectName("hint")
+        hide_hint.setWordWrap(True)
+        card_act_lay.addWidget(hide_hint)
+
+        lay.addWidget(card_act)
+        lay.addStretch(1)
+
+    def _on_hide_pet_click(self) -> None:
+        self.hide_pet_requested.emit()
+        self.accept()
+
+    # ==================================================================================
+    #  Auth & Key Handling
+    # ==================================================================================
     def _set_status(self, text: str, color: str) -> None:
         self.status_lbl.setText(text)
         self.status_lbl.setStyleSheet(f"color: {color};")
 
     def _refresh_auth_ui(self) -> None:
         if gemini.has_key():
-            self._set_status("\u2705  Gemini-Key hinterlegt", "#79D279")
+            self._set_status("✅  Gemini-Key aktiv & sicher hinterlegt", "#79D279")
             self.logout_btn.setVisible(True)
         else:
-            self._set_status("\u274c  Noch kein Gemini-Key", "#FF8F8F")
+            self._set_status("❌  Noch kein Gemini-Key eingetragen", "#FF8F8F")
             self.logout_btn.setVisible(False)
 
     def _on_save_key(self) -> None:
         key = self.key_edit.text().strip()
-        self._set_status("\U0001f504  Pr\u00fcfe Key\u2026", "#8D919B")
+        self._set_status("🔄  Prüfe Key…", "#8D919B")
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         QApplication.processEvents()
         try:
             gemini.validate_key(key)
             gemini.save_key(key)
-        except Exception as exc:  # noqa: BLE001 - LLMError oder Credential-Fehler anzeigen
-            self._set_status(f"\u274c  {exc}", "#FF8F8F")
+        except Exception as exc:  # noqa: BLE001
+            self._set_status(f"❌  {exc}", "#FF8F8F")
             return
         finally:
             QApplication.restoreOverrideCursor()
@@ -313,19 +774,6 @@ class SettingsDialog(QDialog):
         gemini.clear_key()
         self._refresh_auth_ui()
 
-    @staticmethod
-    def _with_label(slider: QSlider, label: QLabel, suffix: str) -> QWidget:
-        box = QWidget()
-        lay = QHBoxLayout(box)
-        lay.setContentsMargins(0, 0, 0, 0)
-        label.setMinimumWidth(64)
-        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        slider.valueChanged.connect(lambda v: label.setText(f"{v}{suffix}"))
-        label.setText(f"{slider.value()}{suffix}")
-        lay.addWidget(slider, 1)
-        lay.addWidget(label)
-        return box
-
     def _open_cfg(self) -> None:
         try:
             os.startfile(str(self.cfg.path))  # type: ignore[attr-defined]
@@ -337,45 +785,66 @@ class SettingsDialog(QDialog):
         dlg = MyDataDialog(self.cfg, parent=self)
         dlg.exec()
 
+    # ==================================================================================
+    #  Speichern
+    # ==================================================================================
     def _save(self) -> None:
         c = self.cfg
         hotkey = self.hotkey_edit.text().strip().lower()
         if not self._hotkey_ok(hotkey):
-            self.hotkey_hint.setText("\u274c  Ung\u00fcltiges Tastenk\u00fcrzel - Beispiel: ctrl+alt+p")
+            self.hotkey_hint.setText("❌  Ungültiges Tastenkürzel – Beispiel: ctrl+alt+p")
             self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
+            self.tabs.setCurrentIndex(4)  # springe zum System-Tab
             return
         hotkey_ex = self.hotkey_explain_edit.text().strip().lower()
         if not self._hotkey_ok(hotkey_ex):
-            self.hotkey_hint.setText("\u274c  Ung\u00fcltiges Tastenk\u00fcrzel f\u00fcr Kopieren & Erkl\u00e4ren - Beispiel: ctrl+alt+e")
+            self.hotkey_hint.setText("❌  Ungültiges Tastenkürzel für Kopieren & Erklären – Beispiel: ctrl+alt+e")
             self.hotkey_hint.setStyleSheet("color: #FF8F8F;")
+            self.tabs.setCurrentIndex(4)
             return
+
         c.set("hotkey", hotkey)
         c.set("hotkey_explain", hotkey_ex)
+
         char = self.char_combo.currentData()
         if char:
             c.set("pet.character", str(char))
+
+        worn = self.worn_combo.currentData()
+        c.set("fun.worn", str(worn or ""))
+
         cur_lang = self.lang_combo.currentData() or "de"
         c.set("language", cur_lang)
         import i18n
         i18n.set_language(cur_lang)
+
         c.set("pet.user_name", self.user_name_edit.text().strip() or "Boss")
+        c.set("pet.opacity", self.opacity_slider.value() / 100.0)
+        c.set("pet.scale", self.scale.value() / 100.0)
+        c.set("pet.speed", self.speed.value())
+        c.set("pet.wander", self.wander.isChecked())
+        c.set("pet.chatter", self.chatter.isChecked())
+        c.set("pet.bubble_seconds", float(self.bubble_slider.value()))
+        c.set("pet.sound_enabled", self.sound_enabled_chk.isChecked())
+        c.set("pet.always_on_top", self.always_on_top_chk.isChecked())
+
+        c.set("fun.weather_outfits", self.weather_outfits_chk.isChecked())
+        c.set("fun.pc_fever", self.pc_fever_chk.isChecked())
+        c.set("ai.enabled", self.ai_enabled.isChecked())
+
         c.set("wellbeing.breaks", self.breaks.isChecked())
         c.set("wellbeing.water", self.water.isChecked())
         c.set("wellbeing.break_min", self.break_min.value())
         c.set("battery_warn", self.battery_warn.isChecked())
         c.set("night_mode", self.night_mode.isChecked())
+
         c.set("daily.briefing", self.briefing_chk.isChecked())
         c.set("daily.curious", self.curious_chk.isChecked())
         c.set("daily.bedtime", self.bedtime_edit.text().strip())
-        c.set("fun.weather_outfits", self.weather_outfits_chk.isChecked())
-        c.set("fun.pc_fever", self.pc_fever_chk.isChecked())
-        c.set("ai.enabled", self.ai_enabled.isChecked())
-        c.set("pet.speed", self.speed.value())
-        c.set("pet.scale", self.scale.value() / 100.0)
-        c.set("pet.wander", self.wander.isChecked())
-        c.set("pet.chatter", self.chatter.isChecked())
+
         c.set("autostart", self.autostart.isChecked())
         set_autostart(self.autostart.isChecked())
         c.set("update.auto", self.auto_update.isChecked())
+
         c.save()
         self.accept()

@@ -12,6 +12,38 @@ _LANG = "de"
 
 STRINGS: dict[str, dict[str, str]] = {
     # -- Kontext- & Tray-Menue ---------------------------------------------------------
+    "menu.hide_pet": {
+        "de": "🙈  {name} ausblenden (Päuschen)",
+        "en": "🙈  Hide {name} (Take a break)",
+    },
+    "menu.show_pet": {
+        "de": "👁️  {name} wieder anzeigen",
+        "en": "👁️  Show {name}",
+    },
+    "menu.focus_mode": {
+        "de": "🎯  Fokus-Modus (Katze pausieren)",
+        "en": "🎯  Focus Mode (Pause pet)",
+    },
+    "menu.end_focus_mode": {
+        "de": "🎯  Fokus-Modus beenden",
+        "en": "🎯  End Focus Mode",
+    },
+    "menu.feed_pet": {
+        "de": "🐟  {name} füttern (Leckerli)",
+        "en": "🐟  Feed {name} (Treat)",
+    },
+    "menu.sub_learn": {
+        "de": "💖  Freundschaft & Lernen",
+        "en": "💖  Friendship & Learning",
+    },
+    "menu.sub_tools": {
+        "de": "📝  Notizen & Hilfe",
+        "en": "📝  Notes & Help",
+    },
+    "tray.pet_hidden_notify": {
+        "de": "{name} macht ein Päuschen! 💤 Klicke auf das Icon in der Taskleiste oder drücke {hotkey}, um sie zurückzuholen.",
+        "en": "{name} is taking a break! 💤 Click the taskbar icon or press {hotkey} to bring them back.",
+    },
     "menu.enter_key": {
         "de": "🔑  Gemini-Key eintragen",
         "en": "🔑  Enter Gemini Key",
@@ -261,6 +293,62 @@ STRINGS: dict[str, dict[str, str]] = {
     "settings.cancel": {
         "de": "Abbrechen",
         "en": "Cancel",
+    },
+    "settings.tab_appearance": {
+        "de": "🎨  Aussehen & Style",
+        "en": "🎨  Appearance & Style",
+    },
+    "settings.tab_behavior": {
+        "de": "🐾  Verhalten & Katze",
+        "en": "🐾  Behavior & Pet",
+    },
+    "settings.tab_ai": {
+        "de": "🤖  Gemini-KI & Sprache",
+        "en": "🤖  Gemini AI & Language",
+    },
+    "settings.tab_wellbeing": {
+        "de": "🌿  Wohlbefinden & Alltag",
+        "en": "🌿  Wellbeing & Daily",
+    },
+    "settings.tab_system": {
+        "de": "⚙️  System & Hotkeys",
+        "en": "⚙️  System & Hotkeys",
+    },
+    "settings.opacity": {
+        "de": "Deckkraft / Transparenz:",
+        "en": "Opacity / Transparency:",
+    },
+    "settings.always_on_top": {
+        "de": "Immer im Vordergrund (über allen Fenstern)",
+        "en": "Always on top (above all windows)",
+    },
+    "settings.sound_enabled": {
+        "de": "Sound-Effekte bei Klicks & Aktionen",
+        "en": "Sound effects on clicks & actions",
+    },
+    "settings.bubble_seconds": {
+        "de": "Sprechblasen-Dauer:",
+        "en": "Speech bubble duration:",
+    },
+    "settings.worn_accessory": {
+        "de": "Outfit / Accessoire:",
+        "en": "Outfit / Accessory:",
+    },
+    "settings.preview_title": {
+        "de": "Charakter-Vorschau",
+        "en": "Character Preview",
+    },
+    "settings.hide_pet_btn": {
+        "de": "🙈  Katze jetzt ausblenden (Päuschen)",
+        "en": "🙈  Hide pet now (Take a break)",
+    },
+    "settings.open_cfg": {
+        "de": "config.json öffnen",
+        "en": "Open config.json",
+    },
+    "settings.my_data": {
+        "de": "🔒  Meine Daten",
+        "en": "🔒  My Data",
     },
 
     # -- Standard-Sprechblasen-Meldungen ------------------------------------------------

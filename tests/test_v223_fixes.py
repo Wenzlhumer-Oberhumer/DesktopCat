@@ -195,3 +195,16 @@ def test_weather_falls_back_from_unknown_long_city():
         r = tools.execute("get_weather", {"location": "Gaspoltshofen - Grieskirchen - Oberoester"})
     assert r.ok and "Gaspoltshofen" in r.message
     assert len(asked) == 2
+
+
+def test_new_customization_and_focus_features():
+    from config import Config
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as td:
+        c = Config(Path(td) / "cfg.json")
+        assert c.get("pet.opacity") == 1.0
+        assert c.get("pet.always_on_top") is True
+        assert c.get("pet.sound_enabled") is True
+        assert c.get("pet.bubble_seconds") == 4.0
+

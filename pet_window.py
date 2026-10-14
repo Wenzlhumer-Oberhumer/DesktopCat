@@ -155,6 +155,8 @@ class PetWindow(QWidget):
     photobox_requested = pyqtSignal()
     new_note_requested = pyqtSignal()
     onboarding_requested = pyqtSignal()
+    hide_requested = pyqtSignal()
+    focus_mode_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -162,13 +164,15 @@ class PetWindow(QWidget):
     def __init__(self, cfg, base_dir: Path):
         flags = (
             Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool                         # kein Eintrag in Taskleiste / Alt-Tab
         )
+        if bool(cfg.get("pet.always_on_top", True)):
+            flags |= Qt.WindowType.WindowStaysOnTopHint
         super().__init__(None, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setWindowTitle("Desktop Cat")
+        self.setWindowOpacity(max(0.3, min(1.0, float(cfg.get("pet.opacity", 1.0)))))
 
         self.cfg = cfg
         self.character = str(cfg.get("pet.character", "cat_mochi"))
@@ -195,6 +199,10 @@ class PetWindow(QWidget):
         self._confetti_until = 0.0
         self._yawn_until = 0.0
         self._happy_until = 0.0
+        self._water_until = 0.0
+        self._water_t: Optional[float] = None
+        self._crumbs_until = 0.0
+        self._crumbs_t: Optional[float] = None
         self._bounced = False
         self._pose = None
         self._last_sig = None
@@ -245,6 +253,15 @@ class PetWindow(QWidget):
             self.character_changed.emit(char)
             self.update()
         self.wander_enabled = bool(self.cfg.get("pet.wander", True))
+        opacity = max(0.3, min(1.0, float(self.cfg.get("pet.opacity", 1.0))))
+        self.setWindowOpacity(opacity)
+        always_on_top = bool(self.cfg.get("pet.always_on_top", True))
+        current_flags = self.windowFlags()
+        is_on_top = bool(current_flags & Qt.WindowType.WindowStaysOnTopHint)
+        if always_on_top != is_on_top:
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, always_on_top)
+            if self.isVisible():
+                self.show()
         if self.isVisible():
             self._schedule_wander()
 
@@ -273,8 +290,30 @@ class PetWindow(QWidget):
     def give_treat(self) -> None:
         self.cfg.set("treats", int(self.cfg.get("treats", 0)) + 1)
         self.cfg.save()
-        self.react_happy()
+        self.eat_treat(3.5)
         self.treat_given.emit()
+
+    def drink_water(self, seconds: float = 5.0) -> None:
+        """Laesst die Katze sichtbar Wasser aus ihrem Wassernaepfchen trinken."""
+        self.wake()
+        now = time.monotonic()
+        self._water_t = now
+        self._water_until = now + seconds
+        self._restart_timer()
+        self._anim_timer.start(16)
+        self.update()
+
+    def eat_treat(self, seconds: float = 3.5) -> None:
+        """Knabber- und Mampf-Animation beim Fuettern."""
+        self.wake()
+        now = time.monotonic()
+        self._crumbs_t = now
+        self._crumbs_until = now + seconds
+        self._hearts_t = now
+        self._happy_until = now + seconds
+        self._restart_timer()
+        self._anim_timer.start(16)
+        self.update()
 
     # -- Zubehoer & Fliegen (Phase 4) --------------------------------------------------
     def set_accessory(self, name: str, on: bool, until: Optional[float] = None) -> None:
@@ -714,6 +753,15 @@ class PetWindow(QWidget):
         if now < self._yawn_until:
             pose.mouth = "o"
             pose.eyes = "happy"
+        if now < self._water_until and self._water_t is not None:
+            pose.water = now - self._water_t
+            pose.mouth = "smile"
+            pose.eyes = "happy"
+            pose.head_dy += 2.5
+        if now < self._crumbs_until and self._crumbs_t is not None:
+            pose.crumbs = now - self._crumbs_t
+            pose.mouth = "smile"
+            pose.eyes = "happy"
         return pose
 
     def paintEvent(self, _event) -> None:
@@ -882,21 +930,35 @@ class PetWindow(QWidget):
     def build_menu(self) -> QMenu:
         menu = style_menu(QMenu(self))
         cmd = self.command_requested.emit
+        cname = self.char_info().get("name", "Kylie")
+
         import gemini
         if not gemini.has_key():
             menu.addAction(tr("menu.enter_key")).triggered.connect(self.settings_requested.emit)
             menu.addSeparator()
+
         menu.addAction(tr("menu.input")).triggered.connect(self.input_requested.emit)
-        menu.addAction(tr("menu.friendship")).triggered.connect(self.friendship_requested.emit)
-        menu.addAction(tr("menu.focus_stats")).triggered.connect(self.focus_stats_requested.emit)
-        menu.addAction(tr("menu.flashcards")).triggered.connect(self.flashcards_requested.emit)
-        cname = self.char_info().get("name", "Kylie")
-        menu.addAction(tr("menu.photo", name=cname)).triggered.connect(self.photobox_requested.emit)
-        menu.addAction(tr("menu.new_note")).triggered.connect(self.new_note_requested.emit)
-        menu.addAction(tr("menu.error_doctor")).triggered.connect(self.error_doctor_requested.emit)
-        menu.addAction(tr("menu.chats")).triggered.connect(self.chats_requested.emit)
-        menu.addAction(tr("menu.data")).triggered.connect(self.data_requested.emit)
-        menu.addAction(tr("menu.onboarding")).triggered.connect(self.onboarding_requested.emit)
+        menu.addAction(tr("menu.feed_pet", name=cname)).triggered.connect(self.give_treat)
+        menu.addAction(tr("menu.hide_pet", name=cname)).triggered.connect(self.hide_requested.emit)
+        menu.addAction(tr("menu.focus_mode")).triggered.connect(self.focus_mode_requested.emit)
+        menu.addSeparator()
+
+        # Freundschaft & Lernen Untermenü
+        learn_menu = menu.addMenu(tr("menu.sub_learn"))
+        style_menu(learn_menu)
+        learn_menu.addAction(tr("menu.friendship")).triggered.connect(self.friendship_requested.emit)
+        learn_menu.addAction(tr("menu.focus_stats")).triggered.connect(self.focus_stats_requested.emit)
+        learn_menu.addAction(tr("menu.flashcards")).triggered.connect(self.flashcards_requested.emit)
+        learn_menu.addAction(tr("menu.photo", name=cname)).triggered.connect(self.photobox_requested.emit)
+
+        # Notizen & Hilfe Untermenü
+        tools_sub = menu.addMenu(tr("menu.sub_tools"))
+        style_menu(tools_sub)
+        tools_sub.addAction(tr("menu.new_note")).triggered.connect(self.new_note_requested.emit)
+        tools_sub.addAction(tr("menu.error_doctor")).triggered.connect(self.error_doctor_requested.emit)
+        tools_sub.addAction(tr("menu.chats")).triggered.connect(self.chats_requested.emit)
+        tools_sub.addAction(tr("menu.data")).triggered.connect(self.data_requested.emit)
+        tools_sub.addAction(tr("menu.onboarding")).triggered.connect(self.onboarding_requested.emit)
         menu.addSeparator()
 
         # Charakter-Auswahl (Live-Wechsel)

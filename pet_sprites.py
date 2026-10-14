@@ -192,6 +192,8 @@ class Pose:
     glint: Optional[float] = None
     sweat: bool = False
     tear: Optional[float] = None
+    water: Optional[float] = None
+    crumbs: Optional[float] = None
     push_power: float = 0.0
     t: float = 0.0
     accessories: tuple[str, ...] = ()
@@ -864,6 +866,41 @@ def _draw_effects(p: QPainter, pose: Pose):
         p.setBrush(QColor(220, 210, 195, 150))
         p.drawEllipse(QPointF(46, FLOOR - 5), 7, 5)
         p.drawEllipse(QPointF(38, FLOOR - 3), 5, 4)
+        p.restore()
+
+    if getattr(pose, "water", None) is not None:
+        t_w = pose.water
+        p.save()
+        p.setPen(_pen(QColor("#5A90C0"), 1.8))
+        p.setBrush(QColor("#D6ECFF"))
+        bowl = QRectF(60, 137, 40, 11)
+        p.drawRoundedRect(bowl, 5.0, 5.0)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#3B9EFF", 230))
+        p.drawRoundedRect(QRectF(63, 139, 34, 6), 3.0, 3.0)
+        for i in range(3):
+            age = (t_w * 1.6 + i * 0.33) % 1.0
+            cx = 70 + i * 10 + math.sin(age * 5.5 + i) * 3
+            cy = 135 - age * 26
+            alpha = int(230 * math.sin(math.pi * age))
+            p.setBrush(QColor(60, 175, 255, alpha))
+            p.drawEllipse(QPointF(cx, cy), 2.2 * (1 - age * 0.3), 2.8 * (1 - age * 0.3))
+        p.restore()
+
+    if getattr(pose, "crumbs", None) is not None:
+        t_cr = pose.crumbs
+        p.save()
+        p.setPen(Qt.PenStyle.NoPen)
+        crumb_colors = [QColor("#FFA94D"), QColor("#FFD43B"), QColor("#F76707")]
+        for i in range(5):
+            age = (t_cr * 1.8 + i * 0.2) % 1.0
+            cx = 80 + math.cos(i * 1.3) * (14 + age * 8)
+            cy = 105 + math.sin(i * 1.5) * (8 + age * 6)
+            col = QColor(crumb_colors[i % len(crumb_colors)])
+            col.setAlpha(int(240 * math.sin(math.pi * age)))
+            p.setBrush(col)
+            r = 1.6 + 0.8 * (1 - age)
+            p.drawEllipse(QPointF(cx, cy), r, r)
         p.restore()
 
 
