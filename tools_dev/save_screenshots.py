@@ -257,6 +257,9 @@ def save_ui_screenshots(out_dir: Path):
 
         # 7. IT-Guide (Overlay, Kylie mit Hackerbrille auf Wolke, Sprechblase)
         save_ui_guide_screenshot(out_dir)
+
+        # 8. Onboarding (4 Phasen: Begrüßung, Spitzname, Galerie, Fertig)
+        save_onboarding_screenshots(out_dir)
     finally:
         try:
             os.remove(db_path)
@@ -412,6 +415,88 @@ def save_ui_guide_screenshot(out_dir: Path):
 
     canvas.save(str(out_dir / "ui_guide.png"))
     print(f"UI-Screenshot gespeichert: {out_dir / 'ui_guide.png'}")
+
+
+def save_onboarding_screenshots(out_dir: Path) -> None:
+    """Erzeugt die vier Onboarding-Screenshots (Begrueßung, Spitzname, Galerie, Fertig)."""
+    from onboarding import OnboardingDialog
+    from config import Config
+
+    cfg = Config()
+
+    def _show_and_grab(dlg):
+        if hasattr(dlg, "_anim"):
+            dlg._anim.stop()
+        if hasattr(dlg, "_opacity_effect"):
+            dlg._opacity_effect.setOpacity(1.0)
+        dlg.show()
+        for _ in range(10):
+            dlg.avatar._tick()
+        QApplication.processEvents()
+        dlg._scroll_to_bottom()
+        sb = dlg.chat_scroll.verticalScrollBar()
+        if sb:
+            sb.setValue(sb.maximum())
+        QApplication.processEvents()
+        return dlg.card.grab()
+
+    # 1. Begrüßung (ui_onboarding_1.png)
+    dlg1 = OnboardingDialog(cfg)
+    pix1 = _show_and_grab(dlg1)
+    pix1.save(str(out_dir / "ui_onboarding_1.png"))
+    dlg1.close()
+    print(f"UI-Screenshot gespeichert: {out_dir / 'ui_onboarding_1.png'}")
+
+    # 2. Spitzname mit Chips (ui_onboarding_2.png)
+    dlg2 = OnboardingDialog(cfg)
+    dlg2._clear_chat()
+    dlg2.flow.step = 4
+    dlg2.flow.answers["language"] = "de"
+    dlg2.flow.answers["name"] = "Florian"
+    dlg2._add_pet_bubble("Hiii! 👋 Ich bin Kylie, deine neue Desktop-Katze. Ich würde dich gern kennenlernen – ist das okay?")
+    dlg2._add_user_bubble("Klar! 😺")
+    dlg2._add_pet_bubble("Welche Sprache magst du?")
+    dlg2._add_user_bubble("Deutsch 🇩🇪")
+    dlg2._add_pet_bubble("Wie heißt du?")
+    dlg2._add_user_bubble("Florian")
+    dlg2._render_current_step()
+    pix2 = _show_and_grab(dlg2)
+    pix2.save(str(out_dir / "ui_onboarding_2.png"))
+    dlg2.close()
+    print(f"UI-Screenshot gespeichert: {out_dir / 'ui_onboarding_2.png'}")
+
+    # 3. Figur-Galerie (ui_onboarding_3.png)
+    dlg3 = OnboardingDialog(cfg)
+    dlg3._clear_chat()
+    dlg3.flow.step = 12
+    dlg3.flow.answers["name"] = "Florian"
+    dlg3.flow.answers["user_name"] = "Flo"
+    dlg3._add_pet_bubble("Und wie soll ich dich nennen?")
+    dlg3._add_user_bubble("Flo")
+    dlg3._add_pet_bubble("In welcher Stadt bist du ungefähr? ☀️")
+    dlg3._add_user_bubble("Berlin")
+    dlg3._render_current_step()
+    pix3 = _show_and_grab(dlg3)
+    pix3.save(str(out_dir / "ui_onboarding_3.png"))
+    dlg3.close()
+    print(f"UI-Screenshot gespeichert: {out_dir / 'ui_onboarding_3.png'}")
+
+    # 4. Fertig mit Konfetti (ui_onboarding_4.png)
+    dlg4 = OnboardingDialog(cfg)
+    dlg4._clear_chat()
+    dlg4.flow.step = 15
+    dlg4.flow.answers["name"] = "Florian"
+    dlg4.flow.answers["user_name"] = "Flo"
+    dlg4._add_pet_bubble("Soll ich mit Windows starten?")
+    dlg4._add_user_bubble("Ja, immer dabei! 🚀")
+    dlg4._render_current_step()
+    dlg4.avatar.pop_confetti()
+    for _ in range(15):
+        dlg4.avatar._tick()
+    pix4 = _show_and_grab(dlg4)
+    pix4.save(str(out_dir / "ui_onboarding_4.png"))
+    dlg4.close()
+    print(f"UI-Screenshot gespeichert: {out_dir / 'ui_onboarding_4.png'}")
 
 
 if __name__ == "__main__":

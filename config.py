@@ -6,7 +6,7 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from paths import APP_DIR, DATA_DIR
 
@@ -64,6 +64,16 @@ DEFAULTS: dict[str, Any] = {
         "pc_fever": True,
         "worn": "",
     },
+    "profile": {
+        "name": "",
+        "pronouns": "",
+        "uses": [],
+        "interests": "",
+        "tone": "",
+        "city": "",
+    },
+    "onboarding_done": False,
+    "onboarding_skips": 0,
 }
 
 
@@ -93,8 +103,8 @@ def _merge(base: dict, over: dict) -> dict:
 class Config:
     """Duenner, threadsicherer Wrapper um das Settings-Dict."""
 
-    def __init__(self, path: Path = CONFIG_PATH):
-        self.path = Path(path)
+    def __init__(self, path: Optional[Path] = None):
+        self.path = Path(path) if path is not None else CONFIG_PATH
         self._lock = threading.Lock()
         self.data: dict[str, Any] = copy.deepcopy(DEFAULTS)
         self.load()

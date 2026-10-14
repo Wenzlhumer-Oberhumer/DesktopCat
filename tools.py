@@ -1310,6 +1310,14 @@ def get_weather(location: Optional[str] = None) -> ToolResult:
     """Aktuelles Wetter fuer eine Stadt (leer = Standort per IP) von wttr.in."""
     user, emo = _user_name(), _emoji()
     loc = (location or "").strip()
+    if not loc:
+        try:
+            from config import Config
+            c_city = str(Config().get("profile.city", "")).strip()
+            if c_city:
+                loc = c_city
+        except Exception:
+            pass
     is_en = i18n.lang() == "en"
     w_lang = "en" if is_en else "de"
     try:
@@ -1489,7 +1497,15 @@ def wipe_my_data() -> ToolResult:
     from memory_store import get_memory_store
     store = get_memory_store()
     store.wipe_everything()
-    return ToolResult(True, f"Alles vergessen, {_user_name()}! Deine Chats und Fakten wurden komplett gelöscht. 🧹✨")
+    try:
+        from config import Config
+        cfg = Config()
+        cfg.set("profile", {"name": "", "pronouns": "", "uses": [], "interests": "", "tone": "", "city": ""})
+        cfg.set("onboarding_done", False)
+        cfg.save()
+    except Exception:
+        pass
+    return ToolResult(True, f"Alles vergessen, {_user_name()}! Deine Chats, dein Profil und Fakten wurden komplett gelöscht. 🧹✨")
 
 
 def start_it_guide(question: str = "") -> ToolResult:

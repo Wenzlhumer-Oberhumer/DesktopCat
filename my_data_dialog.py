@@ -7,8 +7,8 @@ from typing import Optional
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from memory_store import get_memory_store
@@ -107,13 +107,94 @@ class MyDataDialog(QDialog):
         title.setObjectName("title")
         root.addWidget(title)
 
+        # 0. Abschnitt: Dein Profil
+        sec_profile = QLabel(tr("data.section_profile"))
+        sec_profile.setObjectName("section")
+        root.addWidget(sec_profile)
+
+        prof_frame = QFrame()
+        prof_frame.setObjectName("infobox")
+        prof_grid = QGridLayout(prof_frame)
+        prof_grid.setContentsMargins(12, 10, 12, 10)
+        prof_grid.setHorizontalSpacing(12)
+        prof_grid.setVerticalSpacing(8)
+
+        # Name & Spitzname
+        lbl_p_name = QLabel(tr("data.profile_name"))
+        lbl_p_name.setStyleSheet("color: #8D919B; font-size: 9.5pt;")
+        self.edit_p_name = QLineEdit(str(cfg.get("profile.name", "")))
+        self.edit_p_name.setPlaceholderText("z. B. Florian")
+        self.edit_p_name.textChanged.connect(self._on_profile_field_changed)
+
+        lbl_p_nick = QLabel(tr("data.profile_nickname"))
+        lbl_p_nick.setStyleSheet("color: #8D919B; font-size: 9.5pt;")
+        self.edit_p_nick = QLineEdit(str(cfg.get("pet.user_name", "Boss")))
+        self.edit_p_nick.setPlaceholderText("z. B. Flo oder Boss")
+        self.edit_p_nick.textChanged.connect(self._on_profile_field_changed)
+
+        prof_grid.addWidget(lbl_p_name, 0, 0)
+        prof_grid.addWidget(self.edit_p_name, 0, 1)
+        prof_grid.addWidget(lbl_p_nick, 0, 2)
+        prof_grid.addWidget(self.edit_p_nick, 0, 3)
+
+        # Pronomen & Stadt
+        lbl_p_pro = QLabel(tr("data.profile_pronouns"))
+        lbl_p_pro.setStyleSheet("color: #8D919B; font-size: 9.5pt;")
+        self.edit_p_pro = QLineEdit(str(cfg.get("profile.pronouns", "")))
+        self.edit_p_pro.setPlaceholderText("er / sie / they")
+        self.edit_p_pro.textChanged.connect(self._on_profile_field_changed)
+
+        lbl_p_city = QLabel(tr("data.profile_city"))
+        lbl_p_city.setStyleSheet("color: #8D919B; font-size: 9.5pt;")
+        self.edit_p_city = QLineEdit(str(cfg.get("profile.city", "")))
+        self.edit_p_city.setPlaceholderText("z. B. Berlin")
+        self.edit_p_city.textChanged.connect(self._on_profile_field_changed)
+
+        prof_grid.addWidget(lbl_p_pro, 1, 0)
+        prof_grid.addWidget(self.edit_p_pro, 1, 1)
+        prof_grid.addWidget(lbl_p_city, 1, 2)
+        prof_grid.addWidget(self.edit_p_city, 1, 3)
+
+        # Hobbys & Ton
+        lbl_p_int = QLabel(tr("data.profile_interests"))
+        lbl_p_int.setStyleSheet("color: #8D919B; font-size: 9.5pt;")
+        self.edit_p_int = QLineEdit(str(cfg.get("profile.interests", "")))
+        self.edit_p_int.setPlaceholderText("Gitarre, Katzen, Python...")
+        self.edit_p_int.textChanged.connect(self._on_profile_field_changed)
+
+        lbl_p_tone = QLabel(tr("data.profile_tone"))
+        lbl_p_tone.setStyleSheet("color: #8D919B; font-size: 9.5pt;")
+        self.edit_p_tone = QLineEdit(str(cfg.get("profile.tone", "")))
+        self.edit_p_tone.setPlaceholderText("frech & witzig, lieb...")
+        self.edit_p_tone.textChanged.connect(self._on_profile_field_changed)
+
+        prof_grid.addWidget(lbl_p_int, 2, 0)
+        prof_grid.addWidget(self.edit_p_int, 2, 1)
+        prof_grid.addWidget(lbl_p_tone, 2, 2)
+        prof_grid.addWidget(self.edit_p_tone, 2, 3)
+
+        # Profile Buttons
+        prof_btn_row = QHBoxLayout()
+        self.btn_repeat_onboarding = QPushButton(tr("data.btn_onboarding_repeat"))
+        self.btn_repeat_onboarding.clicked.connect(self._on_repeat_onboarding)
+        prof_btn_row.addWidget(self.btn_repeat_onboarding)
+
+        self.btn_del_profile = QPushButton(tr("data.btn_profile_delete"))
+        self.btn_del_profile.setObjectName("danger")
+        self.btn_del_profile.clicked.connect(self._on_delete_profile)
+        prof_btn_row.addWidget(self.btn_del_profile)
+        prof_btn_row.addStretch()
+
+        prof_grid.addLayout(prof_btn_row, 3, 0, 1, 4)
+        root.addWidget(prof_frame)
+
         # 1. Abschnitt: Was Kylie über dich weiß
         sec_facts = QLabel(tr("data.section_facts", name=self.char_name))
         sec_facts.setObjectName("section")
         root.addWidget(sec_facts)
 
         self.facts_scroll = QScrollArea()
-        self.facts_scroll.setFixedHeight(150)
+        self.facts_scroll.setFixedHeight(120)
         self.facts_scroll.setWidgetResizable(True)
         self.facts_container = QWidget()
         self.facts_lay = QVBoxLayout(self.facts_container)
@@ -281,6 +362,10 @@ class MyDataDialog(QDialog):
         )
         if ans == QMessageBox.StandardButton.Yes:
             self.store.wipe_everything()
+            self.cfg.set("profile", {"name": "", "pronouns": "", "uses": [], "interests": "", "tone": "", "city": ""})
+            self.cfg.set("onboarding_done", False)
+            self.cfg.save()
+            self._refresh_profile_fields()
             self._refresh_facts()
             QMessageBox.information(self, "Zurückgesetzt", "Alle Daten wurden vollständig gelöscht. 🧹✨")
 
@@ -294,3 +379,43 @@ class MyDataDialog(QDialog):
         if path:
             self.store.export_text(path)
             QMessageBox.information(self, "Export erfolgreich", f"Deine Daten wurden nach:\n{path}\nexportiert! 📄✨")
+
+    def _on_profile_field_changed(self) -> None:
+        self.cfg.set("profile.name", self.edit_p_name.text().strip())
+        self.cfg.set("pet.user_name", self.edit_p_nick.text().strip() or "Boss")
+        self.cfg.set("profile.pronouns", self.edit_p_pro.text().strip())
+        self.cfg.set("profile.city", self.edit_p_city.text().strip())
+        self.cfg.set("profile.interests", self.edit_p_int.text().strip())
+        self.cfg.set("profile.tone", self.edit_p_tone.text().strip())
+        self.cfg.save()
+
+    def _on_repeat_onboarding(self) -> None:
+        try:
+            from onboarding import OnboardingDialog
+            dlg = OnboardingDialog(self.cfg, parent=self, is_update=True)
+            dlg.exec()
+            self._refresh_profile_fields()
+            self._refresh_facts()
+        except Exception as e:
+            QMessageBox.warning(self, "Fehler", f"Konnte Kennenlernen nicht starten: {e}")
+
+    def _on_delete_profile(self) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("data.btn_profile_delete"))
+        box.setText(tr("data.confirm_delete_profile"))
+        box.setIcon(QMessageBox.Icon.Question)
+        btn_yes = box.addButton("Löschen", QMessageBox.ButtonRole.YesRole)
+        box.addButton("Abbrechen", QMessageBox.ButtonRole.NoRole)
+        box.exec()
+        if box.clickedButton() == btn_yes:
+            self.cfg.set("profile", {"name": "", "pronouns": "", "uses": [], "interests": "", "tone": "", "city": ""})
+            self.cfg.save()
+            self._refresh_profile_fields()
+
+    def _refresh_profile_fields(self) -> None:
+        self.edit_p_name.setText(str(self.cfg.get("profile.name", "")))
+        self.edit_p_nick.setText(str(self.cfg.get("pet.user_name", "Boss")))
+        self.edit_p_pro.setText(str(self.cfg.get("profile.pronouns", "")))
+        self.edit_p_city.setText(str(self.cfg.get("profile.city", "")))
+        self.edit_p_int.setText(str(self.cfg.get("profile.interests", "")))
+        self.edit_p_tone.setText(str(self.cfg.get("profile.tone", "")))

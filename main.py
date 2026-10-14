@@ -447,6 +447,7 @@ class Buddy(QObject):
         self.pet.flashcards_requested.connect(self.open_flashcards_dialog)
         self.pet.photobox_requested.connect(self.start_photobox)
         self.pet.new_note_requested.connect(lambda: self.create_sticky_note())
+        self.pet.onboarding_requested.connect(lambda: self._open_onboarding(is_update=True))
         self.tray.messageClicked.connect(self._on_tray_message_clicked)
 
         from sticky_notes import StickyNoteManager
@@ -535,6 +536,7 @@ class Buddy(QObject):
         self._act(self.tray_menu, tr("menu.error_doctor"), self.start_error_doctor)
         self._act(self.tray_menu, tr("menu.chats"), self.open_chat_history)
         self._act(self.tray_menu, tr("menu.data"), self.open_my_data)
+        self._act(self.tray_menu, tr("menu.onboarding"), lambda: self._open_onboarding(is_update=True))
         self._act(self.tray_menu, tr("menu.watch_screen"), lambda: self._on_submit("was mache ich gerade"))
         self._act(self.tray_menu, tr("menu.create_word"), lambda: self._on_submit("erstelle ein word dokument am desktop"))
         self._act(self.tray_menu, tr("menu.reset_taskbar"), self.pet.reset_to_taskbar)
@@ -558,6 +560,13 @@ class Buddy(QObject):
     def start(self) -> None:
         set_autostart(bool(self.cfg.get("autostart", True)))
         self.pet.drop_in()
+
+        # Phase 10: Onboarding-Check
+        if not _is_test_mode() and not self.cfg.get("onboarding_done", False):
+            skips = int(self.cfg.get("onboarding_skips", 0))
+            if skips < 3:
+                is_up = bool(self.cfg.get("first_run_done", False) or self.cfg.get("rename_intro_done", False))
+                QTimer.singleShot(500, lambda: self._open_onboarding(is_update=is_up))
 
         first_run = not self.cfg.get("first_run_done", False)
         rename_intro = not self.cfg.get("rename_intro_done", False)
@@ -1176,6 +1185,25 @@ class Buddy(QObject):
         dlg = MyDataDialog(self.cfg)
         dlg.setWindowIcon(self.icon)
         dlg.exec()
+
+    def _open_onboarding(self, is_update: bool = False) -> None:
+        try:
+            from onboarding import OnboardingDialog
+            dlg = OnboardingDialog(self.cfg, parent=None, is_update=is_update)
+            dlg.setWindowIcon(self.icon)
+            dlg.exec()
+            # Apply updated pet settings
+            self.pet.character = str(self.cfg.get("pet.character", "cat_mochi"))
+            self.pet.apply_config()
+            self._schedule_chatter()
+            if self.cfg.get("onboarding_done", False):
+                self.pet.drop_in()
+                self.pet.celebrate_confetti(4.0)
+                u = self.user_name()
+                cname = self.char_info().get("name", "Kylie")
+                self._say(f"Schön dich kennenzulernen, {u}! Ich bin {cname} 🐾", 6000)
+        except Exception as e:
+            print(f"[main] Fehler beim Öffnen des Onboardings: {e}")
 
     # -- Phase 6: Freundschaft, Fokus, Lernkarten, Fotobox & Notizen ------------------
     def _award_friendship(self, kind: str) -> None:

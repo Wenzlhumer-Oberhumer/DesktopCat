@@ -50,6 +50,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "🔒  Meine Daten",
         "en": "🔒  My Data",
     },
+    "menu.onboarding": {
+        "de": "✨  Kennenlernen wiederholen",
+        "en": "✨  Repeat Onboarding",
+    },
     "menu.choose_char": {
         "de": "🎭  Charakter wählen",
         "en": "🎭  Choose Character",
@@ -827,6 +831,272 @@ STRINGS: dict[str, dict[str, str]] = {
     "tools.recycle_bin_cleaned": {
         "de": "Papierkorb und temporäre Dateien wurden bereinigt.",
         "en": "Recycle bin and temporary files have been cleaned.",
+    },
+
+    # -- Onboarding (Phase 10) ---------------------------------------------------------
+    "onboarding.q1_welcome": {
+        "de": "Hiii! 👋 Ich bin {name}, deine neue Desktop-Katze. Ich würde dich gern kennenlernen – ist das okay?",
+        "en": "Hiii! 👋 I am {name}, your new desktop companion. I'd love to get to know you – is that okay?",
+    },
+    "onboarding.q1_welcome_update": {
+        "de": "Ich kenn dich ja schon ein bisschen, {user_name} 😺 – darf ich dir noch ein paar Fragen stellen?",
+        "en": "I already know you a little, {user_name} 😺 – may I ask you a few quick questions?",
+    },
+    "onboarding.q1_chip_yes": {
+        "de": "Klar! 😺",
+        "en": "Sure! 😺",
+    },
+    "onboarding.q1_chip_later": {
+        "de": "Später",
+        "en": "Later",
+    },
+    "onboarding.q2_language": {
+        "de": "Welche Sprache magst du?",
+        "en": "Which language do you prefer?",
+    },
+    "onboarding.q2_chip_de": {
+        "de": "Deutsch 🇩🇪",
+        "en": "Deutsch 🇩🇪",
+    },
+    "onboarding.q2_chip_en": {
+        "de": "English 🇬🇧",
+        "en": "English 🇬🇧",
+    },
+    "onboarding.q3_name": {
+        "de": "Wie heißt du?",
+        "en": "What's your name?",
+    },
+    "onboarding.q3_placeholder": {
+        "de": "Dein Name (z. B. Florian)",
+        "en": "Your name (e.g. Alex)",
+    },
+    "onboarding.q4_nickname": {
+        "de": "Und wie soll ich dich nennen? Spitzname, Boss, Chef…?",
+        "en": "And what should I call you? Nickname, Boss, Chief…?",
+    },
+    "onboarding.q4_placeholder": {
+        "de": "Spitzname oder Anrede",
+        "en": "Nickname or salutation",
+    },
+    "onboarding.q5_pronouns": {
+        "de": "Wie soll ich über dich sprechen?",
+        "en": "How should I refer to you?",
+    },
+    "onboarding.q5_chip_he": {
+        "de": "er / ihm",
+        "en": "he / him",
+    },
+    "onboarding.q5_chip_she": {
+        "de": "sie / ihr",
+        "en": "she / her",
+    },
+    "onboarding.q5_chip_they": {
+        "de": "they / them",
+        "en": "they / them",
+    },
+    "onboarding.q5_chip_name_only": {
+        "de": "Einfach mein Name",
+        "en": "Just use my name",
+    },
+    "onboarding.q6_uses": {
+        "de": "Wofür nutzt du deinen PC am meisten?",
+        "en": "What do you use your PC for the most?",
+    },
+    "onboarding.q6_chip_school": {
+        "de": "Schule / Studium",
+        "en": "School / Studies",
+    },
+    "onboarding.q6_chip_work": {
+        "de": "Arbeit",
+        "en": "Work",
+    },
+    "onboarding.q6_chip_coding": {
+        "de": "Coding",
+        "en": "Coding",
+    },
+    "onboarding.q6_chip_gaming": {
+        "de": "Gaming",
+        "en": "Gaming",
+    },
+    "onboarding.q6_chip_creative": {
+        "de": "Kreativ",
+        "en": "Creative",
+    },
+    "onboarding.q6_chip_surfing": {
+        "de": "Surfen",
+        "en": "Web browsing",
+    },
+    "onboarding.q7_interests": {
+        "de": "Was machst du gern? Hobbys, Lieblingsdinge…",
+        "en": "What do you like to do? Hobbies, favorite things…",
+    },
+    "onboarding.q7_placeholder": {
+        "de": "z. B. Gitarre, Katzen, Python, Kochen...",
+        "en": "e.g. Guitar, cats, Python, cooking...",
+    },
+    "onboarding.q8_tone": {
+        "de": "Wie soll ich so drauf sein?",
+        "en": "What personality style should I have?",
+    },
+    "onboarding.q8_chip_sweet": {
+        "de": "🥰 lieb & verspielt",
+        "en": "🥰 sweet & playful",
+    },
+    "onboarding.q8_chip_cheeky": {
+        "de": "😎 frech & witzig",
+        "en": "😎 cheeky & witty",
+    },
+    "onboarding.q8_chip_calm": {
+        "de": "🧘 ruhig & kurz",
+        "en": "🧘 calm & concise",
+    },
+    "onboarding.q8_chip_smart": {
+        "de": "🤓 schlau & erklärend",
+        "en": "🤓 smart & explanatory",
+    },
+    "onboarding.q9_chatter": {
+        "de": "Wie oft darf ich mich melden?",
+        "en": "How often should I pop up to chat?",
+    },
+    "onboarding.q9_chip_often": {
+        "de": "Oft 📢",
+        "en": "Often 📢",
+    },
+    "onboarding.q9_chip_sometimes": {
+        "de": "Ab und zu 💬",
+        "en": "Sometimes 💬",
+    },
+    "onboarding.q9_chip_rare": {
+        "de": "Nur wenn du mich rufst 🤫",
+        "en": "Only when called 🤫",
+    },
+    "onboarding.q10_city": {
+        "de": "In welcher Stadt bist du ungefähr? Dann kann ich dir morgens das Wetter sagen ☀️",
+        "en": "Which city are you in approximately? Then I can tell you the weather in the morning ☀️",
+    },
+    "onboarding.q10_placeholder": {
+        "de": "z. B. Berlin, Wien, Linz...",
+        "en": "e.g. Berlin, Vienna, London...",
+    },
+    "onboarding.q11_key": {
+        "de": "Damit ich richtig schlau werde, brauche ich einen Gratis-Schlüssel von Google 🔑",
+        "en": "To make me truly smart, I need a free key from Google 🔑",
+    },
+    "onboarding.q11_get_key": {
+        "de": "🌐 Gratis-Key holen (Google AI Studio)",
+        "en": "🌐 Get free key (Google AI Studio)",
+    },
+    "onboarding.q11_placeholder": {
+        "de": "Gemini API-Key einfügen (AIzaSy...)",
+        "en": "Paste Gemini API key (AIzaSy...)",
+    },
+    "onboarding.q11_btn_check": {
+        "de": "Prüfen & Speichern",
+        "en": "Verify & Save",
+    },
+    "onboarding.q11_skip": {
+        "de": "Ohne KI weitermachen",
+        "en": "Continue without AI",
+    },
+    "onboarding.q11_success": {
+        "de": "Juhu! Der Schlüssel funktioniert! 🔑✨ Jetzt bin ich richtig schlau.",
+        "en": "Yay! The key works! 🔑✨ Now I am super smart.",
+    },
+    "onboarding.q11_invalid": {
+        "de": "Der Schlüssel konnte nicht bestätigt werden 🥺 Bitte prüfe ihn nochmal.",
+        "en": "Could not verify this key 🥺 Please check it again.",
+    },
+    "onboarding.q12_character": {
+        "de": "Willst du mich so lassen oder lieber eine andere Figur?",
+        "en": "Would you like to keep me as I am, or choose another character?",
+    },
+    "onboarding.q12_btn_keep": {
+        "de": "Mit dieser Figur weitermachen ▶",
+        "en": "Continue with this character ▶",
+    },
+    "onboarding.q13_privacy": {
+        "de": "Hier noch deine Datenschutzeinstellungen – alles bleibt auf deinem PC:",
+        "en": "Here are your privacy settings – everything stays on your PC:",
+    },
+    "onboarding.q14_autostart": {
+        "de": "Soll ich mit Windows starten?",
+        "en": "Should I start automatically with Windows?",
+    },
+    "onboarding.q14_chip_yes": {
+        "de": "Ja, immer dabei! 🚀",
+        "en": "Yes, always! 🚀",
+    },
+    "onboarding.q14_chip_no": {
+        "de": "Nein, ich starte dich selbst 💻",
+        "en": "No, I'll launch you manually 💻",
+    },
+    "onboarding.q15_done": {
+        "de": "Fertig! 🎉 Schön, dich kennenzulernen, {user_name}! Ich hüpf jetzt auf deine Taskleiste – doppelklick mich, wenn du was brauchst.",
+        "en": "All done! 🎉 Nice to meet you, {user_name}! I'll hop onto your taskbar now – double-click me whenever you need something.",
+    },
+    "onboarding.btn_start": {
+        "de": "Los geht's! 🐾",
+        "en": "Let's go! 🐾",
+    },
+    "onboarding.btn_skip": {
+        "de": "Überspringen",
+        "en": "Skip",
+    },
+    "onboarding.btn_send": {
+        "de": "Senden",
+        "en": "Send",
+    },
+    "onboarding.btn_next": {
+        "de": "Weiter ▶",
+        "en": "Next ▶",
+    },
+    "onboarding.typing": {
+        "de": "tippt…",
+        "en": "typing…",
+    },
+    "data.section_profile": {
+        "de": "👤 Dein Profil",
+        "en": "👤 Your Profile",
+    },
+    "data.profile_name": {
+        "de": "Name:",
+        "en": "Name:",
+    },
+    "data.profile_nickname": {
+        "de": "Spitzname:",
+        "en": "Nickname:",
+    },
+    "data.profile_pronouns": {
+        "de": "Pronomen:",
+        "en": "Pronouns:",
+    },
+    "data.profile_uses": {
+        "de": "PC-Nutzung:",
+        "en": "PC uses:",
+    },
+    "data.profile_interests": {
+        "de": "Interessen:",
+        "en": "Interests:",
+    },
+    "data.profile_tone": {
+        "de": "Tonfall:",
+        "en": "Tone:",
+    },
+    "data.profile_city": {
+        "de": "Stadt:",
+        "en": "City:",
+    },
+    "data.btn_onboarding_repeat": {
+        "de": "✨ Kennenlernen wiederholen",
+        "en": "✨ Repeat Onboarding",
+    },
+    "data.btn_profile_delete": {
+        "de": "Profil löschen",
+        "en": "Delete Profile",
+    },
+    "data.confirm_delete_profile": {
+        "de": "Möchtest du dein Profil wirklich zurücksetzen? (Name, Spitzname, Ton und Hobbys werden geleert)",
+        "en": "Do you really want to reset your profile? (Name, nickname, tone and hobbies will be cleared)",
     },
 }
 

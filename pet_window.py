@@ -104,6 +104,7 @@ class PetWindow(QWidget):
     flashcards_requested = pyqtSignal()
     photobox_requested = pyqtSignal()
     new_note_requested = pyqtSignal()
+    onboarding_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -838,6 +839,7 @@ class PetWindow(QWidget):
         menu.addAction(tr("menu.error_doctor")).triggered.connect(self.error_doctor_requested.emit)
         menu.addAction(tr("menu.chats")).triggered.connect(self.chats_requested.emit)
         menu.addAction(tr("menu.data")).triggered.connect(self.data_requested.emit)
+        menu.addAction(tr("menu.onboarding")).triggered.connect(self.onboarding_requested.emit)
         menu.addSeparator()
 
         # Charakter-Auswahl (Live-Wechsel)

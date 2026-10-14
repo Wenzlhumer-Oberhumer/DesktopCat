@@ -3,7 +3,7 @@
 Jeder Punkt abgehakt (`[x]`) oder ehrlich als **NICHT GETESTET – Grund** markiert.
 
 ## Automatisch
-- [x] `python tests/run_tests.py` – alle alten (43) + neuen Tests grün (101/101 Tests bestanden)
+- [x] `python tests/run_tests.py` – alle Tests grün (113/113 Tests bestanden, inkl. 11 Onboarding-Tests)
 - [x] `python -m pyflakes *.py tests/*.py tools_dev/*.py` – keine `undefined name` (0 Fehler / 0 Warnungen)
 - [x] Grep-Test: kein `SetCursorPos`, `SendInput`, `mouse_event`, `pyautogui` im Code (nur Multimedia-Lautstärketasten `keybd_event` in `tools.py` aus v2.1.0 beibehalten; durch `test_no_simulated_mouse_calls` abgesichert)
 - [x] Tests nutzen nur Temp-DBs (grep: kein `mochi.db` aus `DATA_DIR` in `tests/`)
@@ -12,16 +12,21 @@ Jeder Punkt abgehakt (`[x]`) oder ehrlich als **NICHT GETESTET – Grund** marki
 - [x] `ref/plan/screenshots/characters.png` – Kylie heißt Kylie, alle 9 Figuren ok
 - [x] `ref/plan/screenshots/anchors.png` – Anker sitzen bei allen Figuren richtig (Kopf, Augen, Hals, Pfote)
 - [x] `ref/plan/screenshots/accessories.png` – Hackerbrille + Wolke, Partyhut, Schirm bei allen 9 Figuren sehen gut aus
-- [x] Screenshots der neuen Fenster (nativ/offscreen gerendert): Meine Chats (mit Beispieldaten aus Temp-DB), Meine Daten, Freundschaft, Fokus, Lernkarten, Haftnotiz → `ref/plan/screenshots/ui_*.png`
+- [x] Screenshots der neuen Fenster (nativ/offscreen gerendert): Meine Chats (mit Beispieldaten aus Temp-DB), Meine Daten, Freundschaft, Fokus, Lernkarten, Haftnotiz, IT-Guide → `ref/plan/screenshots/ui_*.png`
+- [x] `ref/plan/screenshots/ui_onboarding_1-4.png` – Alle 4 Phasen des Kennenlernens (Begrüßung, Spitzname mit Chips, Figuren-Galerie mit flüssiger Scrollbar, Fertig mit Konfetti & Herzaugen) optisch geprüft und optimiert
 
 ## Manuell im Dev-Modus (`python main.py`)
 > **Hinweis:** Die manuelle Abnahme erfolgt am echten Desktop durch den Nutzer. Unten steht die Schritt-für-Schritt-Anleitung.
 
 - [ ] NICHT GETESTET – Name: „Kylie“ → „Ja? 😺“; schlafende Kylie wacht bei „Kylie!“ auf; „Kylie, wie spät ist es“ funktioniert (erfordert interaktiven Dev-Modus)
-- [ ] NICHT GETESTET – Begrüßung mit Konfetti beim ersten Start nach Update, danach nicht mehr (erfordert interaktiven Dev-Modus)
+- [ ] NICHT GETESTET – Onboarding startet beim Erststart (`onboarding_done == false`), Kylie begrüßt mit 15-Schritte-Dialog (erfordert interaktiven Erststart)
+- [ ] NICHT GETESTET – Onboarding „Später“-Button bricht ab und zählt Zähler bis 3; danach kein automatisches Aufpoppen mehr (erfordert Klick auf Später)
+- [ ] NICHT GETESTET – Onboarding wiederholen: Rechtsklick auf Katze oder Tray → „✨ Kennenlernen wiederholen“ öffnet Dialog mit vorausgefüllten Daten (erfordert Kontextmenü)
+- [ ] NICHT GETESTET – Offline-Befehle: „Nenn mich ab jetzt Chef“, „Wie heiße ich?“, „Was weißt du über mich?“ (erfordert Chat-Eingabe)
+- [ ] NICHT GETESTET – „Meine Daten“ zeigt neues editierbares Profil (Name, Spitzname, Pronomen, Stadt, Hobbys, Tonfall) mit Direkt-Speichern und „Profil löschen“ (erfordert Menü-Klick)
 - [ ] NICHT GETESTET – Chat führen → erscheint in „Meine Chats“, Suche findet ihn, Export erzeugt .txt, Löschen entfernt ihn (erfordert echten Gemini-Key / Chat)
 - [ ] NICHT GETESTET – „Ich habe am 14. März Geburtstag“ → „Gemerkt! 📝“ → steht in „Meine Daten“ → einzeln löschbar (erfordert echten Gemini-Key)
-- [ ] NICHT GETESTET – „vergiss alles“ → Rückfrage → „nein“ → nichts gelöscht; → „ja“ → Meine Daten leer, Meine Chats leer (erfordert Bestätigungsklick)
+- [ ] NICHT GETESTET – „vergiss alles“ → Rückfrage → „nein“ → nichts gelöscht; → „ja“ → Meine Daten leer, Meine Chats leer, Profil zurückgesetzt (erfordert Bestätigungsklick)
 - [ ] NICHT GETESTET – Neugier-Frage erscheint (zum Testen Intervall kurz stellen) und Antwort wird gemerkt (erfordert GUI-Laufzeit)
 - [ ] NICHT GETESTET – IT-Guide: „Wie mache ich in Windows den Dunkelmodus an?“ → Brille + Wolke + Ring + Weiter-Buttons; Klick durch den Ring hindurch funktioniert; Fertig → Rückflug (erfordert echten Nutzerklick durch Overlay)
 - [ ] NICHT GETESTET – Fehlermeldungs-Doktor mit einem echten Fehlerdialog (z. B. `notepad C:\gibtsnicht\x.txt` → „Datei nicht gefunden“-Meldung) (erfordert echten Bildschirmdialog)
@@ -95,3 +100,18 @@ python main.py
    - `DesktopCat.exe` läuft im Task-Manager.
    - Die Desktop-Verknüpfung heißt nun `Desktop Cat` (altes `Mochi.lnk` ist gelöscht).
    - In `Einstellungen` ist der zuvor eingegebene Gemini-Key noch vorhanden.
+
+### 8. Kennenlernen mit Kylie (Onboarding)
+1. **Erststart-Prüfung:**
+   - In einer Testumgebung mit frischer Konfiguration `main.py` starten.
+   - Onboarding-Dialog öffnet sich zentriert, rahmenlos mit abgerundeten Ecken und dunklem Anthrazit-Design.
+   - Kylie ist animiert links zu sehen (1.85x groß) mit Augen- und Schnurrhaaranimation.
+2. **Fragen durchklicken:**
+   - Sprache auswählen, Name und Spitzname eingeben (z. B. Chip „Flo“ anklicken).
+   - Stadt eingeben (z. B. „Berlin“).
+   - Beliebige Figur in der horizontal scrollbaren Galerie anklicken (z. B. Hachi oder Luna) → Pet wechselt live im Dialog.
+   - Am Ende Konfetti-Regen und Klick auf `Los geht's! 🐾` → Katze feiert und wechselt auf den Desktop.
+3. **Wiederholen & Bearbeiten:**
+   - Rechtsklick auf Katze → `✨ Kennenlernen wiederholen` → Dialog öffnet sich mit vorausgefüllten Daten.
+   - Rechtsklick → `🔒 Meine Daten`: Neues editierbares Profil oben mit Name, Spitzname, Pronomen, Stadt, Hobbys, Tonfall.
+   - Änderung eines Feldes wird sofort gespeichert. Klick auf `Profil löschen` setzt Profil auf Werkseinstellungen zurück.

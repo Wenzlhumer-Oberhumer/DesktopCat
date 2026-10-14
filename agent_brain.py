@@ -11,7 +11,7 @@ import logging
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
 
@@ -90,6 +90,94 @@ def system_prompt(name: str, user_name: str = "Boss", character_id: str = "cat_m
            if i18n.lang() == "en" else
            f"4. PERSONA & TON: Antworte immer auf Deutsch, maximal 1-2 kurze Sätze, treu deiner Figur {char_name} ({species}) mit Ausrufen wie '{sound}', höchstens ein Emoji.")
     )
+
+
+def profile_prompt(cfg: Any = None) -> str:
+    """Erzeugt einen kompakten Profil-Block (max ~400 Zeichen) fuer Gemini."""
+    if cfg is None:
+        return ""
+
+    if hasattr(cfg, "get"):
+        priv = cfg.get("privacy") or {}
+        profile = cfg.get("profile") or {}
+        user_name = cfg.get("pet.user_name") or (cfg.get("pet") or {}).get("user_name", "") or ""
+    elif isinstance(cfg, dict):
+        priv = cfg.get("privacy", {}) or {}
+        profile = cfg.get("profile", {}) or {}
+        user_name = cfg.get("pet", {}).get("user_name", "") if isinstance(cfg.get("pet"), dict) else ""
+    else:
+        return ""
+
+    if isinstance(priv, dict) and not priv.get("remember", True):
+        return ""
+
+    name = str(profile.get("name", "")).strip()
+    pronouns = str(profile.get("pronouns", "")).strip()
+    uses = profile.get("uses", [])
+    if isinstance(uses, list):
+        uses_str = ", ".join(str(u).strip() for u in uses if str(u).strip())
+    else:
+        uses_str = str(uses).strip()
+    interests = str(profile.get("interests", "")).strip()
+    tone = str(profile.get("tone", "")).strip()
+    city = str(profile.get("city", "")).strip()
+    u_name = str(user_name).strip()
+
+    if not (name or pronouns or uses_str or interests or tone or city):
+        return ""
+
+    name_parts = []
+    if name:
+        name_parts.append(f"Heißt {name}")
+    if u_name and u_name != name:
+        if name:
+            name_parts.append(f"möchte \"{u_name}\" genannt werden")
+        else:
+            name_parts.append(f"Möchte \"{u_name}\" genannt werden")
+    if pronouns:
+        name_parts.append(f"(Pronomen: {pronouns})")
+
+    first_sentence = ", ".join(name_parts[:2])
+    if len(name_parts) == 3:
+        first_sentence += f" {name_parts[2]}"
+    elif len(name_parts) == 1 and pronouns:
+        first_sentence = name_parts[0]
+
+    if uses_str:
+        if first_sentence:
+            first_sentence += f". Nutzt den PC für {uses_str}."
+        else:
+            first_sentence = f"Nutzt den PC für {uses_str}."
+    elif first_sentence:
+        first_sentence += "."
+
+    sentences = [first_sentence] if first_sentence else []
+
+    extra_parts = []
+    if interests:
+        extra_parts.append(f"Mag: {interests}")
+    if city:
+        extra_parts.append(f"Wohnt in der Nähe von {city}")
+    if tone:
+        tone_map = {
+            "lieb": "lieb & verspielt",
+            "frech": "frech & witzig",
+            "ruhig": "ruhig & kurz",
+            "schlau": "schlau & erklärend",
+        }
+        t_clean = tone.lower().split("&")[0].strip()
+        t_mapped = tone_map.get(t_clean, tone)
+        extra_parts.append(f"Gewünschter Ton: {t_mapped}")
+
+    if extra_parts:
+        sentences.append(". ".join(extra_parts) + ".")
+
+    sentences.append("Berücksichtige das natürlich und unaufdringlich – zähle es nicht auf.")
+
+    block = "ÜBER DEN NUTZER: " + " ".join(sentences)
+    if len(block) > 420:
+        block = block[:417] + "..."
+    return block
 
 
 
@@ -547,6 +635,70 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
     if re.search(r"wie geht|how are you|how do you do", n):
         return Plan(reply=_voice(character_id, "how", user))
 
+    # 18. Name & Profil-Befehle (Offline)
+    m_name = re.search(r"\b(?:nenn mich (?:ab jetzt )?|call me (?:from now on )?)(.+)", raw, re.IGNORECASE)
+    if m_name:
+        new_nick = m_name.group(1).strip(" .!?\"'")
+        new_nick = re.sub(r"^(?:doch\s+|einfach\s+)", "", new_nick, flags=re.IGNORECASE).strip()
+        if new_nick:
+            try:
+                from config import Config
+                c = Config()
+                c.set("pet.user_name", new_nick)
+                c.save()
+            except Exception:
+                pass
+            if i18n.lang() == "en":
+                return Plan(reply=f"Got it! From now on I'll call you {new_nick}! 😺", ok=True)
+            else:
+                return Plan(reply=f"Alles klar, ab jetzt nenne ich dich {new_nick}! 😺", ok=True)
+
+    if re.search(r"\b(wie hei[sß]e ich|wer bin ich|what is my name|who am i|wei[sß]t du wie ich hei[sß]e)\b", n):
+        p_name = ""
+        try:
+            from config import Config
+            cfg_obj = Config()
+            p_name = str(cfg_obj.get("profile.name", "")).strip()
+        except Exception:
+            pass
+        if i18n.lang() == "en":
+            if p_name and p_name != user:
+                return Plan(reply=f"You are {p_name} (and I call you {user})! 😺", ok=True)
+            return Plan(reply=f"You are {user}! 😺", ok=True)
+        else:
+            if p_name and p_name != user:
+                return Plan(reply=f"Du heißt {p_name} (und ich nenne dich {user})! 😺", ok=True)
+            return Plan(reply=f"Du bist {user}! 😺", ok=True)
+
+    if re.search(r"\b(was wei[sß]t du [uü]ber mich|was wei[sß]t du von mir|what do you know about me)\b", n):
+        info_str = f"Du bist {user}!"
+        try:
+            from config import Config
+            from memory_store import get_memory_store
+            cfg_obj = Config()
+            prof = cfg_obj.get("profile", {}) or {}
+            store = get_memory_store()
+            facts = store.facts()
+            details = []
+            if prof.get("name"):
+                details.append(f"Name: {prof['name']}")
+            if user:
+                details.append(f"Spitzname: {user}")
+            if prof.get("interests"):
+                details.append(f"Hobbys: {prof['interests']}")
+            if prof.get("city"):
+                details.append(f"Stadt: {prof['city']}")
+            if facts:
+                details.append(f"{len(facts)} gemerkte Fakten")
+            if details:
+                info_str = ", ".join(details)
+        except Exception:
+            pass
+        if i18n.lang() == "en":
+            return Plan(reply=f"Here is what I know about you: {info_str} 🐾", ok=True)
+        else:
+            return Plan(reply=f"Hier ist, was ich über dich weiß: {info_str} 🐾", ok=True)
+
     return Plan(reply=_UNKNOWN_EN if i18n.lang() == "en" else _UNKNOWN_DE, ok=False)
 
 
@@ -825,8 +977,11 @@ class AgentWorker(QObject):
         for step in range(self.MAX_STEPS):
             prompt_parts = [
                 system_prompt(pet_name, user, self.character_id),
-                f"\nVERF\u00dcGBARE WERKZEUGE:\n{tool_specs_json}\n",
             ]
+            p_block = profile_prompt(self.cfg)
+            if p_block:
+                prompt_parts.append(f"\n{p_block}\n")
+            prompt_parts.append(f"\nVERFÜGBARE WERKZEUGE:\n{tool_specs_json}\n")
 
             if priv.get("remember", True):
                 try:
