@@ -609,8 +609,8 @@ class OnboardingDialog(QDialog):
     def _update_progress(self) -> None:
         step = self.flow.current_step()
         total = self.flow.TOTAL_STEPS
-        paws = "🐾 " * step + "◦ " * (total - step)
-        self.lbl_progress.setText(paws.strip())
+        # ohne Leerzeichen: 15 Pfoten passen neben den Schliessen-Button
+        self.lbl_progress.setText("🐾" * step + "◦" * (total - step))
 
     def _add_pet_bubble(self, text: str) -> None:
         cinfo = get_character_info(self.avatar.character_id)

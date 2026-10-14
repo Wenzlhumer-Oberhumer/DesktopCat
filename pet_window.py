@@ -70,6 +70,54 @@ INTERVALS = {
     PetState.FLY: 16,
 }
 
+THROW_MAX = 3200.0          # px/s, damit ein wilder Wurf nicht durch die Wand tunnelt
+AIR_DRAG = 0.35             # Anteil Geschwindigkeit, der pro Sekunde in der Luft verloren geht
+WALL_BOUNCE = 0.72
+CEIL_BOUNCE = 0.6
+FLOOR_BOUNCE = 0.38         # genau ein kleiner Hopser am Boden
+FLOOR_FRICTION = 0.75
+
+
+def throw_velocity(samples, release_t: float) -> tuple[float, float]:
+    """Wurf-Geschwindigkeit aus den letzten ~100 ms Mausbewegung (px/s).
+    Wer vor dem Loslassen kurz stillhaelt (> 150 ms), laesst die Figur nur fallen."""
+    if len(samples) < 2 or release_t - samples[-1][0] > 0.15:
+        return 0.0, 0.0
+    t1, x1, y1 = samples[-1]
+    recent = [s for s in samples if t1 - s[0] <= 0.1]
+    t0, x0, y0 = recent[0] if len(recent) >= 2 else samples[-2]
+    if t1 - t0 < 0.005:
+        return 0.0, 0.0
+    clamp = lambda v: max(-THROW_MAX, min(THROW_MAX, v))
+    return clamp((x1 - x0) / (t1 - t0)), clamp((y1 - y0) / (t1 - t0))
+
+
+def throw_step(px, py, vx, vy, dt, lo, hi, top, ground, bounced, gravity):
+    """Ein Physik-Schritt fuer die geworfene Figur.
+    Rueckgabe: (px, py, vx, vy, bounced, event) mit event in None | 'wall' | 'floor_bounce' | 'landed'."""
+    event = None
+    vy += gravity * dt
+    vx *= max(0.0, 1.0 - AIR_DRAG * dt)
+    px += vx * dt
+    py += vy * dt
+    if px < lo or px > hi:
+        px = max(lo, min(hi, px))
+        vx = -vx * WALL_BOUNCE
+        event = "wall"
+    if py < top and vy < 0:
+        py = top
+        vy = -vy * CEIL_BOUNCE
+        event = "wall"
+    if py >= ground:
+        py = ground
+        if not bounced and vy > 260:
+            vy = -vy * FLOOR_BOUNCE
+            vx *= FLOOR_FRICTION
+            return px, py, vx, vy, True, "floor_bounce"
+        return px, py, 0.0, 0.0, False, "landed"
+    return px, py, vx, vy, bounced, event
+
+
 MENU_STYLE = """
 QMenu { background: #2B2D31; color: #F2F3F5; border: 1px solid #44464D; border-radius: 12px;
         padding: 6px; font: 10pt "Segoe UI"; }
@@ -160,7 +208,7 @@ class PetWindow(QWidget):
         self._suppress_click = False
         self._press_global = QPoint()
         self._grab_off = QPoint()
-        self._samples: deque = deque(maxlen=6)
+        self._samples: deque = deque(maxlen=30)     # (t, x, y) der letzten Mausbewegungen
 
         self._click_timer = QTimer(self)
         self._click_timer.setSingleShot(True)
@@ -597,26 +645,29 @@ class PetWindow(QWidget):
 
     def _fall(self, dt: float) -> None:
         lo, hi = self._x_bounds()
-        self._vy += self.GRAVITY * dt
-        self._px += self._vx * dt
-        self._py += self._vy * dt
-        self._vx *= (1.0 - min(1.0, 1.8 * dt))
-        if self._px < lo or self._px > hi:
-            self._px = max(lo, min(hi, self._px))
-            self._vx = -self._vx * 0.45
-        ground = self._ground_y()
-        if self._py >= ground:
-            self._py = ground
-            if self._vy > 380 and not self._bounced:
-                self._vy = -self._vy * 0.27          # kleiner, suesser Huepfer
-                self._bounced = True
-                self._land_squash = 1.0
-            else:
-                self._vy = self._vx = 0.0
-                self._bounced = False
-                self._land_squash = 1.0
-                self.set_state(PetState.IDLE)
+        land_vx = self._vx
+        self._px, self._py, self._vx, self._vy, self._bounced, event = throw_step(
+            self._px, self._py, self._vx, self._vy, dt, lo, hi, float(self._avail().top()), self._ground_y(),
+            self._bounced, self.GRAVITY)
+        if event in ("wall", "floor_bounce"):
+            self._land_squash = 1.0 if event == "floor_bounce" else 0.6
+        elif event == "landed":
+            self._land_squash = 1.0
+            self.set_state(PetState.IDLE)
+            if self.wander_enabled and abs(land_vx) > 80:   # Schwung mitnehmen und weiterspazieren
+                direction = 1 if land_vx > 0 else -1
+                QTimer.singleShot(450, lambda: self._walk_after_landing(direction))
         self._apply_pos()
+
+    def _walk_after_landing(self, direction: int) -> None:
+        if self.state != PetState.IDLE or self._dragging or self.frozen:
+            return
+        lo, hi = self._x_bounds()
+        if (direction > 0 and hi - self._px < 80) or (direction < 0 and self._px - lo < 80):
+            direction = -direction
+        self._walk_target = max(lo, min(hi, self._px + direction * random.uniform(160, 360)))
+        if abs(self._walk_target - self._px) >= 20:
+            self.set_state(PetState.WALK_RIGHT if direction > 0 else PetState.WALK_LEFT)
 
     # ==================================================================================
     #  Zeichnen
@@ -641,6 +692,8 @@ class PetWindow(QWidget):
         ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
                           squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until)
         pose = compute_pose(ctx)
+        if self.state == PetState.FALLING:          # im Flug in Wurfrichtung kippen
+            pose.rot += max(-25.0, min(25.0, self._vx / 60.0)) * self.facing
         active_accs = set(self._accessories)
         worn = str(self.cfg.get("fun.worn", "")).strip()
         if worn:
@@ -761,7 +814,7 @@ class PetWindow(QWidget):
         self._px = float(max(vr.left(), min(target.x(), vr.right() + 1 - self.width())))
         self._py = float(max(vr.top(), min(target.y(), vr.bottom() + 1 - self.height())))
         self._apply_pos()
-        self._samples.append((time.monotonic(), gp))
+        self._samples.append((time.monotonic(), gp.x(), gp.y()))
 
     def mouseReleaseEvent(self, e) -> None:
         if e.button() != Qt.MouseButton.LeftButton or not self._pressed:
@@ -769,15 +822,9 @@ class PetWindow(QWidget):
         self._pressed = False
         if self._dragging:
             self._dragging = False
-            vx = vy = 0.0
-            if len(self._samples) >= 2:
-                t0, p0 = self._samples[0]
-                t1, p1 = self._samples[-1]
-                if t1 - t0 > 0.01 and time.monotonic() - t1 < 0.08:
-                    vx = (p1.x() - p0.x()) / (t1 - t0)
-                    vy = (p1.y() - p0.y()) / (t1 - t0)
-            self._vx = max(-900.0, min(900.0, vx * 0.55))
-            self._vy = max(-700.0, min(500.0, vy * 0.4))
+            self._vx, self._vy = throw_velocity(self._samples, time.monotonic())
+            if abs(self._vx) > 100:
+                self.facing = 1 if self._vx > 0 else -1
             self._bounced = False
             self.set_state(PetState.FALLING)
             self._schedule_wander()
