@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer gemini.py: Fehler-Mapping, Modell-Fallback, Bild-Anhang (HTTP gemockt)."""
 from unittest.mock import MagicMock, patch
 

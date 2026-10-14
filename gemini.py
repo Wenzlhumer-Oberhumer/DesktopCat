@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Gemini API mit eigenem Gratis-Key aus Google AI Studio.
 
 Der Key liegt in der Windows-Anmeldeinformationsverwaltung (nicht im Klartext in config.json).

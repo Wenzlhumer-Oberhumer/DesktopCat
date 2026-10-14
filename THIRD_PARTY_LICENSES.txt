@@ -2,12 +2,12 @@
 THIRD-PARTY LICENSES / DRITTANBIETER-LIZENZEN
 ================================================================================
 
-Mochi verwendet folgende Open-Source-Bibliotheken und -Komponenten:
+Desktop Cat verwendet folgende Open-Source-Bibliotheken und -Komponenten:
 
 1. PyQt6
    Lizenz: GNU General Public License v3.0 (GPLv3)
    Copyright (c) Riverbank Computing Limited.
-   Hinweis: Mochi nutzt PyQt6 und wird unter den Bedingungen der GPLv3 bereitgestellt.
+   Hinweis: Desktop Cat nutzt PyQt6 und steht selbst unter der GPLv3 (siehe LICENSE).
    Vollständiger Lizenztext: https://www.gnu.org/licenses/gpl-3.0.html
 
 2. Pillow (PIL)
@@ -40,7 +40,7 @@ Mochi verwendet folgende Open-Source-Bibliotheken und -Komponenten:
    of this software and associated documentation files.
 
 6. wttr.in (Wetter-Dienst, nur Online-Abfrage, keine Bibliothek)
-   Mochi ruft fuer das Werkzeug "Wetter" den kostenlosen Dienst https://wttr.in ab.
+   Desktop Cat ruft fuer das Werkzeug "Wetter" den kostenlosen Dienst https://wttr.in ab.
    Es wird kein API-Key benoetigt und keine Software von wttr.in ausgeliefert.
    Die Wetterdaten stammen laut wttr.in aus dessen angegebenen Quellen (dort
    genannt, z. B. Open-Meteo bzw. World Weather Online). Es gelten die

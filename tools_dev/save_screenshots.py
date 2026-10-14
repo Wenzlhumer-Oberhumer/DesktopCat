@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Erzeugt Screenshots der Katzen-Zustaende fuer Phase 3."""
 import os
 import sys

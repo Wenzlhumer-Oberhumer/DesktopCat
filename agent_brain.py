@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Gehirn des Buddys: Gemini API mit Tool-Calling plus regelbasierter Offline-Parser.
 
 Alles Blockierende (HTTP, Dateioperationen, Dialoge) laeuft in einem QThread-Worker; der UI-Thread
@@ -537,11 +539,12 @@ def parse_offline(text: str, user_name: str = "Boss", character_id: str = "cat_m
         ("desktop", r"desktop|schreibtisch"),
         ("pictures", r"bilder|pictures?|fotos"),
         ("music", r"musik|music"),
-        ("recycle_bin", r"papierkorb|mulleimer|recycle\s*bin"),
-        ("c_drive", r"laufwerk\s*c|festplatte\s*c|c:\b"),
+        ("videos", r"videos?|filme"),
+        ("papierkorb", r"papierkorb|mulleimer|recycle\s*bin"),
+        ("c", r"laufwerk\s*c|festplatte\s*c|c:\b"),
     ]:
-        if re.search(rf"\b(offne\w*|oeffne\w*|geh\s*zu|zeig\w*)\b\s*(?:den\s*|die\s*|das\s*)?(?:ordner\s*)?({kw})\b", n):
-            return Plan("open_folder", {"folder": fld})
+        if re.search(rf"\b(offne\w*|oeffne\w*|open|geh\s*zu|zeig\w*)\b\s*(?:den\s*|die\s*|das\s*|my\s*|the\s*)?(?:ordner\s*)?({kw})\b", n):
+            return Plan("open_folder", {"name": fld})
 
     # 12. Lokale Dateisuche
     m = re.search(r"\b(such\w*|find\w*|search|wo ist|wo liegt|wo finde ich)\b\s*(?:mir\s+)?(?:bitte\s+)?"

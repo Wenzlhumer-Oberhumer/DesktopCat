@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer das JSON-Tool-Calling-Protokoll der Gemini CLI."""
 from agent_brain import parse_cli_response
 

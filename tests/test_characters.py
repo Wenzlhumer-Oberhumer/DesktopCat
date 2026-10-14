@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer pet_sprites: Charakter-Registry und Zeichnen aller Figuren auf ein QImage."""
 from PyQt6.QtGui import QImage, QPainter
 from PyQt6.QtCore import Qt

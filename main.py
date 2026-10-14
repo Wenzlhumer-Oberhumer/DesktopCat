@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Einstiegspunkt: baut Pet, Sprechblase, Eingabeleiste, Gehirn und Tray-Icon zusammen."""
 from __future__ import annotations
 
@@ -89,7 +91,7 @@ if not _is_test_mode and not os.environ.get("DESKTOPCAT_NO_LOG"):
 
 import gemini
 from PyQt6.QtCore import (
-    QAbstractNativeEventFilter, QBuffer, QObject, QPoint, QPointF, QRect, QStandardPaths,
+    QAbstractNativeEventFilter, QBuffer, QObject, QPoint, QRect, QStandardPaths,
     QThread, QTimer, pyqtSignal, pyqtSlot,
 )
 from PyQt6.QtGui import QAction, QGuiApplication, QIcon, QScreen
@@ -395,6 +397,7 @@ class Buddy(QObject):
     """Verdrahtet alle Module miteinander."""
 
     timer_expired = pyqtSignal(str, int, str)      # kommt aus einem Hintergrund-Thread (tools-Timer)
+    data_wiped = pyqtSignal()                      # "Alles vergessen" - evtl. aus dem Agent-Thread
 
     def __init__(self, app: QApplication, cfg: Config):
         super().__init__()
@@ -411,7 +414,7 @@ class Buddy(QObject):
         # Tray-Icon (auch Quelle fuer Windows-Benachrichtigungen)
         self.icon = QIcon(render_icon(64))
         self.tray = QSystemTrayIcon(self.icon, self)
-        self.tray.setToolTip("Desktop Cat - dein Desktop-Buddy")
+        self.tray.setToolTip(tr("tray.tooltip"))
         self.tray_menu = style_menu(QMenu())
         self.tray_menu.aboutToShow.connect(self._update_tray_menu)
         self._update_tray_menu()
@@ -453,6 +456,9 @@ class Buddy(QObject):
         from sticky_notes import StickyNoteManager
         from memory_store import get_memory_store
         self.note_manager = StickyNoteManager(get_memory_store(), on_note_done_cb=self._on_note_completed)
+        from memory_store import MemoryStore
+        MemoryStore.on_wipe.append(self.data_wiped.emit)
+        self.data_wiped.connect(self._on_data_wiped)
         self._quiz_session: Optional[dict] = None
         self._last_photo_folder: Optional[str] = None
 
@@ -621,8 +627,12 @@ class Buddy(QObject):
         QTimer.singleShot(30000, lambda: self._check_update(manual=False))
         self.note_manager.load_notes()
 
+    def _on_data_wiped(self) -> None:
+        self.brain.clear_history()          # sonst geht der alte Verlauf bei der naechsten KI-Frage noch mit
+        self.note_manager.close_all()
+
     def _about(self) -> None:
-        self._say(f"Desktop Cat v{__version__} \U0001F43E\nDein KI-Desktop-Buddy!", 6000)
+        self._say(tr("about.text", version=__version__), 6000)
 
     def quit(self) -> None:
         self.note_manager.close_all()
@@ -642,7 +652,7 @@ class Buddy(QObject):
         self.cfg.save()
 
         if manual:
-            self._say("Suche nach Updates... 🔍", 3000)
+            self._say(tr("say.update_checking"), 3000)
 
         self._update_worker = CheckUpdateWorker(manual=manual)
         self._update_worker.check_completed.connect(self._on_update_checked)
@@ -654,17 +664,17 @@ class Buddy(QObject):
         if status == "update_available":
             self._pending_update = res
             ver = res.get("version", "")
-            self._say(f"Es gibt ein Update auf v{ver}! Klick mich zum Installieren ✨", 10000)
+            self._say(tr("say.update_available", ver=ver), 10000)
             self._update_tray_menu()
         elif status == "up_to_date" and manual:
-            self._say("Du hast die neueste Version 😺", 5000)
+            self._say(tr("say.update_latest"), 5000)
         elif status == "error" and manual:
-            self._say("Konnte nicht nach Updates suchen 😿", 5000)
+            self._say(tr("say.update_check_failed"), 5000)
 
     def _start_update_download(self) -> None:
         if not getattr(self, "_pending_update", None):
             return
-        self._say("Lade Update herunter... ⏳", 8000)
+        self._say(tr("say.update_downloading"), 8000)
         self._download_worker = DownloadUpdateWorker(
             self._pending_update["setup_url"],
             self._pending_update["sha_url"],
@@ -675,10 +685,10 @@ class Buddy(QObject):
 
     def _on_update_downloaded(self, ok: bool, path_or_err: str) -> None:
         if ok:
-            self._say("Update wird installiert... Bis gleich! 🐾", 3000)
+            self._say(tr("say.update_installing"), 3000)
             QTimer.singleShot(1500, lambda: self._apply_update(path_or_err))
         else:
-            self._say(f"Update-Fehler: {path_or_err} 😿", 8000)
+            self._say(tr("say.update_error", err=path_or_err), 8000)
 
     def _apply_update(self, setup_exe: str) -> None:
         launch_installer(setup_exe)
@@ -706,7 +716,7 @@ class Buddy(QObject):
             self.input.dismiss()
             return
         if self.brain.busy:
-            self._say("Moment, ich bin noch dran... \U0001F6E0\uFE0F", 2500)
+            self._say(tr("say.still_busy"), 2500)
             return
         self.bubble.hide_now()
         self.pet.freeze(True)
@@ -799,13 +809,13 @@ class Buddy(QObject):
                 self.pet.react_happy()
 
         if not self.brain.submit(text):
-            self._say("Moment, ich bin noch dran... \U0001F6E0\uFE0F", 2500)
+            self._say(tr("say.still_busy"), 2500)
 
     # -- Aufgaben-Lebenszyklus --------------------------------------------------------------
     def _on_task_started(self, _text: str) -> None:
         self.pet.freeze(True)
         self.pet.set_working()
-        self._say("Ich bin dran... \U0001F43E", persistent=True)
+        self._say(tr("say.working"), persistent=True)
 
     def _on_task_finished(self, ok: bool, message: str, notify: str) -> None:
         self.pet.freeze(False)
@@ -857,12 +867,12 @@ class Buddy(QObject):
 
     def _on_character_changed(self, _cid: str) -> None:
         ci = self.char_info()
-        self._say(f"{ci.get('sound', '')} Ich bin {ci.get('name', 'Kylie')}! {ci.get('emoji', '')}", 3000)
+        self._say(tr("say.i_am", sound=ci.get('sound', ''), name=ci.get('name', 'Kylie'), emoji=ci.get('emoji', '')), 3000)
 
     def _on_treat(self) -> None:
         n = int(self.cfg.get("treats", 0))
         ci = self.char_info()
-        self._say(f"{ci.get('sound', 'Mjam!')} Danke, {self.user_name()}! \U0001F356 Schon {n} Leckerli bekommen! \U0001F496", 4000)
+        self._say(tr("say.treat_thanks", sound=ci.get('sound', 'Mjam!'), name=self.user_name(), n=n), 4000)
         self._award_friendship("treat")
 
     # -- Phase 3: Alltag, Neugier, Briefing, Geburtstag, Schlafenszeit -----------------
@@ -882,7 +892,7 @@ class Buddy(QObject):
                         store.set_stat(bday_stat, "1")
                         self.pet.wake()
                         self.pet.celebrate_confetti(6.0)
-                        self._say(f"Alles Gute zum Geburtstag, {self.user_name()}! 🎂🎉✨", 10000)
+                        self._say(tr("say.birthday", name=self.user_name()), 10000)
                         return
 
             # 2. Guten-Morgen-Briefing
@@ -1020,9 +1030,9 @@ class Buddy(QObject):
                 self.pet.wake_with_stretch(4.0)
                 self.pet.set_accessory("nightcap", True, until=time.monotonic() + 1800.0)
                 if is_second:
-                    self._say(f"Immer noch fleißig, {self.user_name()}? Schlaf gut und erhol dich schön! 😴💤", 9000)
+                    self._say(tr("say.late_night_1", name=self.user_name()), 9000)
                 else:
-                    self._say(f"Es ist schon spät, {self.user_name()} – Zeit fürs Bett? 😴", 9000)
+                    self._say(tr("say.late_night_2", name=self.user_name()), 9000)
         except Exception:
             pass
 
@@ -1078,12 +1088,8 @@ class Buddy(QObject):
                 self.pet.set_accessory("fan", True, until=now + 180.0)
                 if now - self._last_fever_alert > 3600.0:
                     self._last_fever_alert = now
-                    self.brain.set_pending_action(
-                        "system_info",
-                        {},
-                        "Puh, dein PC kocht! \U0001F975 Soll ich nachsehen, was so viel frisst?",
-                    )
-                    self._say("Puh, dein PC kocht! \U0001F975 Soll ich nachsehen, was so viel frisst? (Antworte mit Ja oder Nein)", 8000)
+                    self.brain.pending_action = ("system_info", {})   # "ja" fuehrt es aus
+                    self._say(tr("say.pc_hot"), 8000)
         except Exception:
             pass
 
@@ -1119,7 +1125,7 @@ class Buddy(QObject):
             self._battery_warned = True
             self.pet.wake()
             self.pet.sad(3.0)
-            self._say(f"\U0001F50B Nur noch {pct} % Akku, {self.user_name()}! Bitte Ladekabel anschlie\u00dfen.", 9000)
+            self._say(tr("say.battery_low", pct=pct, name=self.user_name()), 9000)
             self.tray.showMessage("Akku fast leer", f"Nur noch {pct} % Akku.", self.icon, 7000)
 
     # -- Interaktion -------------------------------------------------------------------------
@@ -1155,7 +1161,7 @@ class Buddy(QObject):
                         self.cfg.set("hotkey", old_spec)
                         self.cfg.save()
                         self._hotkey_ok = self.hotkey.register(old_spec, HOTKEY_ID, self._hotkey_pressed)
-                        self._say("Dieses Tastenk\u00fcrzel ist schon belegt \U0001F63F Ich behalte das alte.", 4500)
+                        self._say(tr("say.hotkey_taken"), 4500)
                         return
                 ex_spec = str(self.cfg.get("hotkey_explain", "ctrl+alt+e"))
                 if ex_spec != old_ex_spec:
@@ -1164,7 +1170,7 @@ class Buddy(QObject):
                         self.cfg.set("hotkey_explain", old_ex_spec)
                         self.cfg.save()
                         self.hotkey.register(old_ex_spec, EXPLAIN_HOTKEY_ID, self._explain_hotkey_pressed)
-                self._say("Gespeichert! \U0001F43E", 2000)
+                self._say(tr("say.saved"), 2000)
         finally:
             self._settings_open = False
 
@@ -1201,7 +1207,7 @@ class Buddy(QObject):
                 self.pet.celebrate_confetti(4.0)
                 u = self.user_name()
                 cname = self.char_info().get("name", "Kylie")
-                self._say(f"Schön dich kennenzulernen, {u}! Ich bin {cname} 🐾", 6000)
+                self._say(tr("say.nice_to_meet", u=u, cname=cname), 6000)
         except Exception as e:
             print(f"[main] Fehler beim Öffnen des Onboardings: {e}")
 
@@ -1250,7 +1256,7 @@ class Buddy(QObject):
         if not cards and deck:
             cards = store.get_cards()
         if not cards:
-            self._say("Du hast noch keine Lernkarten! 📚 Öffne per Rechtsklick '📚 Lernkarten' oder sag 'Kylie, erstelle mir Lernkarten zu Englisch'!", 5000)
+            self._say(tr("say.no_cards"), 5000)
             return
 
         sorted_cards = sorted(cards, key=lambda c: c.get("box", 1))
@@ -1265,7 +1271,7 @@ class Buddy(QObject):
             "total": len(quiz_cards),
         }
         self.pet.wake()
-        self._say(f"Quiz-Runde startet! 📚 ({len(quiz_cards)} Karten)", 2500)
+        self._say(tr("say.quiz_start", n=len(quiz_cards)), 2500)
         QTimer.singleShot(2600, self._ask_next_quiz_card)
 
     def _ask_next_quiz_card(self) -> None:
@@ -1288,7 +1294,7 @@ class Buddy(QObject):
             return
         if text.strip().lower() in ("abbrechen", "stop", "beenden", "quiz beenden"):
             self._quiz_session = None
-            self._say("Quiz abgebrochen. Wir üben ein andermal weiter! 🐾", 3000)
+            self._say(tr("say.quiz_cancelled"), 3000)
             return
 
         from fun import compare_answer, update_leitner_box
@@ -1352,10 +1358,10 @@ class Buddy(QObject):
 
     def _create_ai_flashcards(self, topic: str, count: int = 10) -> None:
         if not gemini.has_key():
-            self._say("Für automatische KI-Lernkarten trage bitte erst deinen Gemini-Key ein (Rechtsklick → Gemini-Key eintragen) 🔑", 4500)
+            self._say(tr("say.cards_need_key"), 4500)
             return
 
-        self._say(f"Ich erstelle {count} Lernkarten zu „{topic}“ für dich... 🧠📚", persistent=True)
+        self._say(tr("say.cards_creating", count=count, topic=topic), persistent=True)
         from fun_dialogs import GeminiCardWorker
         from memory_store import get_memory_store
 
@@ -1366,20 +1372,20 @@ class Buddy(QObject):
             for front, back in cards[:count]:
                 store.add_card(deck_name, front, back)
             self.pet.celebrate(3.0)
-            self._say(f"Fertig! 🎉 {len(cards[:count])} Lernkarten im Deck „{deck_name}“ gespeichert. Sag 'quiz starten', um loszulegen! 🐾", 6000)
+            self._say(tr("say.cards_done", n=len(cards[:count]), deck_name=deck_name), 6000)
         def _on_fail(err):
             self.pet.sad()
-            self._say(f"Konnte keine Karten erstellen: {err}", 4000)
+            self._say(tr("say.cards_failed", err=err), 4000)
 
         worker.success.connect(_on_success)
         worker.failed.connect(_on_fail)
-        worker.finished.connect(lambda: self._active_workers.remove(worker) if worker in self._active_workers else None)
+        self._active_workers = [w for w in self._active_workers if not w.isFinished()]   # Referenz halten bis fertig
         self._active_workers.append(worker)
         worker.start()
 
     def start_photobox(self) -> None:
         cname = self.char_info().get("name", "Kylie")
-        self._say(f"Achtung, der ganze Bildschirm ist auf dem Foto mit {cname} 📸", 2400)
+        self._say(tr("say.photo_warn", cname=cname), 2400)
         pose_choice = random.choice(["dance", "cool", "celebrate"])
         if pose_choice == "dance":
             self.pet.dance(6.0)
@@ -1388,9 +1394,9 @@ class Buddy(QObject):
         else:
             self.pet.celebrate(6.0)
 
-        QTimer.singleShot(2400, lambda: self._say("3... 🐾", 1000))
-        QTimer.singleShot(3500, lambda: self._say("2... 📸", 1000))
-        QTimer.singleShot(4600, lambda: self._say("1... Smile! ✨", 900))
+        QTimer.singleShot(2400, lambda: self._say(tr("say.countdown_3"), 1000))
+        QTimer.singleShot(3500, lambda: self._say(tr("say.countdown_2"), 1000))
+        QTimer.singleShot(4600, lambda: self._say(tr("say.countdown_1"), 900))
         QTimer.singleShot(5600, self._snap_photobox)
 
     def _snap_photobox(self) -> None:
@@ -1417,7 +1423,7 @@ class Buddy(QObject):
             framed.save(str(out_path))
 
             self.pet.react_happy()
-            self._say("Klick! 📸 Wunderschön geworden! ✨", 4000)
+            self._say(tr("say.photo_done"), 4000)
             self._last_photo_folder = str(target_dir)
             self.tray.showMessage(
                 "📸 Foto gespeichert!",
@@ -1427,7 +1433,7 @@ class Buddy(QObject):
             )
         except Exception as exc:
             print(f"[photobox] Fehler: {exc}")
-            self._say(f"Konnte kein Foto aufnehmen: {exc}", 4000)
+            self._say(tr("say.photo_failed", exc=exc), 4000)
 
     def _on_tray_message_clicked(self) -> None:
         if getattr(self, "_last_photo_folder", None):
@@ -1441,20 +1447,20 @@ class Buddy(QObject):
 
     def create_sticky_note(self, text: str = "", color: str = "yellow") -> None:
         note_id, x, y = self.note_manager.create_note(text=text, color=color)
-        target_pt = QPointF(float(x - 50), float(y + 20))
-        self.pet.fly_to(target_pt)
+        self.pet.fly_to(float(x - 50), float(y + 20))
         QTimer.singleShot(1100, lambda: self.pet.push_animation(1.2))
-        self._say("Haftnotiz angeklebt! 📌", 3000)
+        QTimer.singleShot(2600, self.pet.land)                  # sonst schwebt sie ewig auf der Wolke
+        self._say(tr("say.note_stuck"), 3000)
 
     def _on_note_completed(self, _note_id: int) -> None:
         self.pet.react_happy()
-        self._say("Erledigt! Super gemacht! ✨", 3500)
+        self._say(tr("say.done_great"), 3500)
 
     # -- Phase 5: IT-Support, Klick-Guide, Fehler-Doktor & Kopieren/Erklären -----------
     def _explain_hotkey_pressed(self) -> None:
         text = QGuiApplication.clipboard().text().strip()
         if not text:
-            self._say("Markier erst etwas und drück Strg+C 😺", 4000)
+            self._say(tr("say.select_first"), 4000)
             return
         if len(text) > 4000:
             text = text[:4000]
@@ -1485,12 +1491,12 @@ class Buddy(QObject):
 
     def _run_clipboard_action(self, mode: str, text: str) -> None:
         if not gemini.has_key():
-            self._say("Für Erklärungen brauche ich meinen Gemini-Key 🔑", 4000)
+            self._say(tr("say.explain_need_key"), 4000)
             return
 
         self.pet.freeze(True)
         self.pet.set_working()
-        self._say("Ich schau's mir an... 🐾", persistent=True)
+        self._say(tr("say.looking"), persistent=True)
 
         worker = ClipboardExplainWorker(mode, text)
         worker.finished_with_result.connect(self._on_explain_result)
@@ -1510,7 +1516,7 @@ class Buddy(QObject):
     def _on_explain_failed(self, err: str) -> None:
         self.pet.freeze(False)
         self.bubble.hide_now()
-        self._say(f"Fehler: {err} 😿", 4500)
+        self._say(tr("say.error", err=err), 4500)
 
     @pyqtSlot()
     def _reap_explain_threads(self) -> None:
@@ -1521,7 +1527,7 @@ class Buddy(QObject):
     # -- Fehler-Doktor -----------------------------------------------------------------
     def start_error_doctor(self) -> None:
         if not gemini.has_key():
-            self._say("Für den Fehlermeldungs-Doktor brauche ich meinen Gemini-Key 🔑", 4000)
+            self._say(tr("say.doctor_need_key"), 4000)
             return
 
         self.pet.hide()
@@ -1536,10 +1542,10 @@ class Buddy(QObject):
         self.pet.show()
         b64 = pixmap_to_b64(pix)
 
-        self.pet.set_accessory("hacker_glasses")
+        self.pet.set_accessory("hacker_glasses", True)
         self.pet.freeze(True)
         self.pet.set_working()
-        self._say("Ich untersuche den Bildschirm... 🩺", persistent=True)
+        self._say(tr("say.doctor_scanning"), persistent=True)
 
         worker = ErrorDoctorWorker(b64)
         worker.finished_with_result.connect(self._on_error_doctor_result)
@@ -1564,12 +1570,12 @@ class Buddy(QObject):
     @pyqtSlot(str)
     def _on_error_doctor_failed(self, err: str) -> None:
         self.pet.freeze(False)
-        self.pet.remove_accessory("hacker_glasses")
+        self.pet.set_accessory("hacker_glasses", False)
         self.bubble.hide_now()
-        self._say(f"Doktor-Fehler: {err} 😿", 4500)
+        self._say(tr("say.doctor_error", err=err), 4500)
 
     def _on_error_doctor_closed(self) -> None:
-        self.pet.remove_accessory("hacker_glasses")
+        self.pet.set_accessory("hacker_glasses", False)
         self.bubble.hide_now()
 
     @pyqtSlot()
@@ -1581,12 +1587,12 @@ class Buddy(QObject):
     # -- IT-Support / Klick-Anleitung --------------------------------------------------
     def start_it_guide(self, question: str) -> None:
         if not gemini.has_key():
-            self._say("Für die Klick-Anleitung brauche ich meinen Gemini-Key 🔑", 4000)
+            self._say(tr("say.guide_need_key"), 4000)
             return
 
-        self.pet.set_accessory("hacker_glasses")
-        self.pet.set_accessory("cloud")
-        self._say("IT-Support-Modus aktiviert! 🕶️ Ich zeig's dir Schritt für Schritt.", 3000)
+        self.pet.set_accessory("hacker_glasses", True)
+        self.pet.set_accessory("cloud", True)
+        self._say(tr("say.guide_start"), 3000)
 
         cid = self.pet.character
         self._guide_session = GuideSession(question, self.user_name(), cid)
@@ -1674,22 +1680,22 @@ class Buddy(QObject):
 
     @pyqtSlot(str)
     def _guide_on_step_failed(self, err: str) -> None:
-        self._say(f"Konnte den nächsten Schritt nicht laden: {err} 😿", 4000)
+        self._say(tr("say.guide_step_failed", err=err), 4000)
         self._guide_finish(celebrate=False)
 
     def _guide_finish(self, celebrate: bool = False) -> None:
         if self.guide_overlay:
             self.guide_overlay.hide()
             self.guide_overlay.hide_target()
-        self.pet.remove_accessory("cloud")
-        self.pet.remove_accessory("hacker_glasses")
+        self.pet.set_accessory("cloud", False)
+        self.pet.set_accessory("hacker_glasses", False)
         self.pet.land()
         self.bubble.hide_now()
         if celebrate:
-            self._say("Geschafft! 🎉", 4000)
+            self._say(tr("say.guide_done"), 4000)
             self.pet.celebrate()
         else:
-            self._say("Klick-Anleitung beendet! 🐾", 3000)
+            self._say(tr("say.guide_ended"), 3000)
         self._guide_session = None
 
     def _get_active_screen(self) -> QScreen:

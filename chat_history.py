@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Fenster „Meine Chats“: Chronologischer Verlauf, Suche, Export und Weiterreden."""
 from __future__ import annotations
 
@@ -12,6 +14,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+import tools
 from memory_store import get_memory_store
 from pet_sprites import get_character_info
 from i18n import tr
@@ -288,13 +291,13 @@ class ChatHistoryDialog(QDialog):
     def _on_export(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Chat-Verlauf exportieren",
-            str(Path.home() / "Desktop" / "DesktopCat_Chats.txt"),
-            "Textdateien (*.txt);;Alle Dateien (*.*)",
+            tr("chats.export_title"),
+            str(tools.desktop_dir() / "DesktopCat_Chats.txt"),
+            tr("common.file_filter_txt"),
         )
         if path:
             self.store.export_text(path)
-            QMessageBox.information(self, "Export erfolgreich", f"Deine Daten wurden nach:\n{path}\nexportiert! 📄✨")
+            QMessageBox.information(self, tr("common.export_ok_title"), tr("common.export_ok_text", path=path))
 
     def _on_resume(self) -> None:
         cid = self._selected_conv_id()

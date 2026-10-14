@@ -7,6 +7,7 @@ block_cipher = None
 datas = [
     ('assets', 'assets'),
     ('THIRD_PARTY_LICENSES.txt', '.'),
+    ('LICENSE', '.'),
 ]
 
 a = Analysis(

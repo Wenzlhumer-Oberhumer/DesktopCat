@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Einfacher, abhaengigkeitsfreier Test-Runner fuer tests/."""
 import importlib.util
 import sys
@@ -44,6 +46,7 @@ def main():
         "test_onboarding",
         "test_throw",
         "test_startup",
+        "test_v223_fixes",
     ]
 
     total = 0

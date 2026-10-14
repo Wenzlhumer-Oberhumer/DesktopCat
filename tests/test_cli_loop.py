@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer die _chat_cli-Schleife mit gemocktem gemini.ask."""
 from unittest.mock import patch
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Grafik fuer das Pet: laedt GIF/PNG-Sprites aus assets/ und malt - falls keine vorhanden sind -
 eine niedliche Kawaii-Katze per QPainter (komplett prozedural animiert, keine Bilddateien noetig)."""
 from __future__ import annotations

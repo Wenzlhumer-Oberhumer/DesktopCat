@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer neue Tools (Timer, Wetter, Netzwerk, Fenster, PC aufraeumen) und den Offline-Parser."""
 import threading
 from unittest.mock import MagicMock, patch

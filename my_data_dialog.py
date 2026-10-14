@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Fenster „Meine Daten“: Faktenverwaltung, Datenschutzeinstellungen, Loeschfunktionen und Transparenzhinweise."""
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
+import tools
 from memory_store import get_memory_store
 from i18n import tr
 
@@ -342,21 +345,20 @@ class MyDataDialog(QDialog):
     def _on_delete_all_chats(self) -> None:
         ans = QMessageBox.question(
             self,
-            "Alle Chats löschen",
-            "Möchtest du wirklich alle gespeicherten Chat-Verläufe löschen?\nGemerkte Fakten bleiben erhalten.",
+            tr("data.del_chats_title"),
+            tr("data.del_chats_text"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if ans == QMessageBox.StandardButton.Yes:
             self.store.delete_all_chats()
-            QMessageBox.information(self, "Gelöscht", "Alle Chat-Verläufe wurden gelöscht. 🗑️")
+            QMessageBox.information(self, tr("data.deleted_title"), tr("data.deleted_text"))
 
     def _on_wipe_everything(self) -> None:
         ans = QMessageBox.warning(
             self,
-            "Alles vergessen",
-            "Wirklich alles vergessen? Das kann nicht rückgängig gemacht werden.\n"
-            "Alle Chats, gemerkten Fakten und Statistiken werden unwiderruflich gelöscht.",
+            tr("data.wipe_title"),
+            tr("data.wipe_text"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -367,18 +369,18 @@ class MyDataDialog(QDialog):
             self.cfg.save()
             self._refresh_profile_fields()
             self._refresh_facts()
-            QMessageBox.information(self, "Zurückgesetzt", "Alle Daten wurden vollständig gelöscht. 🧹✨")
+            QMessageBox.information(self, tr("data.reset_title"), tr("data.reset_text"))
 
     def _on_export_all(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Alle Daten exportieren",
-            str(Path.home() / "Desktop" / "DesktopCat_AlleDaten.txt"),
-            "Textdateien (*.txt);;Alle Dateien (*.*)",
+            tr("data.export_title"),
+            str(tools.desktop_dir() / "DesktopCat_AlleDaten.txt"),
+            tr("common.file_filter_txt"),
         )
         if path:
             self.store.export_text(path)
-            QMessageBox.information(self, "Export erfolgreich", f"Deine Daten wurden nach:\n{path}\nexportiert! 📄✨")
+            QMessageBox.information(self, tr("common.export_ok_title"), tr("common.export_ok_text", path=path))
 
     def _on_profile_field_changed(self) -> None:
         self.cfg.set("profile.name", self.edit_p_name.text().strip())
@@ -397,15 +399,15 @@ class MyDataDialog(QDialog):
             self._refresh_profile_fields()
             self._refresh_facts()
         except Exception as e:
-            QMessageBox.warning(self, "Fehler", f"Konnte Kennenlernen nicht starten: {e}")
+            QMessageBox.warning(self, tr("common.error_title"), tr("data.onboarding_failed", e=e))
 
     def _on_delete_profile(self) -> None:
         box = QMessageBox(self)
         box.setWindowTitle(tr("data.btn_profile_delete"))
         box.setText(tr("data.confirm_delete_profile"))
         box.setIcon(QMessageBox.Icon.Question)
-        btn_yes = box.addButton("Löschen", QMessageBox.ButtonRole.YesRole)
-        box.addButton("Abbrechen", QMessageBox.ButtonRole.NoRole)
+        btn_yes = box.addButton(tr("data.btn_delete"), QMessageBox.ButtonRole.YesRole)
+        box.addButton(tr("data.btn_cancel"), QMessageBox.ButtonRole.NoRole)
         box.exec()
         if box.clickedButton() == btn_yes:
             self.cfg.set("profile", {"name": "", "pronouns": "", "uses": [], "interests": "", "tone": "", "city": ""})

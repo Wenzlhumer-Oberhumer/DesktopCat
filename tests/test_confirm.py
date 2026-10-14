@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer den Bestaetigungs-Flow gefaehrlicher Tools (Papierkorb leeren etc.).
 
 Laeuft ueber AgentBrain.submit() mit Worker-Thread, wartet im Test synchron (QEventLoop) auf das

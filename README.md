@@ -22,7 +22,7 @@
 - **🐾 9 Charaktere zur Auswahl:** Umschalten live per Rechtsklick ➜ *Charakter* oder in den Einstellungen. Die KI-Antworten und die Offline-Antworten sprechen im Stil des gewählten Charakters.
   | Figur | Art |
   |---|---|
-  | **Mochi** (Standard) | Calico-Glückskatze |
+  | **Kylie** (Standard) | Calico-Glückskatze |
   | **Luna** | Midnight-Katze |
   | **Hachi** | Shiba Inu |
   | **Balu** | Golden-Welpe |
@@ -31,19 +31,19 @@
   | **Spooky** | Geist-Slime |
   | **Lotti** | Rosa Axolotl |
   | **Pip** | Kaiser-Pinguin |
-- **🗣️ Eigener Name / Anrede:** Mochi spricht dich nicht mehr fix mit „Boss“ an, sondern mit dem Namen, den du in den Einstellungen einträgst.
+- **🗣️ Eigener Name / Anrede:** Kylie spricht dich nicht mehr fix mit „Boss“ an, sondern mit dem Namen, den du in den Einstellungen einträgst.
 - **🛠️ Neue Werkzeuge:**
-  - **Timer & Pomodoro:** Mochi erinnert dich per Tray-Benachrichtigung, wenn die Zeit um ist.
+  - **Timer & Pomodoro:** Kylie erinnert dich per Tray-Benachrichtigung, wenn die Zeit um ist.
   - **Live-Wetter:** „Wie ist das Wetter in Wien?“ über wttr.in. Ohne API-Key und kostenlos.
   - **PC aufräumen:** leert den Papierkorb und löscht alte Temp-Dateien (mit Rückfrage).
   - **Netzwerk- & IP-Info:** zeigt deine IP-Adressen und Netzwerkdaten.
   - **Fenster wegschieben & schließen:** bringt Fenster aus dem Weg oder schließt sie (mit Rückfrage).
-- **🛡️ Sicherheitsabfrage:** Vor gefährlichen Aktionen (Papierkorb/Temp leeren, Fenster schließen, Datei löschen, PowerShell) fragt Mochi nach. Antworte mit **„ja“** oder **„nein“**. Ohne „ja“ passiert nichts.
+- **🛡️ Sicherheitsabfrage:** Vor gefährlichen Aktionen (Papierkorb/Temp leeren, Fenster schließen, Datei löschen, PowerShell) fragt Kylie nach. Antworte mit **„ja“** oder **„nein“**. Ohne „ja“ passiert nichts.
 - **✨ Extras:**
-  - **Wohlfühl-Erinnerungen:** Mochi erinnert ans Strecken und Wassertrinken, in der Stimme deines Charakters. Pausiert automatisch, wenn eine Anwendung im Vollbild läuft.
+  - **Wohlfühl-Erinnerungen:** Kylie erinnert ans Strecken und Wassertrinken, in der Stimme deines Charakters. Pausiert automatisch, wenn eine Anwendung im Vollbild läuft.
   - **Akku-Warnung:** meldet sich, wenn der Akku unter 15 % fällt und das Gerät nicht am Netzteil hängt.
-  - **Nachtmodus (23–7 Uhr):** Mochi schläft öfter und ruft seltener dazwischen.
-  - **Spielmodus „Fang die Maus“:** Mochi läuft 15 Sekunden lang deinem Mauszeiger hinterher.
+  - **Nachtmodus (23–7 Uhr):** Kylie schläft öfter und ruft seltener dazwischen.
+  - **Spielmodus „Fang die Maus“:** Kylie läuft 15 Sekunden lang deinem Mauszeiger hinterher.
   - **„Leckerli geben“:** Herzchen und ein Spruch, dazu ein Zähler („Schon 12 Leckerli bekommen!“).
   - **Hotkey änderbar:** der globale Hotkey (Standard `Strg + Alt + P`) lässt sich in den Einstellungen umstellen.
 - **💸 Alles bleibt kostenlos:** Keine kostenpflichtigen APIs. Gemini läuft wie bisher mit dem eigenen Gratis-Key, Wetter über wttr.in ohne Schlüssel.
@@ -57,7 +57,7 @@
   - Kein störender Rahmen, keine Einträge in Alt-Tab oder Taskleiste (`Qt.WindowType.Tool`).
   - Echte Desktop-Physik: Schmiegt sich an die Oberkante der Windows-Taskleiste an.
   - Interaktives **Drag & Drop**: In der Luft halten (zappelt überrascht mit Schweißtröpfchen), loslassen (fällt mit weichem Squish & Mini-Bounce auf die Taskleiste zurück).
-  - Autonomes Wandern: Alle 5–10 Sekunden entscheidet Mochi zufällig, ob er stehen bleibt, ein Nickerchen macht (`SLEEP`) oder neugierig spazieren geht.
+  - Autonomes Wandern: Alle 5–10 Sekunden entscheidet Kylie zufällig, ob sie stehen bleibt, ein Nickerchen macht (`SLEEP`) oder neugierig spazieren geht.
   - Single-Instance-Schutz über Windows-Mutex (`MochiDesktopPetMutex`).
 
 - **🎨 Handgezeichneter Calico-Katzen-Look (nach echten Fotos):**
@@ -81,7 +81,7 @@
   - **Stufenloses Zoomen:** Mit **`Strg + Mausrad`** (oder `Shift + Mausrad`) direkt am Bildschirm vergrößern oder verkleinern (60 % bis 250 %).
 
 - **💬 Elegante Dark-Mode UI & Reiches Kontextmenü:**
-  - Schwebende Sprechblase mit animiertem Fade-In/Fade-Out und Pfeil, der auf Mochis Kopf zeigt.
+  - Schwebende Sprechblase mit animiertem Fade-In/Fade-Out und Pfeil, der auf den Kopf der Figur zeigt.
   - Schlanke Eingabeleiste ("Was soll ich tun, Boss? 🐾" – „Boss“ wird durch deinen eingestellten Namen ersetzt): Öffnet sich per **Doppelklick**, per globalem Hotkey (**`Strg + Alt + P`**), über das Tray-Icon oder Rechtsklick-Menü.
   - Klick auf die Sprechblase öffnet direkt den Antwort-Modus oder installiert anstehende Updates.
 
@@ -89,8 +89,8 @@
   - Einstellungen ➜ *Gratis-Key holen* öffnet Google AI Studio, dort mit Google anmelden und *Create API key* klicken. Ein Bezahlkonto ist nicht nötig (Free Tier); Angebote für Billing, Firebase oder Guthaben kann man überspringen.
   - Key einfügen ➜ *Prüfen & speichern*. Der Key liegt sicher in der Windows-Anmeldeinformationsverwaltung, nicht in `config.json`.
   - Jeder Nutzer verwendet sein eigenes Gratis-Kontingent; keine Kosten für den Entwickler.
-  - Sicheres JSON-Tool-Protokoll: die KI kann nur Mochis eigene Werkzeuge auslösen.
-  - Ohne Key oder ohne Internet arbeitet Mochi automatisch im **100 % Offline-Modus**.
+  - Sicheres JSON-Tool-Protokoll: die KI kann nur Desktop Cats eigene Werkzeuge auslösen.
+  - Ohne Key oder ohne Internet arbeitet Kylie automatisch im **100 % Offline-Modus**.
   - Hinweis: Der frühere „Mit Google anmelden“-Weg über die Gemini CLI funktioniert seit dem 18.06.2026 für private Google-Konten nicht mehr (Google hat ihn abgeschaltet).
 
 - **⚡ 20 Echte Windows-Aktionen (`tools.py`):**
@@ -125,7 +125,7 @@
 
 | Aktion | Geste / Taste |
 |---|---|
-| **Kraulen / Streicheln** | Einfacher Linksklick (Mochi schnurrt mit Herzaugen & Herzchen) |
+| **Kraulen / Streicheln** | Einfacher Linksklick (Kylie schnurrt mit Herzaugen & Herzchen) |
 | **Befehl eingeben** | Doppelklick auf das Pet oder **`Strg + Alt + P`** |
 | **Größe ändern (Zoom)** | **`Strg + Mausrad`** oder **`Shift + Mausrad`** direkt über dem Pet |
 | **Hochheben / Werfen** | Mit linker Maustaste ziehen und loslassen |
@@ -149,15 +149,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Nutzerdaten und Logs werden automatisch unter `%APPDATA%\Mochi\` abgelegt:
-- `%APPDATA%\Mochi\config.json`: Einstellungen
-- `%APPDATA%\Mochi\buddy.log`: Logdatei
+Nutzerdaten und Logs werden automatisch unter `%APPDATA%\Kylie\` abgelegt:
+- `%APPDATA%\Kylie\config.json`: Einstellungen
+- `%APPDATA%\Kylie\buddy.log`: Logdatei
 
 ---
 
 ## 📦 Build & Installer erstellen
 
-Mochi bringt ein vollständiges Build-System mit:
+Desktop Cat bringt ein vollständiges Build-System mit:
 
 ```powershell
 # Baut PyInstaller-Bundle und das Inno Setup Setup:
@@ -166,7 +166,7 @@ Mochi bringt ein vollständiges Build-System mit:
 
 Das Skript:
 1. Baut das Multi-Size-Icon (`assets/mochi.ico`).
-2. Erzeugt das PyInstaller-Bundle (`dist\Mochi\`).
+2. Erzeugt das PyInstaller-Bundle (`dist\DesktopCat\`).
 3. Kompiliert das Inno-Setup-Installationsprogramm (`dist\DesktopCat-Setup-<version>.exe`) inklusive `.sha256`-Prüfsumme.
 
 ### Release auf GitHub veröffentlichen
@@ -185,7 +185,17 @@ Die Charakter-Designs, die Persona-Texte und die Werkzeuge Timer, Wetter, PC auf
 
 ---
 
-## 📄 Lizenz & Third-Party
+## 📄 Lizenz (Copyleft: GNU GPL v3)
 
-Mochi steht unter der **GNU General Public License v3.0 (GPLv3)**, da es die PyQt6-Bibliothek nutzt.
-Detaillierte Lizenzhinweise zu allen Drittanbieter-Komponenten (PyQt6, Pillow, pywin32, docx, pptx, wttr.in) finden sich in `THIRD_PARTY_LICENSES.txt`.
+Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer
+
+Desktop Cat ist **freie Software**: Du darfst sie unter den Bedingungen der **GNU General Public License, Version 3 oder (nach deiner Wahl) jeder späteren Version**, wie von der Free Software Foundation veröffentlicht, weitergeben und/oder verändern. Den vollständigen Lizenztext findest du in [`LICENSE`](LICENSE) (SPDX: `GPL-3.0-or-later`).
+
+Desktop Cat wird in der Hoffnung verbreitet, dass es nützlich ist, aber **OHNE JEDE GEWÄHRLEISTUNG**, sogar ohne die implizite Gewährleistung der MARKTREIFE oder der EIGNUNG FÜR EINEN BESTIMMTEN ZWECK. Details stehen in der GNU General Public License.
+
+**Was Copyleft für dich bedeutet:**
+- ✅ Du darfst Desktop Cat benutzen, kopieren, verändern und weitergeben – auch verändert.
+- 🔁 Wenn du eine (veränderte) Version weitergibst, muss sie **ebenfalls unter der GPL v3** stehen, und du musst den **Quellcode** mitliefern oder zugänglich machen.
+- 📝 Copyright- und Lizenzhinweise dürfen nicht entfernt werden; Änderungen müssen als solche erkennbar sein.
+
+Desktop Cat nutzt PyQt6 (GPL v3) und weitere Open-Source-Bibliotheken; deren Hinweise stehen in [`THIRD_PARTY_LICENSES.txt`](THIRD_PARTY_LICENSES.txt). Der Wetterdienst wttr.in wird nur online abgefragt (keine mitgelieferte Software).

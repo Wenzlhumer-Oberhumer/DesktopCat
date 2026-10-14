@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer Phase 5: IT-Support, Klick-Guide, Koordinaten-Mapping und Overlay."""
 import json
 import re

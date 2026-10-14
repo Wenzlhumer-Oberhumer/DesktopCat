@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Onboarding-Dialog („Kennenlernen mit Kylie“): Spielerisches Erstgespraech mit animiertem Pet,
 Frage-Zustandsmaschine, Schnellantwort-Chips und optionaler Gemini-Reaktion.
 """
@@ -173,7 +175,7 @@ class OnboardingFlow:
                 try:
                     from memory_store import get_memory_store
                     store = get_memory_store()
-                    store.add_fact(f"Mag: {cleaned}", kind="profile", category="Hobbys")
+                    store.add_fact(f"Mag: {cleaned}", kind="profile")
                 except Exception:
                     pass
             self.step = 8
@@ -328,10 +330,9 @@ class KeyValidationWorker(QThread):
 
     def run(self) -> None:
         try:
-            ok, msg = gemini.validate_key(self.key)
-            if ok:
-                gemini.save_key(self.key)
-            self.validation_done.emit(ok, msg)
+            gemini.validate_key(self.key)       # wirft LLMError, wenn der Key nicht passt
+            gemini.save_key(self.key)
+            self.validation_done.emit(True, "")
         except Exception as e:
             self.validation_done.emit(False, str(e))
 
@@ -1028,7 +1029,7 @@ class OnboardingDialog(QDialog):
 
         def _on_next():
             sel = [opt for opt, b in selected_buttons.items() if b.isChecked()]
-            disp = ", ".join(sel) if sel else "Keine"
+            disp = ", ".join(sel) if sel else tr("onboarding.none")
             self._handle_answer(sel, disp)
 
         btn_row = QHBoxLayout()
@@ -1102,7 +1103,7 @@ class OnboardingDialog(QDialog):
         thread.quit()
         if ok:
             self.avatar.pop_hearts()
-            self._add_user_bubble("🔑 [API-Key eingegeben]")
+            self._add_user_bubble(tr("onboarding.key_entered"))
             self._add_pet_bubble(tr("onboarding.q11_success"))
             self.flow.submit_answer(key)
             QTimer.singleShot(800, self._render_current_step)
@@ -1197,7 +1198,7 @@ class OnboardingDialog(QDialog):
                 "remember": chk_rem.isChecked(),
                 "use_history": chk_hist.isChecked(),
             }
-            self._handle_answer(data, "Datenschutz bestätigt ✓")
+            self._handle_answer(data, tr("onboarding.privacy_ack"))
 
         btn_row = QHBoxLayout()
         btn_next = QPushButton(tr("onboarding.btn_next"))

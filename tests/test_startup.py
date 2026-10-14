@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Startet Buddy wirklich (start()), mit Temp-Config und Temp-DB - fing den _is_test_mode()-Absturz."""
 import tempfile
 from pathlib import Path

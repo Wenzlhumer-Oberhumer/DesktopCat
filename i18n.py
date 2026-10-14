@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Internationalisierung (i18n) fuer Desktop Cat (Phase 7).
 
 Unterstuetzt Deutsch ('de') und Englisch ('en').
@@ -1097,6 +1099,278 @@ STRINGS: dict[str, dict[str, str]] = {
     "data.confirm_delete_profile": {
         "de": "Möchtest du dein Profil wirklich zurücksetzen? (Name, Spitzname, Ton und Hobbys werden geleert)",
         "en": "Do you really want to reset your profile? (Name, nickname, tone and hobbies will be cleared)",
+    },
+    "tray.tooltip": {
+        "de": "Desktop Cat - dein Desktop-Buddy",
+        "en": "Desktop Cat - your desktop buddy",
+    },
+    "about.text": {
+        "de": "Desktop Cat v{version} \U0001F43E\nDein KI-Desktop-Buddy!\nFreie Software unter der GNU GPL v3",
+        "en": "Desktop Cat v{version} \U0001F43E\nYour AI desktop buddy!\nFree software under the GNU GPL v3",
+    },
+    "say.update_checking": {
+        "de": "Suche nach Updates... 🔍",
+        "en": "Checking for updates... 🔍",
+    },
+    "say.update_available": {
+        "de": "Es gibt ein Update auf v{ver}! Klick mich zum Installieren ✨",
+        "en": "There's an update to v{ver}! Click me to install it ✨",
+    },
+    "say.update_latest": {
+        "de": "Du hast die neueste Version 😺",
+        "en": "You have the latest version 😺",
+    },
+    "say.update_check_failed": {
+        "de": "Konnte nicht nach Updates suchen 😿",
+        "en": "Couldn't check for updates 😿",
+    },
+    "say.update_downloading": {
+        "de": "Lade Update herunter... ⏳",
+        "en": "Downloading update... ⏳",
+    },
+    "say.update_installing": {
+        "de": "Update wird installiert... Bis gleich! 🐾",
+        "en": "Installing update... See you in a moment! 🐾",
+    },
+    "say.update_error": {
+        "de": "Update-Fehler: {err} 😿",
+        "en": "Update error: {err} 😿",
+    },
+    "say.still_busy": {
+        "de": "Moment, ich bin noch dran... \U0001F6E0\uFE0F",
+        "en": "Hang on, I'm still working on it... \U0001F6E0\uFE0F",
+    },
+    "say.working": {
+        "de": "Ich bin dran... \U0001F43E",
+        "en": "On it... \U0001F43E",
+    },
+    "say.i_am": {
+        "de": "{sound} Ich bin {name}! {emoji}",
+        "en": "{sound} I'm {name}! {emoji}",
+    },
+    "say.treat_thanks": {
+        "de": "{sound} Danke, {name}! \U0001F356 Schon {n} Leckerli bekommen! \U0001F496",
+        "en": "{sound} Thanks, {name}! \U0001F356 That's {n} treats already! \U0001F496",
+    },
+    "say.birthday": {
+        "de": "Alles Gute zum Geburtstag, {name}! 🎂🎉✨",
+        "en": "Happy birthday, {name}! 🎂🎉✨",
+    },
+    "say.late_night_1": {
+        "de": "Immer noch fleißig, {name}? Schlaf gut und erhol dich schön! 😴💤",
+        "en": "Still hard at work, {name}? Sleep well and get some rest! 😴💤",
+    },
+    "say.late_night_2": {
+        "de": "Es ist schon spät, {name} – Zeit fürs Bett? 😴",
+        "en": "It's getting late, {name} – time for bed? 😴",
+    },
+    "say.pc_hot": {
+        "de": "Puh, dein PC kocht! \U0001F975 Soll ich nachsehen, was so viel frisst? (Antworte mit Ja oder Nein)",
+        "en": "Phew, your PC is boiling! \U0001F975 Want me to check what's eating so much? (Answer yes or no)",
+    },
+    "say.battery_low": {
+        "de": "\U0001F50B Nur noch {pct} % Akku, {name}! Bitte Ladekabel anschlie\u00dfen.",
+        "en": "\U0001F50B Only {pct} % battery left, {name}! Please plug in the charger.",
+    },
+    "say.hotkey_taken": {
+        "de": "Dieses Tastenk\u00fcrzel ist schon belegt \U0001F63F Ich behalte das alte.",
+        "en": "That shortcut is already taken \U0001F63F I'll keep the old one.",
+    },
+    "say.saved": {
+        "de": "Gespeichert! \U0001F43E",
+        "en": "Saved! \U0001F43E",
+    },
+    "say.nice_to_meet": {
+        "de": "Schön dich kennenzulernen, {u}! Ich bin {cname} 🐾",
+        "en": "Nice to meet you, {u}! I'm {cname} 🐾",
+    },
+    "say.no_cards": {
+        "de": "Du hast noch keine Lernkarten! 📚 Öffne per Rechtsklick '📚 Lernkarten' oder sag 'Kylie, erstelle mir Lernkarten zu Englisch'!",
+        "en": "You don't have any flashcards yet! 📚 Right-click and open '📚 Flashcards' or say 'Kylie, make me flashcards about English'!",
+    },
+    "say.quiz_start": {
+        "de": "Quiz-Runde startet! 📚 ({n} Karten)",
+        "en": "Quiz round starting! 📚 ({n} cards)",
+    },
+    "say.quiz_cancelled": {
+        "de": "Quiz abgebrochen. Wir üben ein andermal weiter! 🐾",
+        "en": "Quiz cancelled. We'll practice another time! 🐾",
+    },
+    "say.cards_need_key": {
+        "de": "Für automatische KI-Lernkarten trage bitte erst deinen Gemini-Key ein (Rechtsklick → Gemini-Key eintragen) 🔑",
+        "en": "For automatic AI flashcards, please enter your Gemini key first (right-click → Enter Gemini key) 🔑",
+    },
+    "say.cards_creating": {
+        "de": "Ich erstelle {count} Lernkarten zu „{topic}“ für dich... 🧠📚",
+        "en": "I'm creating {count} flashcards about “{topic}” for you... 🧠📚",
+    },
+    "say.cards_done": {
+        "de": "Fertig! 🎉 {n} Lernkarten im Deck „{deck_name}“ gespeichert. Sag 'quiz starten', um loszulegen! 🐾",
+        "en": "Done! 🎉 {n} flashcards saved in the deck “{deck_name}”. Say 'start quiz' to begin! 🐾",
+    },
+    "say.cards_failed": {
+        "de": "Konnte keine Karten erstellen: {err}",
+        "en": "Couldn't create any cards: {err}",
+    },
+    "say.photo_warn": {
+        "de": "Achtung, der ganze Bildschirm ist auf dem Foto mit {cname} 📸",
+        "en": "Heads up, the whole screen will be in the photo with {cname} 📸",
+    },
+    "say.countdown_3": {
+        "de": "3... 🐾",
+        "en": "3... 🐾",
+    },
+    "say.countdown_2": {
+        "de": "2... 📸",
+        "en": "2... 📸",
+    },
+    "say.countdown_1": {
+        "de": "1... Smile! ✨",
+        "en": "1... Smile! ✨",
+    },
+    "say.photo_done": {
+        "de": "Klick! 📸 Wunderschön geworden! ✨",
+        "en": "Click! 📸 It turned out beautifully! ✨",
+    },
+    "say.photo_failed": {
+        "de": "Konnte kein Foto aufnehmen: {exc}",
+        "en": "Couldn't take a photo: {exc}",
+    },
+    "say.note_stuck": {
+        "de": "Haftnotiz angeklebt! 📌",
+        "en": "Sticky note attached! 📌",
+    },
+    "say.done_great": {
+        "de": "Erledigt! Super gemacht! ✨",
+        "en": "Done! Well done! ✨",
+    },
+    "say.select_first": {
+        "de": "Markier erst etwas und drück Strg+C 😺",
+        "en": "Select something first and press Ctrl+C 😺",
+    },
+    "say.explain_need_key": {
+        "de": "Für Erklärungen brauche ich meinen Gemini-Key 🔑",
+        "en": "I need my Gemini key for explanations 🔑",
+    },
+    "say.looking": {
+        "de": "Ich schau's mir an... 🐾",
+        "en": "Let me take a look... 🐾",
+    },
+    "say.error": {
+        "de": "Fehler: {err} 😿",
+        "en": "Error: {err} 😿",
+    },
+    "say.doctor_need_key": {
+        "de": "Für den Fehlermeldungs-Doktor brauche ich meinen Gemini-Key 🔑",
+        "en": "I need my Gemini key for the error doctor 🔑",
+    },
+    "say.doctor_scanning": {
+        "de": "Ich untersuche den Bildschirm... 🩺",
+        "en": "Examining the screen... 🩺",
+    },
+    "say.doctor_error": {
+        "de": "Doktor-Fehler: {err} 😿",
+        "en": "Doctor error: {err} 😿",
+    },
+    "say.guide_need_key": {
+        "de": "Für die Klick-Anleitung brauche ich meinen Gemini-Key 🔑",
+        "en": "I need my Gemini key for the click guide 🔑",
+    },
+    "say.guide_start": {
+        "de": "IT-Support-Modus aktiviert! 🕶️ Ich zeig's dir Schritt für Schritt.",
+        "en": "IT support mode activated! 🕶️ I'll show you step by step.",
+    },
+    "say.guide_step_failed": {
+        "de": "Konnte den nächsten Schritt nicht laden: {err} 😿",
+        "en": "Couldn't load the next step: {err} 😿",
+    },
+    "say.guide_done": {
+        "de": "Geschafft! 🎉",
+        "en": "Done! 🎉",
+    },
+    "say.guide_ended": {
+        "de": "Klick-Anleitung beendet! 🐾",
+        "en": "Click guide finished! 🐾",
+    },
+    "data.del_chats_title": {
+        "de": "Alle Chats löschen",
+        "en": "Delete all chats",
+    },
+    "data.del_chats_text": {
+        "de": "Möchtest du wirklich alle gespeicherten Chat-Verläufe löschen?\nGemerkte Fakten bleiben erhalten.",
+        "en": "Do you really want to delete all saved chat histories?\nRemembered facts will be kept.",
+    },
+    "data.deleted_title": {
+        "de": "Gelöscht",
+        "en": "Deleted",
+    },
+    "data.deleted_text": {
+        "de": "Alle Chat-Verläufe wurden gelöscht. 🗑️",
+        "en": "All chat histories have been deleted. 🗑️",
+    },
+    "data.wipe_title": {
+        "de": "Alles vergessen",
+        "en": "Forget everything",
+    },
+    "data.wipe_text": {
+        "de": "Wirklich alles vergessen? Das kann nicht rückgängig gemacht werden.\nAlle Chats, gemerkten Fakten und Statistiken werden unwiderruflich gelöscht.",
+        "en": "Really forget everything? This cannot be undone.\nAll chats, remembered facts and statistics will be permanently deleted.",
+    },
+    "data.reset_title": {
+        "de": "Zurückgesetzt",
+        "en": "Reset",
+    },
+    "data.reset_text": {
+        "de": "Alle Daten wurden vollständig gelöscht. 🧹✨",
+        "en": "All data has been completely deleted. 🧹✨",
+    },
+    "data.export_title": {
+        "de": "Alle Daten exportieren",
+        "en": "Export all data",
+    },
+    "common.file_filter_txt": {
+        "de": "Textdateien (*.txt);;Alle Dateien (*.*)",
+        "en": "Text files (*.txt);;All files (*.*)",
+    },
+    "common.export_ok_title": {
+        "de": "Export erfolgreich",
+        "en": "Export successful",
+    },
+    "common.export_ok_text": {
+        "de": "Deine Daten wurden nach:\n{path}\nexportiert! 📄✨",
+        "en": "Your data was exported to:\n{path}\n📄✨",
+    },
+    "common.error_title": {
+        "de": "Fehler",
+        "en": "Error",
+    },
+    "data.onboarding_failed": {
+        "de": "Konnte Kennenlernen nicht starten: {e}",
+        "en": "Couldn't start the onboarding: {e}",
+    },
+    "data.btn_delete": {
+        "de": "Löschen",
+        "en": "Delete",
+    },
+    "data.btn_cancel": {
+        "de": "Abbrechen",
+        "en": "Cancel",
+    },
+    "chats.export_title": {
+        "de": "Chat-Verlauf exportieren",
+        "en": "Export chat history",
+    },
+    "onboarding.none": {
+        "de": "Keine",
+        "en": "None",
+    },
+    "onboarding.privacy_ack": {
+        "de": "Datenschutz bestätigt ✓",
+        "en": "Privacy confirmed ✓",
+    },
+    "onboarding.key_entered": {
+        "de": "🔑 [API-Key eingegeben]",
+        "en": "🔑 [API key entered]",
     },
 }
 

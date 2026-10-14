@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Lokaler Speicher fuer Chats, gemerkte Fakten und Statistiken (SQLite)."""
 from __future__ import annotations
 
@@ -442,6 +444,9 @@ class MemoryStore:
         with self._db() as db:
             db.execute("DELETE FROM notes WHERE id = ?", (note_id,))
 
+    # Wird nach "Alles vergessen" aufgerufen (z. B. Verlauf im Speicher leeren). Kann aus Worker-Threads kommen.
+    on_wipe: list = []
+
     def wipe_everything(self) -> None:
         """Loescht alle Tabellen restlos und fuehrt ein VACUUM aus."""
         conn = sqlite3.connect(str(self.path), timeout=10.0)
@@ -460,6 +465,11 @@ class MemoryStore:
             conn.execute("VACUUM")
         finally:
             conn.close()
+        for cb in list(MemoryStore.on_wipe):
+            try:
+                cb()
+            except Exception:
+                pass
 
 
 _STORE: Optional[MemoryStore] = None

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Das Pet-Fenster: transparentes Always-on-Top-Overlay mit Zustandsmaschine, Physik und Animation."""
 from __future__ import annotations
 

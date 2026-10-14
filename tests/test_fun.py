@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer Phase 6: Freundschaft, Fokus-Statistik, Lernkarten, Fotobox und Notizen."""
 from __future__ import annotations
 

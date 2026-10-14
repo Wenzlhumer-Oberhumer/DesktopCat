@@ -83,7 +83,8 @@ if (-not $SkipInstaller) {
         # 8. SHA256-Pruefsumme fuer Auto-Update schreiben
         $setupHash = (Get-FileHash -Path $setupExe -Algorithm SHA256).Hash.ToLower()
         $shaFile = "$ScriptDir\dist\DesktopCat-Setup-$Version.exe.sha256"
-        "$setupHash  DesktopCat-Setup-$Version.exe" | Set-Content -Path $shaFile -Encoding UTF8
+        # ohne BOM: aeltere Desktop-Cat-Versionen (<= 2.2.1) koennen eine BOM nicht lesen
+        [IO.File]::WriteAllText($shaFile, "$setupHash  DesktopCat-Setup-$Version.exe`n", (New-Object Text.UTF8Encoding $false))
         Write-Host "SHA256 fuer Setup geschrieben: $shaFile ($setupHash)" -ForegroundColor Green
 
         # 9. Optionales Code-Signing

@@ -1,4 +1,4 @@
-; Inno Setup 6 Script fuer Desktop Cat
+﻿; Inno Setup 6 Script fuer Desktop Cat
 #ifndef AppVersion
 #define AppVersion "2.2.0"
 #endif
@@ -20,6 +20,7 @@ CloseApplications=yes
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+LicenseFile=..\LICENSE
 ShowLanguageDialog=no
 
 [Languages]
@@ -37,6 +38,7 @@ Type: files; Name: "{userdesktop}\Mochi.lnk"
 [Files]
 Source: "..\dist\DesktopCat\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Source: "..\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\Desktop Cat"; Filename: "{app}\DesktopCat.exe"

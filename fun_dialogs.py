@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Dialoge für Freundschaft, Fokus-Statistik und Lernkarten (Phase 6)."""
 from __future__ import annotations
 
@@ -324,6 +326,9 @@ class FocusStatsDialog(QDialog):
 # ======================================================================================
 #  3. Lernkarten-Dialog (Flashcards Verwaltung & KI Generator)
 # ======================================================================================
+_RUNNING_WORKERS: list = []
+
+
 class GeminiCardWorker(QThread):
     """Fragt Gemini im Hintergrund nach Lernkarten als JSON-Liste."""
 
@@ -369,7 +374,6 @@ class FlashcardsDialog(QDialog):
     def __init__(self, store, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.store = store
-        self._gemini_worker: Optional[GeminiCardWorker] = None
 
         self.setWindowTitle(tr("cards.title"))
         self.resize(600, 560)
@@ -586,10 +590,15 @@ class FlashcardsDialog(QDialog):
             return
 
         self._ai_topic = topic.strip()
-        self._gemini_worker = GeminiCardWorker(self._ai_topic)
-        self._gemini_worker.success.connect(self._on_ai_cards_generated)
-        self._gemini_worker.failed.connect(lambda err: QMessageBox.warning(self, tr("cards.ai_err_title"), tr("cards.ai_err_msg", err=err)))
-        self._gemini_worker.start()
+        worker = GeminiCardWorker(self._ai_topic)
+        worker.success.connect(self._on_ai_cards_generated)
+        worker.failed.connect(self._on_ai_cards_failed)
+        # Modulweit festhalten: schliesst man den Dialog waehrend Gemini antwortet, darf der Thread nicht mitsterben
+        _RUNNING_WORKERS[:] = [w for w in _RUNNING_WORKERS if not w.isFinished()] + [worker]
+        worker.start()
+
+    def _on_ai_cards_failed(self, err: str) -> None:
+        QMessageBox.warning(self, tr("cards.ai_err_title"), tr("cards.ai_err_msg", err=err))
 
     def _on_ai_cards_generated(self, cards: list) -> None:
         deck = self.cb_decks.currentText() or "Allgemein"

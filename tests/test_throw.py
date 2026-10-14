@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer die Wurf-Physik in pet_window (reine Funktionen, keine Fenster)."""
 from pet_window import THROW_MAX, throw_step, throw_velocity
 

@@ -1,6 +1,6 @@
 # Desktop Cat v2.2 – Gesamtplan für den Coding-Agent
 
-Projekt: Python 3.13 + PyQt6 Desktop-Pet für Windows. Repo `NairolfDev/DesktopCat`, Branch **`dev`**.
+Projekt: Python 3.13 + PyQt6 Desktop-Pet für Windows. Repo `Wenzlhumer-Oberhumer/DesktopCat`, Branch **`dev`**.
 Aktueller Stand: **v2.1.0** („Mochi“, 9 Figuren, Gemini-Gratis-Key, Installer, Auto-Update, 43 Tests).
 Ziel: **v2.2.0 „Desktop Cat“** mit Standard-Katze **Kylie** und vielen neuen Features.
 

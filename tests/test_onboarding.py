@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Tests fuer Phase 10: Kennenlernen mit Kylie (Onboarding, Profil, Ablauf, Offline-Befehle)."""
 import tempfile
 from pathlib import Path

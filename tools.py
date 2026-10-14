@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Echte Windows-Aktionen, die der Buddy (per KI oder Regelparser) ausfuehren kann.
 
 Alle Funktionen sind blockierend und fuer den Einsatz in einem Worker-Thread gedacht - nie im UI-Thread aufrufen.
@@ -90,6 +92,16 @@ def _pet_name() -> str:
         return get_character_info(_ctx["char"]).get("name", "Kylie")
     except Exception:
         return "Kylie"
+
+
+def known_folder(name: str) -> Path:
+    """Echter Pfad eines Windows-Ordners (Downloads, Documents, Pictures, Music, Videos) -
+    auch wenn er z. B. nach OneDrive umgeleitet ist."""
+    try:
+        from win32com.shell import shell, shellcon
+        return Path(shell.SHGetKnownFolderPath(getattr(shellcon, f"FOLDERID_{name}")))
+    except Exception:
+        return Path.home() / name
 
 
 def desktop_dir() -> Path:
@@ -717,14 +729,15 @@ def clipboard_action(action: str = "read", text: Optional[str] = None) -> ToolRe
 def open_folder(name: str = "downloads") -> ToolResult:
     """Oeffnet Windows-Ordner wie Downloads, Dokumente, Desktop, Bilder, Musik oder Papierkorb."""
     raw = (name or "downloads").lower().strip()
-    home = Path.home()
+    downloads, documents = known_folder("Downloads"), known_folder("Documents")
+    pictures, music, videos = known_folder("Pictures"), known_folder("Music"), known_folder("Videos")
     mapping = {
-        "downloads": home / "Downloads", "download": home / "Downloads",
-        "dokumente": home / "Documents", "documents": home / "Documents",
+        "downloads": downloads, "download": downloads,
+        "dokumente": documents, "documents": documents,
         "desktop": desktop_dir(), "schreibtisch": desktop_dir(),
-        "bilder": home / "Pictures", "pictures": home / "Pictures", "fotos": home / "Pictures",
-        "musik": home / "Music", "music": home / "Music",
-        "videos": home / "Videos", "filme": home / "Videos",
+        "bilder": pictures, "pictures": pictures, "fotos": pictures,
+        "musik": music, "music": music,
+        "videos": videos, "filme": videos,
         "c": Path("C:\\"), "c:": Path("C:\\"), "festplatte": Path("C:\\"),
     }
     if "papierkorb" in raw or "trash" in raw or "recycle" in raw:
@@ -765,8 +778,14 @@ def calculate(expression: str) -> ToolResult:
         res = val * (p / 100.0)
         return ToolResult(True, f"Das Ergebnis ist: {res:g} 🧮✨ ({p:g}% von {val:g})")
 
-    expr_clean = expr.replace(",", ".").replace("x", "*").replace(":", "/").replace("^", "**")
-    expr_clean = re.sub(r"[^0-9+\-*/().%\s]", "", expr_clean)
+    import math
+    expr_clean = expr.replace(",", ".").replace(":", "/").replace("^", "**").replace("wurzel", "sqrt")
+    expr_clean = re.sub(r"(?<=\d)\s*x\s*(?=\d)", "*", expr_clean)          # "3 x 4" -> "3*4", "max" bleibt
+    # Buchstaben NICHT einfach entfernen: aus "sqrt(144)+6" wurde sonst "(144)+6" = 150
+    expr_clean = re.sub(r"[^0-9a-z_+\-*/().%\s]", "", expr_clean)
+    funcs = {"sqrt": math.sqrt, "abs": abs, "round": round, "sin": math.sin, "cos": math.cos, "tan": math.tan,
+             "log": math.log10, "ln": math.log}
+    consts = {"pi": math.pi, "e": math.e}
 
     ops = {
         ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
@@ -777,8 +796,15 @@ def calculate(expression: str) -> ToolResult:
     def _eval(node):
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return node.value
+        if isinstance(node, ast.Name) and node.id in consts:
+            return consts[node.id]
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in funcs \
+                and len(node.args) == 1 and not node.keywords:
+            return funcs[node.func.id](_eval(node.args[0]))
         if isinstance(node, ast.BinOp) and type(node.op) in ops:
             left, right = _eval(node.left), _eval(node.right)
+            if isinstance(node.op, ast.Pow) and abs(right) > 1000:   # 9**9**9 wuerde die App einfrieren
+                raise ValueError("Exponent zu gross")
             return ops[type(node.op)](left, right)
         if isinstance(node, ast.UnaryOp) and type(node.op) in ops:
             return ops[type(node.op)](_eval(node.operand))
@@ -1320,13 +1346,21 @@ def get_weather(location: Optional[str] = None) -> ToolResult:
             pass
     is_en = i18n.lang() == "en"
     w_lang = "en" if is_en else "de"
-    try:
-        resp = requests.get(f"https://wttr.in/{requests.utils.quote(loc)}", params={"format": "j1", "lang": w_lang},
-                            headers={"User-Agent": "curl/8.0", "Accept": "application/json"}, timeout=6)
-        resp.raise_for_status()
-        data = resp.json()
-        cur = data["current_condition"][0]
-    except (requests.RequestException, ValueError, KeyError, IndexError):
+    data = cur = None
+    # "Gaspoltshofen - Grieskirchen - Oberoesterreich" kennt wttr.in nicht -> erster Ortsname, dann Ortung per IP
+    first = re.split(r"\s*[-/,(]\s*", loc)[0].strip() if loc else ""
+    for candidate in dict.fromkeys([loc, first, ""]):
+        try:
+            resp = requests.get(f"https://wttr.in/{requests.utils.quote(candidate)}", params={"format": "j1", "lang": w_lang},
+                                headers={"User-Agent": "curl/8.0", "Accept": "application/json"}, timeout=6)
+            resp.raise_for_status()
+            data = resp.json()
+            cur = data["current_condition"][0]
+            loc = candidate
+            break
+        except (requests.RequestException, ValueError, KeyError, IndexError):
+            continue
+    if cur is None:
         err = f"Can't fetch weather right now \U0001F327️ Are you online, {user}?" if is_en else f"Das Wetter kann ich gerade nicht abrufen \U0001F327️ Hast du Internet, {user}?"
         return ToolResult(False, err)
 

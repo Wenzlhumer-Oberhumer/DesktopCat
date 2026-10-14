@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Einstellungs-Verwaltung: laedt/speichert config.json und ergaenzt fehlende Werte mit Defaults."""
 from __future__ import annotations
 

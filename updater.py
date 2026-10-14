@@ -1,9 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
 """Auto-Update-Logik ueber GitHub Releases."""
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import re
 import subprocess
 import tempfile
 import urllib.request
@@ -42,6 +45,23 @@ def is_trusted_url(url: str) -> bool:
     return any(url.startswith(prefix) for prefix in TRUSTED_PREFIXES)
 
 
+def latest_release_via_redirect(repo: str) -> dict:
+    """Neuestes Release ohne GitHub-API (kein Rate-Limit): /releases/latest leitet auf /releases/tag/<tag> weiter.
+    Liefert dieselbe Form wie die API-Antwort (tag_name, assets, body)."""
+    req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", method="HEAD",
+                                 headers={"User-Agent": f"DesktopCat/{__version__}"})
+    with urllib.request.urlopen(req, timeout=10.0) as resp:
+        final_url = resp.geturl()
+    m = re.search(r"/releases/tag/([^/?#]+)", final_url)
+    if not m:
+        raise ValueError(f"Kein Release gefunden ({final_url})")
+    tag = m.group(1)
+    setup = f"DesktopCat-Setup-{tag.lstrip('vV')}.exe"
+    base = f"https://github.com/{repo}/releases/download/{tag}/"
+    return {"tag_name": tag, "body": "",
+            "assets": [{"name": n, "browser_download_url": base + n} for n in (setup, setup + ".sha256")]}
+
+
 class CheckUpdateWorker(QThread):
     """Prueft im Hintergrund, ob ein neues GitHub Release vorliegt."""
 
@@ -62,8 +82,13 @@ class CheckUpdateWorker(QThread):
             },
         )
         try:
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            try:
+                with urllib.request.urlopen(req, timeout=10.0) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except Exception as api_exc:
+                # Die API erlaubt ohne Login nur 60 Abfragen/Stunde pro IP (Schule, Firma, ...) -> Webseite fragen
+                logger.info("GitHub-API nicht verfuegbar (%s), nutze Release-Weiterleitung", api_exc)
+                data = latest_release_via_redirect(self.repo)
 
             tag = data.get("tag_name", "")
             if not tag:
@@ -86,19 +111,17 @@ class CheckUpdateWorker(QThread):
             # Assets suchen
             setup_url = ""
             sha_url = ""
-            for asset in data.get("assets", []):
-                name = asset.get("name", "")
-                download_url = asset.get("browser_download_url", "")
-                if name.endswith(".exe") and "Setup" in name:
-                    setup_url = download_url
-                elif name.endswith(".sha256"):
-                    sha_url = download_url
+            assets = {a.get("name", ""): a.get("browser_download_url", "") for a in data.get("assets", [])}
+            setup_name = next((n for n in assets if n.startswith("DesktopCat-Setup-") and n.endswith(".exe")), "")
+            setup_url = assets.get(setup_name, "")
+            sha_url = assets.get(setup_name + ".sha256", "")
 
-            if not setup_url:
+            # Ohne Pruefsumme wird nichts installiert (Schutz vor manipulierten/fehlerhaften Downloads)
+            if not setup_url or not sha_url:
                 self.check_completed.emit({
                     "status": "error",
                     "manual": self.manual,
-                    "error": "Keine Setup.exe im Release gefunden.",
+                    "error": "Im Release fehlt DesktopCat-Setup-*.exe oder die passende .sha256-Datei.",
                 })
                 return
 
@@ -138,6 +161,9 @@ class DownloadUpdateWorker(QThread):
             return
 
         expected_hash = ""
+        if not self.sha_url:
+            self.download_completed.emit(False, "Keine SHA256-Pruefsumme vorhanden - Update abgebrochen.")
+            return
         if self.sha_url:
             if not is_trusted_url(self.sha_url):
                 self.download_completed.emit(False, "SHA256-URL ist nicht vertrauenswuerdig.")
@@ -148,7 +174,7 @@ class DownloadUpdateWorker(QThread):
                     headers={"User-Agent": f"DesktopCat/{__version__}"},
                 )
                 with urllib.request.urlopen(req_sha, timeout=10.0) as resp:
-                    sha_content = resp.read().decode("utf-8").strip()
+                    sha_content = resp.read().decode("utf-8-sig").strip()
                     parts = sha_content.split()
                     if parts:
                         expected_hash = parts[0].strip().lower()
@@ -184,7 +210,7 @@ class DownloadUpdateWorker(QThread):
                         self.progress.emit(min(100, pct))
 
             actual_hash = hasher.hexdigest().lower()
-            if expected_hash and actual_hash != expected_hash:
+            if not expected_hash or actual_hash != expected_hash:
                 try:
                     temp_dest.unlink()
                 except OSError:
