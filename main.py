@@ -453,6 +453,10 @@ class Buddy(QObject):
         self.pet.onboarding_requested.connect(lambda: self._open_onboarding(is_update=True))
         self.pet.wash_requested.connect(self._on_wash)
         self.pet.character_tree_requested.connect(self.open_character_tree)
+        self.pet.bubble_game_requested.connect(self.start_bubble_game)
+        self.pet.yarn_game_requested.connect(self.start_yarn_game)
+        self.pet.wallpaper_requested.connect(self.activate_lively_wallpaper)
+        self.pet.pet_bed_requested.connect(self.toggle_pet_bed)
         self.pet.hide_requested.connect(self.hide_pet)
         self.pet.focus_mode_requested.connect(self.start_focus_mode)
         self.tray.messageClicked.connect(self._on_tray_message_clicked)
@@ -466,6 +470,24 @@ class Buddy(QObject):
         self.data_wiped.connect(self._on_data_wiped)
         self._quiz_session: Optional[dict] = None
         self._last_photo_folder: Optional[str] = None
+
+        # v2.4.0: Möbel (Katzenbett) & Minispiele
+        from furniture import PetBedWidget
+        self.pet_bed = PetBedWidget(cfg)
+        self.pet.pet_bed = self.pet_bed
+        if bool(cfg.get("furniture.bed_visible", True)):
+            self.pet_bed.show()
+        else:
+            self.pet_bed.hide()
+
+        from minigames import BubblePopGameManager, YarnBallWidget
+        self.bubble_mgr = BubblePopGameManager(get_memory_store(), cfg)
+        self.yarn_ball: Optional[YarnBallWidget] = None
+
+        # Auto-Sync Lively Wallpaper (Empfohlen ⭐)
+        if bool(cfg.get("lively.auto_sync", False)):
+            import lively_wallpaper
+            lively_wallpaper.apply_lively_wallpaper(cfg, get_memory_store())
 
         self.explain_card = ExplainCard()
         self.guide_overlay: Optional[GuideOverlay] = None
@@ -656,6 +678,12 @@ class Buddy(QObject):
         self._say(tr("about.text", version=__version__), 6000)
 
     def quit(self) -> None:
+        if bool(self.cfg.get("lively.auto_sync", False)):
+            try:
+                import lively_wallpaper
+                lively_wallpaper.restore_original_wallpaper(self.cfg)
+            except Exception:
+                pass
         self.note_manager.close_all()
         self.hotkey.unregister()
         self.tray.hide()
@@ -905,6 +933,10 @@ class Buddy(QObject):
         ci = self.char_info()
         self._say(tr("say.treat_thanks", sound=ci.get('sound', 'Mjam!'), name=self.user_name(), n=n), 4000)
         self._award_friendship("treat")
+        from achievements import record_achievement_event
+        from seasonal_events import record_quest_event
+        record_achievement_event(store, "treats_given", 1)
+        record_quest_event(store, "quest_hl_treats", 1)
 
     def _on_wash(self) -> None:
         import pet_care
@@ -916,12 +948,18 @@ class Buddy(QObject):
         pet_care.wash_pet(self.cfg, store)
         self.pet.wash_pet(4.5)
         self._play_pet_sound()
+        if hasattr(self, "bubble_mgr") and self.bubble_mgr:
+            self.bubble_mgr.spawn_wave(8)
+        from achievements import record_achievement_event
+        from seasonal_events import record_quest_event
+        record_achievement_event(store, "washes_given", 1)
+        record_quest_event(store, "quest_sp_washes", 1)
         ci = self.char_info()
         cname = ci.get("name", "Kylie")
         lines = [
             f"Bubbly fresh! 🫧 {cname} glänzt wieder wie neu!",
             f"Ooh wie das herrlich duftet! 🧼 Danke {self.user_name()}!",
-            f"Blubb blubb... Seifenblasen! 🫧 So sauber war ich noch nie!",
+            f"Blubb blubb... Seifenblasen! 🫧 Klicke sie an, um sie platzen zu lassen!",
         ]
         self._say(random.choice(lines), 4500)
         self._award_friendship("wash")
@@ -1354,7 +1392,73 @@ class Buddy(QObject):
         except Exception:
             store = None
         dlg = CharacterTreeDialog(self.cfg, store, self.pet)
+        dlg.bubble_game_requested.connect(self.start_bubble_game)
+        dlg.yarn_game_requested.connect(self.start_yarn_game)
+        dlg.wallpaper_requested.connect(self.activate_lively_wallpaper)
+        dlg.bed_toggled.connect(self.toggle_pet_bed)
         dlg.exec()
+
+    # -- v2.4.0: Minispiele, Lively Wallpaper & Möbel ----------------------------------
+    def start_bubble_game(self) -> None:
+        if not hasattr(self, "bubble_mgr") or not self.bubble_mgr:
+            from minigames import BubblePopGameManager
+            from memory_store import get_memory_store
+            self.bubble_mgr = BubblePopGameManager(get_memory_store(), self.cfg)
+        self.bubble_mgr.spawn_wave(14)
+        self._say("🫧 Seifenblasen-Welle gestartet! Klicke die Blasen an, um sie mit *Plopp!* zu zerplatzen!", 4500)
+
+    def start_yarn_game(self) -> None:
+        from minigames import YarnBallWidget
+        if not getattr(self, "yarn_ball", None):
+            self.yarn_ball = YarnBallWidget()
+            self.yarn_ball.kicked.connect(self._on_yarn_kicked)
+
+        hx = self.pet.x() + (120 if self.pet.facing > 0 else -120)
+        hy = self.pet.y() - 80
+        self.yarn_ball.launch(float(hx), float(hy), 280.0 if self.pet.facing > 0 else -280.0, -220.0)
+        self.pet.wake()
+        self.pet.chase_mouse(12.0)
+        self._say("🧶 Fang das Wollknäuel! Klicke und wirf es mit Schwung über den Desktop!", 4500)
+
+    def _on_yarn_kicked(self) -> None:
+        from memory_store import get_memory_store
+        from achievements import record_achievement_event
+        from fun import add_friendship_points
+        try:
+            store = get_memory_store()
+            add_friendship_points(store, "treat")
+            record_achievement_event(store, "yarn_catches", 1)
+        except Exception:
+            pass
+        self.pet.react_happy()
+        cname = self.char_info().get("name", "Kylie")
+        self._say(f"Yay! 🐾 {cname} hat das Wollknäuel gefangen und weggestupst!", 3500)
+
+    def activate_lively_wallpaper(self) -> None:
+        import lively_wallpaper
+        from memory_store import get_memory_store
+        try:
+            store = get_memory_store()
+        except Exception:
+            store = None
+        ok, msg = lively_wallpaper.apply_lively_wallpaper(self.cfg, store)
+        self._say(msg, 5000)
+        if ok:
+            self.pet.celebrate_confetti(4.0)
+
+    def toggle_pet_bed(self, visible: Optional[bool] = None) -> None:
+        if not hasattr(self, "pet_bed") or not self.pet_bed:
+            from furniture import PetBedWidget
+            self.pet_bed = PetBedWidget(self.cfg)
+            self.pet.pet_bed = self.pet_bed
+        new_vis = (not self.pet_bed.isVisible()) if visible is None else visible
+        self.cfg.set("furniture.bed_visible", new_vis)
+        self.cfg.save()
+        if new_vis:
+            self.pet_bed.show()
+            self._say("🛋️ Dein kuscheliges Katzenbett steht bereit! Du kannst es mit der Maus frei verschieben.", 4000)
+        else:
+            self.pet_bed.hide()
 
     def open_friendship_dialog(self) -> None:
         from fun_dialogs import FriendshipDialog

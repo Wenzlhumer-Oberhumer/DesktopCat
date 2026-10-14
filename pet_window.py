@@ -17,6 +17,7 @@ from PyQt6.QtGui import QCursor, QGuiApplication, QPainter
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from i18n import tr
+import sound_effects
 import tools
 
 from accessories import fly_position
@@ -159,6 +160,10 @@ class PetWindow(QWidget):
     focus_mode_requested = pyqtSignal()
     wash_requested = pyqtSignal()
     character_tree_requested = pyqtSignal()
+    bubble_game_requested = pyqtSignal()
+    yarn_game_requested = pyqtSignal()
+    wallpaper_requested = pyqtSignal()
+    pet_bed_requested = pyqtSignal()
 
 
     GRAVITY = 2300.0
@@ -210,6 +215,8 @@ class PetWindow(QWidget):
         self._bounced = False
         self._pose = None
         self._last_sig = None
+        self.pet_bed = None
+        self.room_mode = bool(cfg.get("pet.room_mode", True))
 
         # Zubehoer & Fliegen (Phase 4)
         self._accessories: set[str] = set()
@@ -311,6 +318,7 @@ class PetWindow(QWidget):
     def drink_water(self, seconds: float = 5.0) -> None:
         """Laesst die Katze sichtbar Wasser aus ihrem Wassernaepfchen trinken."""
         self.wake()
+        sound_effects.play_sound("water", self.cfg)
         now = time.monotonic()
         self._water_t = now
         self._water_until = now + seconds
@@ -321,6 +329,7 @@ class PetWindow(QWidget):
     def eat_treat(self, seconds: float = 3.5) -> None:
         """Knabber- und Mampf-Animation beim Fuettern."""
         self.wake()
+        sound_effects.play_sound("chomp", self.cfg)
         now = time.monotonic()
         self._crumbs_t = now
         self._crumbs_until = now + seconds
@@ -333,6 +342,7 @@ class PetWindow(QWidget):
     def wash_pet(self, seconds: float = 4.5) -> None:
         """Laesst die Katze genussvoll ein Schaumbad nehmen mit schwebenden Seifenblasen."""
         self.wake()
+        sound_effects.play_sound("pop", self.cfg)
         now = time.monotonic()
         self._bubbles_t = now
         self._bubbles_until = now + seconds
@@ -431,6 +441,40 @@ class PetWindow(QWidget):
     def _ground_y(self) -> float:
         """y des Fensters, wenn das Pet direkt auf der Oberkante der Taskleiste steht."""
         return self._avail().bottom() + 1 - FLOOR * self.scale
+
+    def _perch_levels(self) -> list[float]:
+        """Gibt die verfuegbaren Hoehenebenen im Raum zurueck (Boden, Bett, Fensterbrett, Wandregal)."""
+        avail = self._avail()
+        ground = self._ground_y()
+        if not bool(self.cfg.get("pet.room_mode", True)):
+            return [ground]
+        h = float(avail.height())
+        shelf = float(avail.top() + h * 0.22)
+        window_sill = float(avail.top() + h * 0.48)
+        levels = [ground, window_sill, shelf]
+        if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+            _, bed_y = self.pet_bed.get_dock_position()
+            levels.append(bed_y)
+        return sorted(levels)
+
+    def _closest_perch_y(self, y: float) -> float:
+        """Findet die naechstgelegene Hoehenebene unterhalb oder nahe von y."""
+        levels = self._perch_levels()
+        ground = self._ground_y()
+        candidates = [lvl for lvl in levels if lvl >= y - 12]
+        return min(candidates, key=lambda l: abs(l - y)) if candidates else ground
+
+    def _leap_to_perch(self, target_y: float) -> None:
+        """Laesst die Katze mit einem agilen Katzensprung auf eine hoehere oder tiefere Ebene springen."""
+        self.wake()
+        dx = random.choice([-140.0, 140.0])
+        lo, hi = self._x_bounds()
+        target_x = max(lo + 60, min(hi - 60, self._px + dx))
+        self.facing = 1 if target_x > self._px else -1
+        self._vx = (target_x - self._px) * 1.5
+        dy = target_y - self._py
+        self._vy = min(-500.0, dy * 2.2 - 250.0) if dy < 0 else -180.0
+        self.set_state(PetState.FALLING)
 
     def _x_bounds(self) -> tuple[float, float]:
         g = self._avail()
@@ -564,6 +608,7 @@ class PetWindow(QWidget):
     def react_happy(self) -> None:
         """Klick-Reaktion: Huepfer + Herzchen."""
         self.wake()
+        sound_effects.play_sound("purr", self.cfg)
         now = time.monotonic()
         self._hop_t = now
         self._hearts_t = now
@@ -588,16 +633,34 @@ class PetWindow(QWidget):
             self._schedule_wander()
             return
         r = random.random()
-        if is_night(self.cfg) and r < 0.7:        # nachts doppelt so oft schlafen
+
+        # 1. Schlafen: Bevorzugt im Katzenbett, falls aufgestellt
+        if (is_night(self.cfg) and r < 0.6) or (r < 0.28):
+            if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
+                bed_x, bed_y = self.pet_bed.get_dock_position()
+                if abs(self._px - bed_x) > 25 or abs(self._py - bed_y) > 25:
+                    self._leap_to_perch(bed_y)
+                    self._px, self._py = bed_x, bed_y
+                    self._apply_pos()
             self.set_state(PetState.SLEEP)
-            self._schedule_wander(random.uniform(10, 20))
-        elif r < 0.22:                              # einfach stehen bleiben
+            self._schedule_wander(random.uniform(12, 25))
+            return
+
+        # 2. Raum-Modus: 2D-Klettern & Springen auf andere Ebenen (ohne Wolke)
+        if bool(self.cfg.get("pet.room_mode", True)) and r < 0.48:
+            levels = self._perch_levels()
+            other_levels = [lvl for lvl in levels if abs(lvl - self._py) > 40]
+            if other_levels:
+                chosen_y = random.choice(other_levels)
+                self._leap_to_perch(chosen_y)
+                self._schedule_wander(random.uniform(6, 12))
+                return
+
+        # 3. Stehen bleiben oder horizontal laufen
+        if r < 0.70:
             self.wake()
             self._schedule_wander()
-        elif r < 0.42:                            # schlafen
-            self.set_state(PetState.SLEEP)
-            self._schedule_wander(random.uniform(10, 20))
-        else:                                     # ein paar Schritte
+        else:
             self._start_walk()
             self._schedule_wander()
 
@@ -639,11 +702,11 @@ class PetWindow(QWidget):
             self._walk(dt)
         elif s == PetState.FALLING:
             self._fall(dt)
-        elif s == PetState.FLY:
-            self._fly(dt)
-        elif s != PetState.DRAGGED and self._py < self._ground_y() - 1.5 and not self._dragging:
-            self._vx = self._vy = 0.0       # z. B. Taskleiste hat sich bewegt -> nachfallen
-            self.set_state(PetState.FALLING)
+        elif s != PetState.DRAGGED and not self._dragging:
+            closest = self._closest_perch_y(self._py)
+            if self._py < closest - 2.5:
+                self._vx = self._vy = 0.0       # z. B. Ebene hat sich bewegt -> nachfallen
+                self.set_state(PetState.FALLING)
 
         # Effekt-Timer abklingen lassen
         if self._land_squash > 0:
@@ -708,14 +771,15 @@ class PetWindow(QWidget):
             return
         self._px += math.copysign(step, diff)
         self._px = max(lo, min(hi, self._px))
-        self._py = self._ground_y()
+        self._py = self._closest_perch_y(self._py)
         self._apply_pos()
 
     def _fall(self, dt: float) -> None:
         lo, hi = self._x_bounds()
         land_vx = self._vx
+        target_ground = self._closest_perch_y(self._py)
         self._px, self._py, self._vx, self._vy, self._bounced, event = throw_step(
-            self._px, self._py, self._vx, self._vy, dt, lo, hi, float(self._avail().top()), self._ground_y(),
+            self._px, self._py, self._vx, self._vy, dt, lo, hi, float(self._avail().top()), target_ground,
             self._bounced, self.GRAVITY)
         if event in ("wall", "floor_bounce"):
             self._land_squash = 1.0 if event == "floor_bounce" else 0.6
@@ -923,6 +987,7 @@ class PetWindow(QWidget):
             self.input_requested.emit()
 
     def _on_single_click(self) -> None:
+        sound_effects.play_sound("meow", self.cfg)
         self.react_happy()
         self.petted.emit()
 
@@ -1027,6 +1092,10 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.chase")).triggered.connect(lambda: self.chase_mouse(15.0))
         tricks.addAction(tr("menu.treat")).triggered.connect(self.give_treat)
         tricks.addAction(tr("menu.wash_pet", name=name)).triggered.connect(self.wash_requested.emit)
+        tricks.addAction(tr("menu.bubble_game")).triggered.connect(self.bubble_game_requested.emit)
+        tricks.addAction(tr("menu.yarn_game")).triggered.connect(self.yarn_game_requested.emit)
+        tricks.addAction(tr("menu.lively_wallpaper")).triggered.connect(self.wallpaper_requested.emit)
+        tricks.addAction(tr("menu.pet_bed")).triggered.connect(self.pet_bed_requested.emit)
         tricks.addAction(tr("menu.sleep")).triggered.connect(lambda: self.set_state(PetState.SLEEP))
         tricks.addAction(tr("menu.wake")).triggered.connect(self.wake)
 

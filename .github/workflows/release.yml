@@ -1,0 +1,60 @@
+name: Build and Release Desktop Cat
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows EXE & Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup --no-progress
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller pillow
+
+      - name: Generate Multi-Size Icon
+        run: |
+          python tools_dev/make_icon.py
+
+      - name: Run Build Script (PyInstaller & Inno Setup)
+        run: |
+          powershell -ExecutionPolicy Bypass -File build.ps1
+
+      - name: Create Portable Zip
+        run: |
+          Compress-Archive -Path dist\DesktopCat\* -DestinationPath dist\DesktopCat-Windows-Portable.zip
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DesktopCat-Setup-*.exe
+            dist/DesktopCat-Setup-*.exe.sha256
+            dist/DesktopCat-Windows-Portable.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

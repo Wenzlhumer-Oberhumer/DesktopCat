@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Florian Oberhumer und Stefan Wenzlhumer - Desktop Cat (siehe LICENSE)
-"""Charakter-Baum & Tamagotchi-Care Dialog (Gamification).
+"""Charakter-Baum, Trophäen & Minispiele Dialog (v2.4.0).
 
-Zeigt:
-1. Freundschafts-Level & Fortschritt
-2. Tamagotchi-Werte (Hunger 🥣, Sauberkeit 🧼, Laune 💖) mit Schnellaktionen (Füttern, Waschen, Streicheln)
-3. 8-stufigen Charakter-Freischalt-Baum für alle 15 Tiere und Wesen.
+Bietet 3 Tabs:
+1. 🌳 Charakter-Baum: 8-stufige Freischaltung aller 15 Gefährten & Tamagotchi-Pflege
+2. 🏆 Trophäen & Quests: 12 freischaltbare Achievements & saisonale Feiertags-Quests
+3. 🎮 Minispiele & Zimmer: Seifenblasen, Wollknäuel, Katzenbett & Lively Wallpaper
 """
 from __future__ import annotations
 
@@ -14,14 +14,17 @@ from typing import Optional
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
-    QDialog, QFrame, QGroupBox, QHBoxLayout, QLabel,
-    QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFrame, QGroupBox, QHBoxLayout, QLabel,
+    QProgressBar, QPushButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget,
 )
 
+from achievements import get_achievement_status, get_all_achievements
 from fun import LEVEL_NAMES, LEVEL_THRESHOLDS, level_for
 from i18n import tr
+import lively_wallpaper
 import pet_care
 from pet_sprites import CHARACTERS, get_character_info
+from seasonal_events import get_current_event, get_quest_status
 from settings_dialog import STYLE
 
 CARE_DIALOG_STYLE = STYLE + """
@@ -62,13 +65,29 @@ QFrame#charCardLocked {
     border-radius: 8px;
     padding: 8px;
 }
+QFrame#achCardUnlocked {
+    background-color: #26332E;
+    border: 1px solid #4ECCA3;
+    border-radius: 8px;
+    padding: 10px;
+}
+QFrame#achCardLocked {
+    background-color: #26282E;
+    border: 1px solid #3A3D46;
+    border-radius: 8px;
+    padding: 10px;
+}
 """
 
 
 class CharacterTreeDialog(QDialog):
-    """Interaktiver Dialog fuer Gamification, Tamagotchi-Beduerfnisse und Charakter-Freischaltung."""
+    """Interaktiver Dialog fuer Gamification, Tamagotchi-Care, Trophäen und Minispiele."""
 
     character_selected = pyqtSignal(str)
+    bubble_game_requested = pyqtSignal()
+    yarn_game_requested = pyqtSignal()
+    wallpaper_requested = pyqtSignal()
+    bed_toggled = pyqtSignal(bool)
 
     def __init__(self, cfg, store=None, pet=None, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -77,8 +96,8 @@ class CharacterTreeDialog(QDialog):
         self.pet = pet
 
         self.setWindowTitle(tr("care.tree_title"))
-        self.resize(620, 720)
-        self.setMinimumSize(540, 500)
+        self.resize(680, 750)
+        self.setMinimumSize(580, 520)
         self.setStyleSheet(CARE_DIALOG_STYLE)
 
         self._setup_ui()
@@ -87,7 +106,7 @@ class CharacterTreeDialog(QDialog):
     def _setup_ui(self) -> None:
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(12)
+        main_layout.setSpacing(10)
 
         # 1. Header
         header_layout = QVBoxLayout()
@@ -104,8 +123,8 @@ class CharacterTreeDialog(QDialog):
         top_box = QFrame()
         top_box.setObjectName("tierCard")
         top_layout = QVBoxLayout(top_box)
-        top_layout.setSpacing(10)
-        top_layout.setContentsMargins(12, 10, 12, 10)
+        top_layout.setSpacing(8)
+        top_layout.setContentsMargins(12, 8, 12, 8)
 
         # Freundschaftszeile
         friend_row = QHBoxLayout()
@@ -136,7 +155,7 @@ class CharacterTreeDialog(QDialog):
 
         # Tamagotchi-Stats (Hunger, Sauberkeit, Laune)
         stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(16)
+        stats_layout.setSpacing(14)
 
         # Hunger
         v_hunger = QVBoxLayout()
@@ -174,17 +193,48 @@ class CharacterTreeDialog(QDialog):
         top_layout.addLayout(stats_layout)
         main_layout.addWidget(top_box)
 
-        # 3. Scroll-Bereich für den Charakter-Baum
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        # 3. Tabs: Charakter-Baum, Trophäen & Quests, Minispiele & Zimmer
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #3A3D46; background: #202226; border-radius: 8px; }
+            QTabBar::tab { background: #26282E; color: #A0A5B0; padding: 8px 18px; font-weight: bold; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }
+            QTabBar::tab:selected { background: #FF8FB1; color: #202226; }
+        """)
 
+        # Tab 1: Charakter-Baum
+        scroll_tree = QScrollArea()
+        scroll_tree.setWidgetResizable(True)
+        scroll_tree.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         self.tree_widget = QWidget()
         self.tree_layout = QVBoxLayout(self.tree_widget)
-        self.tree_layout.setContentsMargins(0, 4, 8, 4)
-        self.tree_layout.setSpacing(12)
-        scroll.setWidget(self.tree_widget)
-        main_layout.addWidget(scroll, 1)
+        self.tree_layout.setContentsMargins(4, 8, 8, 8)
+        self.tree_layout.setSpacing(10)
+        scroll_tree.setWidget(self.tree_widget)
+        self.tabs.addTab(scroll_tree, tr("care.tab_tree"))
+
+        # Tab 2: Trophäen & Quests
+        scroll_trophies = QScrollArea()
+        scroll_trophies.setWidgetResizable(True)
+        scroll_trophies.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        self.trophies_widget = QWidget()
+        self.trophies_layout = QVBoxLayout(self.trophies_widget)
+        self.trophies_layout.setContentsMargins(4, 8, 8, 8)
+        self.trophies_layout.setSpacing(10)
+        scroll_trophies.setWidget(self.trophies_widget)
+        self.tabs.addTab(scroll_trophies, tr("care.tab_trophies"))
+
+        # Tab 3: Minispiele & Zimmer
+        scroll_games = QScrollArea()
+        scroll_games.setWidgetResizable(True)
+        scroll_games.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        self.games_widget = QWidget()
+        self.games_layout = QVBoxLayout(self.games_widget)
+        self.games_layout.setContentsMargins(4, 8, 8, 8)
+        self.games_layout.setSpacing(10)
+        scroll_games.setWidget(self.games_widget)
+        self.tabs.addTab(scroll_games, tr("care.tab_games"))
+
+        main_layout.addWidget(self.tabs, 1)
 
         # Schließen Button unten
         btn_close = QPushButton("Schließen")
@@ -196,8 +246,7 @@ class CharacterTreeDialog(QDialog):
         main_layout.addLayout(btn_box)
 
     def refresh_all(self) -> None:
-        """Aktualisiert alle Anzeigen: Freundschaft, Tamagotchi-Stats und Charakter-Karten."""
-        # 1. Freundschaftsdaten
+        """Aktualisiert Freundschaft, Tamagotchi-Stats, Baum, Trophäen und Minispiele."""
         current_fp = 0
         if self.store is not None:
             try:
@@ -221,42 +270,30 @@ class CharacterTreeDialog(QDialog):
         else:
             self.bar_fp.setFormat(f"Max Level ({current_fp} FP)")
 
-        # 2. Tamagotchi Stats
         care = pet_care.get_care_stats(self.cfg)
         self._update_stat_bar(self.bar_hunger, care["hunger"])
         self._update_stat_bar(self.bar_hygiene, care["hygiene"])
         self._update_stat_bar(self.bar_happy, care["happiness"])
 
-        # 3. Charakter-Baum aufbauen
         self._build_tree(lvl, current_fp)
+        self._build_trophies()
+        self._build_games()
 
     def _update_stat_bar(self, bar: QProgressBar, val: int) -> None:
         bar.setValue(val)
         bar.setFormat(f"{val} %")
-        if val >= 60:
-            color = "#4ECCA3"   # Frisches Gruen
-        elif val >= 35:
-            color = "#F6C90E"   # Sonnengelb
-        else:
-            color = "#FF6B6B"   # Warnrot
-        bar.setStyleSheet(f"""
-            QProgressBar::chunk {{
-                background-color: {color};
-                border-radius: 5px;
-            }}
-        """)
+        color = "#4ECCA3" if val >= 60 else ("#F6C90E" if val >= 35 else "#FF6B6B")
+        bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {color}; border-radius: 5px; }}")
 
     def _build_tree(self, user_lvl: int, user_fp: int) -> None:
-        # Bestehende Widgets leeren
         while self.tree_layout.count():
             item = self.tree_layout.takeAt(0)
             w = item.widget()
-            if w is not None:
+            if w:
                 w.deleteLater()
 
         current_char = str(self.cfg.get("pet.character", "cat_mochi"))
 
-        # Iteriere durch die 8 Tiers
         for tier_lvl in sorted(pet_care.UNLOCK_TIERS.keys()):
             char_ids = pet_care.UNLOCK_TIERS[tier_lvl]
             req_pts = LEVEL_THRESHOLDS[tier_lvl - 1] if tier_lvl - 1 < len(LEVEL_THRESHOLDS) else 0
@@ -268,7 +305,6 @@ class CharacterTreeDialog(QDialog):
             t_layout.setContentsMargins(10, 8, 10, 8)
             t_layout.setSpacing(8)
 
-            # Tier Header
             th_layout = QHBoxLayout()
             tier_title = f"Stufe {tier_lvl} — {LEVEL_NAMES.get(tier_lvl, 'Stufe ' + str(tier_lvl))}"
             lbl_t_title = QLabel(tier_title)
@@ -286,7 +322,6 @@ class CharacterTreeDialog(QDialog):
             th_layout.addWidget(lbl_status)
             t_layout.addLayout(th_layout)
 
-            # Charaktere in diesem Tier
             chars_row = QHBoxLayout()
             chars_row.setSpacing(10)
 
@@ -306,7 +341,6 @@ class CharacterTreeDialog(QDialog):
                 c_layout.setContentsMargins(8, 8, 8, 8)
                 c_layout.setSpacing(4)
 
-                # Icon & Name
                 top_line = QHBoxLayout()
                 lbl_em = QLabel(ci.get("emoji", "🐾"))
                 lbl_em.setStyleSheet("font-size: 20pt;")
@@ -324,32 +358,24 @@ class CharacterTreeDialog(QDialog):
                 top_line.addStretch()
                 c_layout.addLayout(top_line)
 
-                # Beschreibung / Spruch
                 lbl_desc = QLabel(ci.get("desc", ""))
                 lbl_desc.setStyleSheet("color: #B0B5C0; font-size: 8pt;")
                 lbl_desc.setWordWrap(True)
                 lbl_desc.setMaximumHeight(36)
                 c_layout.addWidget(lbl_desc)
 
-                # Button / Status
                 if is_active:
                     btn = QPushButton(tr("care.active"))
                     btn.setEnabled(False)
-                    btn.setStyleSheet(
-                        "background: #FF8FB1; color: #202226; font-weight: bold; border: none; border-radius: 6px; padding: 4px;"
-                    )
+                    btn.setStyleSheet("background: #FF8FB1; color: #202226; font-weight: bold; border: none; border-radius: 6px; padding: 4px;")
                 elif is_tier_unlocked:
                     btn = QPushButton(tr("care.activate"))
-                    btn.setStyleSheet(
-                        "background: #3A3D46; color: #F2F3F5; border: 1px solid #5A5E6B; border-radius: 6px; padding: 4px;"
-                    )
+                    btn.setStyleSheet("background: #3A3D46; color: #F2F3F5; border: 1px solid #5A5E6B; border-radius: 6px; padding: 4px;")
                     btn.clicked.connect(lambda _=False, c=cid: self._select_char(c))
                 else:
                     btn = QPushButton(f"🔒 Lvl {tier_lvl}")
                     btn.setEnabled(False)
-                    btn.setStyleSheet(
-                        "background: #25272D; color: #6C707A; border: 1px solid #363940; border-radius: 6px; padding: 4px;"
-                    )
+                    btn.setStyleSheet("background: #25272D; color: #6C707A; border: 1px solid #363940; border-radius: 6px; padding: 4px;")
                 c_layout.addWidget(btn)
                 chars_row.addWidget(card, 1)
 
@@ -357,6 +383,181 @@ class CharacterTreeDialog(QDialog):
             self.tree_layout.addWidget(tier_frame)
 
         self.tree_layout.addStretch()
+
+    def _build_trophies(self) -> None:
+        """Erstellt die Ansicht für saisonale Quests und die 12 Achievements."""
+        while self.trophies_layout.count():
+            item = self.trophies_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        # 1. Saisonale Feiertags-Quest
+        event = get_current_event()
+        event_card = QFrame()
+        event_card.setObjectName("tierCard")
+        e_layout = QVBoxLayout(event_card)
+        e_layout.setContentsMargins(12, 10, 12, 10)
+        e_layout.setSpacing(6)
+
+        lbl_ev_title = QLabel(event["title"])
+        lbl_ev_title.setStyleSheet("font-weight: bold; color: #FFD166; font-size: 11pt;")
+        lbl_ev_sub = QLabel(event["subtitle"])
+        lbl_ev_sub.setStyleSheet("color: #A0A5B0; font-size: 9pt;")
+        e_layout.addWidget(lbl_ev_title)
+        e_layout.addWidget(lbl_ev_sub)
+
+        for quest in event.get("quests", []):
+            cur, tgt, done = get_quest_status(self.store, quest)
+            q_box = QHBoxLayout()
+            lbl_q = QLabel(f"🎯 {quest['title']} ({quest['desc']})")
+            lbl_q.setStyleSheet("color: #F2F3F5; font-size: 9pt;")
+            q_box.addWidget(lbl_q)
+            q_box.addStretch()
+
+            bar_q = QProgressBar()
+            bar_q.setMaximum(tgt)
+            bar_q.setValue(cur)
+            bar_q.setFormat(f"{cur}/{tgt}" if not done else "✔ Erledigt!")
+            bar_q.setFixedWidth(130)
+            bar_q.setFixedHeight(18)
+            q_box.addWidget(bar_q)
+            e_layout.addLayout(q_box)
+
+        self.trophies_layout.addWidget(event_card)
+
+        # 2. Die 12 Achievements
+        lbl_ach_title = QLabel("🏆 Ruhmeshalle & Meilensteine")
+        lbl_ach_title.setStyleSheet("font-weight: bold; color: #FFB3C6; font-size: 11pt; margin-top: 6px;")
+        self.trophies_layout.addWidget(lbl_ach_title)
+
+        for ach in get_all_achievements():
+            cur, tgt, unlocked = get_achievement_status(self.store, ach)
+            card = QFrame()
+            card.setObjectName("achCardUnlocked" if unlocked else "achCardLocked")
+            c_layout = QHBoxLayout(card)
+            c_layout.setContentsMargins(10, 8, 10, 8)
+            c_layout.setSpacing(10)
+
+            lbl_ic = QLabel(ach["icon"])
+            lbl_ic.setStyleSheet("font-size: 20pt;")
+            c_layout.addWidget(lbl_ic)
+
+            v_txt = QVBoxLayout()
+            v_txt.setSpacing(2)
+            lbl_at = QLabel(ach["title"])
+            lbl_at.setStyleSheet("font-weight: bold; font-size: 10pt; color: #F2F3F5;")
+            lbl_ad = QLabel(f"{ach['desc']} (+{ach['fp_reward']} FP)")
+            lbl_ad.setStyleSheet("color: #8D919B; font-size: 8pt;")
+            v_txt.addWidget(lbl_at)
+            v_txt.addWidget(lbl_ad)
+            c_layout.addLayout(v_txt, 1)
+
+            bar_a = QProgressBar()
+            bar_a.setMaximum(tgt)
+            bar_a.setValue(cur)
+            bar_a.setFixedWidth(120)
+            bar_a.setFixedHeight(18)
+            if unlocked:
+                bar_a.setFormat("✔ Erreicht")
+                bar_a.setStyleSheet("QProgressBar::chunk { background-color: #4ECCA3; border-radius: 5px; }")
+            else:
+                bar_a.setFormat(f"{cur}/{tgt}")
+                bar_a.setStyleSheet("QProgressBar::chunk { background-color: #FF8FB1; border-radius: 5px; }")
+            c_layout.addWidget(bar_a)
+
+            self.trophies_layout.addWidget(card)
+
+        self.trophies_layout.addStretch()
+
+    def _build_games(self) -> None:
+        """Erstellt die Ansicht fuer Minispiele, Katzenbett und Lively Wallpaper."""
+        while self.games_layout.count():
+            item = self.games_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        # 1. Lively Wallpaper: Katzenzimmer (Empfohlen ⭐)
+        room_card = QFrame()
+        room_card.setObjectName("tierCard")
+        r_layout = QVBoxLayout(room_card)
+        r_layout.setContentsMargins(12, 10, 12, 10)
+        r_layout.setSpacing(8)
+
+        lbl_rw = QLabel(tr("lively.title"))
+        lbl_rw.setStyleSheet("font-weight: bold; color: #FFD166; font-size: 11pt;")
+        lbl_rd = QLabel(tr("lively.desc"))
+        lbl_rd.setStyleSheet("color: #A0A5B0; font-size: 9pt;")
+        r_layout.addWidget(lbl_rw)
+        r_layout.addWidget(lbl_rd)
+
+        self.chk_auto_lively = QCheckBox(tr("lively.auto_sync_label"))
+        self.chk_auto_lively.setChecked(bool(self.cfg.get("lively.auto_sync", True)))
+        self.chk_auto_lively.toggled.connect(self._on_auto_lively_toggled)
+        r_layout.addWidget(self.chk_auto_lively)
+
+        btn_act_lively = QPushButton(tr("lively.activate_btn"))
+        btn_act_lively.setStyleSheet("background: #FF8FB1; color: #202226; font-weight: bold; border-radius: 6px; padding: 7px;")
+        btn_act_lively.clicked.connect(self._on_activate_lively)
+        r_layout.addWidget(btn_act_lively)
+        self.games_layout.addWidget(room_card)
+
+        # 2. Seifenblasen-Minispiel
+        bubble_card = QFrame()
+        bubble_card.setObjectName("charCard")
+        b_layout = QVBoxLayout(bubble_card)
+        b_layout.setContentsMargins(12, 10, 12, 10)
+        b_layout.setSpacing(6)
+        lbl_bt = QLabel(tr("game.bubble_title"))
+        lbl_bt.setStyleSheet("font-weight: bold; color: #6EC5E9; font-size: 10pt;")
+        lbl_bd = QLabel(tr("game.bubble_desc"))
+        lbl_bd.setStyleSheet("color: #8D919B; font-size: 8pt;")
+        btn_start_bubble = QPushButton(tr("game.bubble_btn"))
+        btn_start_bubble.setStyleSheet("background: #3A3D46; color: #F2F3F5; border-radius: 6px; padding: 6px;")
+        btn_start_bubble.clicked.connect(self.bubble_game_requested.emit)
+        b_layout.addWidget(lbl_bt)
+        b_layout.addWidget(lbl_bd)
+        b_layout.addWidget(btn_start_bubble)
+        self.games_layout.addWidget(bubble_card)
+
+        # 3. Wollknäuel-Minispiel
+        yarn_card = QFrame()
+        yarn_card.setObjectName("charCard")
+        y_layout = QVBoxLayout(yarn_card)
+        y_layout.setContentsMargins(12, 10, 12, 10)
+        y_layout.setSpacing(6)
+        lbl_yt = QLabel(tr("game.yarn_title"))
+        lbl_yt.setStyleSheet("font-weight: bold; color: #FF9AA2; font-size: 10pt;")
+        lbl_yd = QLabel(tr("game.yarn_desc"))
+        lbl_yd.setStyleSheet("color: #8D919B; font-size: 8pt;")
+        btn_start_yarn = QPushButton(tr("game.yarn_btn"))
+        btn_start_yarn.setStyleSheet("background: #3A3D46; color: #F2F3F5; border-radius: 6px; padding: 6px;")
+        btn_start_yarn.clicked.connect(self.yarn_game_requested.emit)
+        y_layout.addWidget(lbl_yt)
+        y_layout.addWidget(lbl_yd)
+        y_layout.addWidget(btn_start_yarn)
+        self.games_layout.addWidget(yarn_card)
+
+        # 4. Kuscheliges Katzenbett
+        bed_card = QFrame()
+        bed_card.setObjectName("charCard")
+        bd_layout = QVBoxLayout(bed_card)
+        bd_layout.setContentsMargins(12, 10, 12, 10)
+        bd_layout.setSpacing(6)
+        lbl_bdt = QLabel(tr("furniture.bed_title"))
+        lbl_bdt.setStyleSheet("font-weight: bold; color: #FFB7B2; font-size: 10pt;")
+        lbl_bdd = QLabel(tr("furniture.bed_desc"))
+        lbl_bdd.setStyleSheet("color: #8D919B; font-size: 8pt;")
+        self.chk_bed = QCheckBox(tr("furniture.bed_btn"))
+        self.chk_bed.setChecked(bool(self.cfg.get("furniture.bed_visible", True)))
+        self.chk_bed.toggled.connect(self._on_bed_toggled)
+        bd_layout.addWidget(lbl_bdt)
+        bd_layout.addWidget(lbl_bdd)
+        bd_layout.addWidget(self.chk_bed)
+        self.games_layout.addWidget(bed_card)
+
+        self.games_layout.addStretch()
 
     def _select_char(self, cid: str) -> None:
         self.cfg.set("pet.character", cid)
@@ -383,3 +584,16 @@ class CharacterTreeDialog(QDialog):
         if self.pet is not None:
             self.pet.react_happy()
         self.refresh_all()
+
+    def _on_auto_lively_toggled(self, checked: bool) -> None:
+        self.cfg.set("lively.auto_sync", checked)
+        self.cfg.save()
+
+    def _on_activate_lively(self) -> None:
+        lively_wallpaper.apply_lively_wallpaper(self.cfg, self.store)
+        self.wallpaper_requested.emit()
+
+    def _on_bed_toggled(self, checked: bool) -> None:
+        self.cfg.set("furniture.bed_visible", checked)
+        self.cfg.save()
+        self.bed_toggled.emit(checked)

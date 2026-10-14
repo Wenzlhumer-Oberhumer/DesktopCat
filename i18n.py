@@ -100,6 +100,86 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "Mir geht es wunderbar! Schnurr... 💖",
         "en": "I'm feeling wonderful! Purr... 💖",
     },
+    "care.tab_tree": {
+        "de": "🌳  Charakter-Baum",
+        "en": "🌳  Character Tree",
+    },
+    "care.tab_trophies": {
+        "de": "🏆  Trophäen & Quests",
+        "en": "🏆  Trophies & Quests",
+    },
+    "care.tab_games": {
+        "de": "🎮  Minispiele & Zimmer",
+        "en": "🎮  Minigames & Room",
+    },
+    "lively.title": {
+        "de": "🖼️  Lively Wallpaper: Katzenzimmer (Empfohlen ⭐)",
+        "en": "🖼️  Lively Wallpaper: Cat Room (Recommended ⭐)",
+    },
+    "lively.desc": {
+        "de": "Dynamisches HTML5-Zimmer mit Tag/Nacht-Lichtzyklus, Sternenhimmel und Deko.",
+        "en": "Dynamic HTML5 room with day/night lighting, starry skies and cozy decor.",
+    },
+    "lively.activate_btn": {
+        "de": "🖼️  Katzenzimmer-Hintergrund aktivieren",
+        "en": "🖼️  Activate Cat Room Wallpaper",
+    },
+    "lively.auto_sync_label": {
+        "de": "Hintergrund automatisch mit Desktop Cat aktivieren & beim Beenden zurücksetzen (Empfohlen ⭐)",
+        "en": "Automatically sync wallpaper with Desktop Cat and restore on exit (Recommended ⭐)",
+    },
+    "game.bubble_title": {
+        "de": "🫧  Seifenblasen-Platzen",
+        "en": "🫧  Bubble Pop Game",
+    },
+    "game.bubble_desc": {
+        "de": "Klicke auf aufsteigende Seifenblasen, um sie mit Plopp-Sound platzen zu lassen!",
+        "en": "Click floating soap bubbles to pop them with a satisfying sound and earn FP!",
+    },
+    "game.bubble_btn": {
+        "de": "🫧  Seifenblasen-Welle starten",
+        "en": "🫧  Spawn Bubble Wave",
+    },
+    "game.yarn_title": {
+        "de": "🧶  Wollknäuel-Fangen",
+        "en": "🧶  Yarn Ball Catch",
+    },
+    "game.yarn_desc": {
+        "de": "Wirf das Wollknäuel über den Bildschirm – dein Tier jagt hinterher und kickt es zurück!",
+        "en": "Fling the yarn ball across your desktop – your pet chases it and kicks it back!",
+    },
+    "game.yarn_btn": {
+        "de": "🧶  Wollknäuel werfen",
+        "en": "🧶  Throw Yarn Ball",
+    },
+    "furniture.bed_title": {
+        "de": "🛋️  Kuscheliges Katzenbett",
+        "en": "🛋️  Cozy Pet Bed",
+    },
+    "furniture.bed_desc": {
+        "de": "Platziere ein weiches Körbchen am Desktop. Dein Tier kuschelt sich zum Schlafen hinein!",
+        "en": "Place a soft basket on your desktop. Your pet curls up inside when sleeping!",
+    },
+    "furniture.bed_btn": {
+        "de": "🛋️  Katzenbett ein-/ausblenden",
+        "en": "🛋️  Toggle Pet Bed",
+    },
+    "menu.lively_wallpaper": {
+        "de": "🖼️  Katzenzimmer-Wallpaper (Lively)",
+        "en": "🖼️  Cat Room Wallpaper (Lively)",
+    },
+    "menu.bubble_game": {
+        "de": "🫧  Seifenblasen platzen",
+        "en": "🫧  Pop Soap Bubbles",
+    },
+    "menu.yarn_game": {
+        "de": "🧶  Wollknäuel werfen",
+        "en": "🧶  Throw Yarn Ball",
+    },
+    "menu.pet_bed": {
+        "de": "🛋️  Katzenbett anzeigen / verbergen",
+        "en": "🛋️  Toggle Pet Bed",
+    },
     "menu.sub_learn": {
         "de": "💖  Freundschaft & Lernen",
         "en": "💖  Friendship & Learning",

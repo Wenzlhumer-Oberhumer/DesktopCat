@@ -1,0 +1,13 @@
+{
+  "AppVersion": "1.0",
+  "Title": "Desktop Cat Cozy Room",
+  "Thumbnail": "preview.png",
+  "Preview": "preview.png",
+  "Desc": "A cozy Kawaii room with real-time day/night lighting, glowing fairy lights, and live ambient particles.",
+  "Author": "Desktop Cat",
+  "License": "GPL-3.0",
+  "Contact": "https://github.com/Wenzlhumer-Oberhumer/DesktopCat",
+  "Type": 1,
+  "FileName": "index.html",
+  "Arguments": ""
+}
