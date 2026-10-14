@@ -19,6 +19,11 @@ import custom_scripts
 from scripts_dialog import CustomScriptsDialog
 import tools
 from tools import ToolResult
+import tempfile as _tempfile
+
+_TMP_SCRIPTS = Path(_tempfile.mkdtemp(prefix="dc_scripts_test_"))
+custom_scripts.SCRIPTS_DIR = _TMP_SCRIPTS
+custom_scripts.MANIFEST_FILE = _TMP_SCRIPTS / "scripts.json"
 
 
 def test_custom_scripts_lifecycle():
@@ -31,6 +36,7 @@ def test_custom_scripts_lifecycle():
         description="Multipliziert zwei Zahlen",
         schedule="manual",
         enabled=True,
+        approved=True,
     )
     assert ok is True
     assert meta["name"] == "test_math.py"
@@ -79,6 +85,7 @@ def test_custom_scripts_routines_scheduling():
         code="print('startup ok')\n",
         schedule="startup",
         enabled=True,
+        approved=True,
     )
     due_startup = custom_scripts.get_due_routines(is_startup=True)
     assert any(s["name"] == "test_startup.py" for s in due_startup)
@@ -92,6 +99,7 @@ def test_custom_scripts_routines_scheduling():
         code="print('interval ok')\n",
         schedule="interval_60m",
         enabled=True,
+        approved=True,
     )
     now = datetime.datetime.now()
     # Nie gelaufen -> sofort fällig
@@ -133,7 +141,9 @@ def test_tools_custom_scripts_execution():
     assert res_list.ok is True
     assert "auto_tool_test" in res_list.message
 
-    # Ausführen
+    # Ausführen: erst nach Freigabe durch den Nutzer (Skripte-Manager)
+    assert tools.execute("run_custom_script", {"name": "auto_tool_test.py"}).ok is False
+    assert custom_scripts.approve_script("auto_tool_test.py")
     res_run = tools.execute("run_custom_script", {"name": "auto_tool_test.py"})
     assert res_run.ok is True
     assert "Automated Tool Execution Success!" in res_run.message
@@ -185,3 +195,34 @@ def test_scripts_dialog_instantiation():
     assert dlg.list_scripts.count() >= 1
     assert dlg.btn_run.isEnabled() is True
     dlg.close()
+
+
+
+
+def test_ai_scripts_never_run_or_schedule_without_user_approval():
+    # Sicherheitsluecke v2.5.0: KI-Skripte liefen ohne Rueckfrage als Autostart-Routine
+    res = tools.execute("create_custom_script", {"name": "ki_test.py", "code": "print('hi')\n", "schedule": "startup"})
+    assert res.ok
+    assert not any(s["name"] == "ki_test.py" for s in custom_scripts.get_due_routines(is_startup=True))
+    run = custom_scripts.run_script("ki_test.py")
+    assert not run["ok"] and "freigegeben" in run["error"]
+    assert custom_scripts.approve_script("ki_test.py")
+    assert any(s["name"] == "ki_test.py" for s in custom_scripts.get_due_routines(is_startup=True))
+    # Datei nach der Freigabe veraendert -> Freigabe ungueltig
+    (custom_scripts.SCRIPTS_DIR / "ki_test.py").write_text("print('boese')\n", encoding="utf-8")
+    assert not custom_scripts.run_script("ki_test.py")["ok"]
+    custom_scripts.delete_script("ki_test.py")
+
+
+def test_script_names_cannot_escape_the_scripts_folder():
+    outside = Path(_tempfile.mkdtemp(prefix="dc_outside_")) / "evil.py"
+    for bad in (str(outside), r"..\..\evil.py", "../evil.py", "scripts.json", ".hidden.py"):
+        custom_scripts.save_script(name=bad, code="print(1)\n", approved=True)
+        assert not outside.exists()
+        assert not (custom_scripts.SCRIPTS_DIR.parent / "evil.py").exists()
+    for leftover in custom_scripts.SCRIPTS_DIR.glob("evil.py"):
+        leftover.unlink()
+
+
+def test_script_tools_need_confirmation():
+    assert {"run_custom_script", "manage_custom_routines"} <= tools.DANGEROUS_TOOLS

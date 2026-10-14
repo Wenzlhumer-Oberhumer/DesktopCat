@@ -843,6 +843,11 @@ def confirm_question(tool: str, args: dict, user_name: str = "Boss", character_i
         what = f"die gemerkten Fakten zu „{q}“ löschen" if q else "diese gemerkten Fakten löschen"
     elif tool == "wipe_my_data":
         what = "wirklich alle gemerkten Fakten und Chat-Verläufe unwiderruflich löschen"
+    elif tool == "run_custom_script":
+        what = f"das Skript „{str(args.get('name') or '')[:60]}“ ausführen"
+    elif tool == "manage_custom_routines":
+        what = (f"bei der Routine „{str(args.get('name') or '')[:60]}“ "
+                f"„{args.get('action', 'list')}“ ausführen (Zeitplan: {args.get('schedule', '-')})")
     else:
         what = f"„{tool}“ ausführen"
     return f"{sound} Soll ich wirklich {what}, {user}? Sag ja oder nein. {cinfo.get('emoji', '')}".strip()

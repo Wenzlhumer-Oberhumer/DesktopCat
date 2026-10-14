@@ -11,8 +11,11 @@ from __future__ import annotations
 import ast
 import datetime
 import json
+import hashlib
 import os
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -65,6 +68,54 @@ if __name__ == "__main__":
 '''
 
 
+_NAME_RE = re.compile(r"^[\w.-]+\.py$")
+
+
+def safe_name(name: str) -> str:
+    """Nur ein schlichter Dateiname im Skripte-Ordner - kein Pfad, kein '..' (sonst ValueError)."""
+    n = Path(str(name or "").strip().replace(" ", "_")).name
+    if not n.endswith(".py"):
+        n += ".py"
+    if not _NAME_RE.match(n) or n.startswith(".") or n == "scripts.json":
+        raise ValueError(f"Ungueltiger Skriptname: {name!r}")
+    return n
+
+
+def code_hash(code: str) -> str:
+    return hashlib.sha256((code or "").encode("utf-8")).hexdigest()
+
+
+def is_approved(item: dict[str, Any]) -> bool:
+    """Freigegeben = der Nutzer hat GENAU diesen Code im Skripte-Manager gesehen und gespeichert/freigegeben."""
+    return bool(item.get("approved_hash")) and item.get("approved_hash") == code_hash(item.get("code", ""))
+
+
+def approve_script(name: str) -> bool:
+    """Gibt den aktuellen Code eines Skripts frei (nur aus der Oberflaeche aufrufen, nie aus KI-Tools)."""
+    item = get_script(name)
+    if not item:
+        return False
+    manifest = _load_manifest()
+    meta = manifest.get("scripts", {}).get(item["name"])
+    if not meta:
+        return False
+    meta["code"] = item["code"]
+    meta["approved_hash"] = code_hash(item["code"])
+    _save_manifest(manifest)
+    return True
+
+
+def python_interpreter() -> Optional[str]:
+    """Python fuer die Skripte. In der installierten App ist sys.executable DesktopCat.exe (kein Python!)."""
+    if not getattr(sys, "frozen", False):
+        return sys.executable
+    for cand in ("py", "python"):
+        exe = shutil.which(cand)
+        if exe and "WindowsApps" not in exe:      # WindowsApps-"python" ist nur ein Store-Platzhalter
+            return exe
+    return None
+
+
 def get_scripts_dir() -> Path:
     """Gibt das Skript-Verzeichnis zurück und stellt sicher, dass es existiert."""
     SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -108,6 +159,7 @@ def init_default_scripts() -> None:
             is_routine=True,
             schedule="daily_09:00",
             enabled=True,
+            approved=True,
         )
         save_script(
             name="augen_pause.py",
@@ -117,6 +169,7 @@ def init_default_scripts() -> None:
             is_routine=True,
             schedule="interval_60m",
             enabled=True,
+            approved=True,
         )
         save_script(
             name="quick_pc_status.py",
@@ -126,6 +179,7 @@ def init_default_scripts() -> None:
             is_routine=False,
             schedule="manual",
             enabled=True,
+            approved=True,
         )
 
 
@@ -136,7 +190,10 @@ def list_scripts() -> list[dict[str, Any]]:
     scripts = manifest.get("scripts", {})
     res = []
     for name, item in sorted(scripts.items()):
-        script_file = SCRIPTS_DIR / name
+        try:
+            script_file = SCRIPTS_DIR / safe_name(name)
+        except ValueError:
+            continue
         if not script_file.is_file():
             # Datei neu erstellen falls im Manifest aber nicht auf Festplatte
             if item.get("code"):
@@ -150,9 +207,10 @@ def list_scripts() -> list[dict[str, Any]]:
 
 def get_script(name: str) -> Optional[dict[str, Any]]:
     """Gibt Metadaten und Code für ein einzelnes Skript zurück."""
-    name_clean = name.strip()
-    if not name_clean.endswith(".py"):
-        name_clean += ".py"
+    try:
+        name_clean = safe_name(name)
+    except ValueError:
+        return None
     manifest = _load_manifest()
     item = manifest.get("scripts", {}).get(name_clean)
     if not item:
@@ -199,11 +257,14 @@ def save_script(
     is_routine: bool = False,
     schedule: str = "manual",
     enabled: bool = True,
+    approved: bool = False,
 ) -> tuple[bool, str, Optional[dict[str, Any]]]:
-    """Speichert ein Python-Skript und registriert es im Manifest."""
-    name_clean = name.strip().replace(" ", "_")
-    if not name_clean.endswith(".py"):
-        name_clean += ".py"
+    """Speichert ein Python-Skript und registriert es im Manifest.
+    approved=True nur, wenn der Nutzer den Code selbst gesehen hat (Skripte-Manager) - KI-Skripte laufen sonst nie."""
+    try:
+        name_clean = safe_name(name)
+    except ValueError as exc:
+        return False, str(exc), None
 
     # Syntax validieren
     valid, err = validate_python_code(code)
@@ -229,6 +290,8 @@ def save_script(
         "is_routine": bool(is_routine or schedule != "manual"),
         "schedule": schedule or "manual",
         "enabled": bool(enabled),
+        "approved_hash": code_hash(code) if approved else (
+            existing.get("approved_hash") if existing.get("approved_hash") == code_hash(code) else ""),
         "created_at": existing.get("created_at", datetime.datetime.now().isoformat()),
         "updated_at": datetime.datetime.now().isoformat(),
         "last_run": existing.get("last_run"),
@@ -241,9 +304,10 @@ def save_script(
 
 def delete_script(name: str) -> bool:
     """Löscht ein Skript und entfernt es aus dem Manifest."""
-    name_clean = name.strip()
-    if not name_clean.endswith(".py"):
-        name_clean += ".py"
+    try:
+        name_clean = safe_name(name)
+    except ValueError:
+        return False
 
     script_path = SCRIPTS_DIR / name_clean
     if script_path.is_file():
@@ -287,10 +351,15 @@ def run_script(
         target_path = temp_file
         record_name = None
     else:
-        name_clean = name_or_code.strip()
-        if not name_clean.endswith(".py"):
-            name_clean += ".py"
+        try:
+            name_clean = safe_name(name_or_code)
+        except ValueError as exc:
+            return {"ok": False, "stdout": "", "stderr": str(exc), "duration_s": 0.0, "exit_code": -1, "error": str(exc)}
         target_path = SCRIPTS_DIR / name_clean
+        item = get_script(name_clean)          # liest den Code frisch von der Platte
+        if target_path.is_file() and not (item and is_approved(item)):
+            msg = "Dieses Skript ist noch nicht freigegeben - bitte im Skripte-Manager ansehen und speichern."
+            return {"ok": False, "stdout": "", "stderr": msg, "duration_s": 0.0, "exit_code": -1, "error": msg}
         if not target_path.is_file():
             return {
                 "ok": False,
@@ -307,7 +376,11 @@ def run_script(
     root_dir = str(Path(__file__).resolve().parent)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [root_dir, env.get("PYTHONPATH", "")]))
 
-    cmd = [sys.executable, str(target_path.resolve()), *(args or [])]
+    py = python_interpreter()
+    if not py:
+        msg = "Für eigene Skripte muss Python installiert sein (python.org)."
+        return {"ok": False, "stdout": "", "stderr": msg, "duration_s": 0.0, "exit_code": -1, "error": msg}
+    cmd = [py, str(target_path.resolve()), *(args or [])]
     try:
         proc = subprocess.run(
             cmd,
@@ -377,7 +450,7 @@ def get_due_routines(
     due = []
 
     for item in list_scripts():
-        if not item.get("enabled", True):
+        if not item.get("enabled", True) or not is_approved(item):
             continue
         schedule = item.get("schedule", "manual")
         if schedule == "manual":

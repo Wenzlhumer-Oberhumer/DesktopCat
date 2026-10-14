@@ -11,7 +11,7 @@ import os
 import subprocess
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFrame, QHBoxLayout, QLabel,
@@ -20,7 +20,19 @@ from PyQt6.QtWidgets import (
 )
 
 import custom_scripts
-from paths import DATA_DIR
+
+_RUNNING: list = []      # haelt laufende Worker fest, auch wenn der Dialog geschlossen wird
+
+
+class _RunWorker(QThread):
+    done = pyqtSignal(dict)
+
+    def __init__(self, name: str):
+        super().__init__()
+        self.name = name
+
+    def run(self) -> None:
+        self.done.emit(custom_scripts.run_script(self.name))
 
 
 SCHEDULE_OPTIONS = [
@@ -255,7 +267,8 @@ class CustomScriptsDialog(QDialog):
         self.btn_run.clicked.connect(self._on_run_script)
         btn_bar.addWidget(self.btn_run)
 
-        self.btn_save = QPushButton("💾 Speichern")
+        self.btn_save = QPushButton("💾 Speichern & freigeben")
+        self.btn_save.setToolTip("Erst nach dem Freigeben darf das Skript laufen oder als Routine starten.")
         self.btn_save.setObjectName("btnSave")
         self.btn_save.clicked.connect(self._on_save_script)
         btn_bar.addWidget(self.btn_save)
@@ -317,7 +330,8 @@ class CustomScriptsDialog(QDialog):
                 sched_badge = "⏳ " + sched.replace("interval_", "")
 
             status_sym = "●" if enabled else "○"
-            item_text = f"{status_sym} {title}\n    {sched_badge} ({name})"
+            lock = "" if custom_scripts.is_approved(s) else "  🔒 noch nicht freigegeben"
+            item_text = f"{status_sym} {title}{lock}\n    {sched_badge} ({name})"
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, name)
             if not enabled:
@@ -407,6 +421,7 @@ if __name__ == "__main__":
             title=title,
             schedule=schedule,
             enabled=enabled,
+            approved=True,          # der Nutzer hat den Code hier vor sich und speichert ihn bewusst
         )
 
         if not ok:
@@ -441,7 +456,12 @@ if __name__ == "__main__":
         self.lbl_status.setText(f"Führe {self._current_script_name} aus...")
         self.console_output.setPlainText("Ausführung gestartet...\n")
 
-        res = custom_scripts.run_script(self._current_script_name)
+        self._run_worker = _RunWorker(self._current_script_name)     # bis 30 s - nicht im UI-Thread
+        self._run_worker.done.connect(self._on_run_done)
+        _RUNNING[:] = [w for w in _RUNNING if not w.isFinished()] + [self._run_worker]
+        self._run_worker.start()
+
+    def _on_run_done(self, res: dict) -> None:
         self.btn_run.setEnabled(True)
 
         ok = res["ok"]

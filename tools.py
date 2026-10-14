@@ -32,7 +32,8 @@ from paths import DATA_DIR
 LOG_FILE = DATA_DIR / "desktop_organize_log.json"
 
 # Tools, die erst nach ausdruecklichem "ja" des Nutzers laufen duerfen (siehe agent_brain.AgentBrain.pending_action)
-DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell", "forget_facts", "wipe_my_data", "run_custom_script"}
+DANGEROUS_TOOLS = {"clean_pc", "close_window", "delete_file", "execute_powershell", "forget_facts", "wipe_my_data",
+                   "run_custom_script", "manage_custom_routines"}
 
 
 @dataclass
@@ -1568,6 +1569,7 @@ def create_custom_script(
         is_routine=bool(schedule != "manual"),
         schedule=schedule,
         enabled=True,
+        approved=False,      # KI-Code laeuft nie, bevor der Nutzer ihn im Skripte-Manager freigibt
     )
     if not ok:
         return ToolResult(False, f"Konnte das Skript nicht anlegen: {msg}")
@@ -1576,7 +1578,7 @@ def create_custom_script(
     sched_info = f" (Geplant: {schedule})" if schedule != "manual" else ""
     return ToolResult(
         True,
-        f"Ich habe das Python-Skript \u201e{clean_name}\u201c für dich erstellt! \U0001F40D\u2728{sched_info} Du findest es im Skripte-Manager.",
+        f"Ich habe das Python-Skript \u201e{clean_name}\u201c für dich erstellt! \U0001F40D\u2728{sched_info} Schau es dir bitte im Skripte-Manager an und tippe auf Speichern & freigeben - erst dann darf es laufen. 🔒",
         data={"script_name": clean_name, "code": code, "schedule": schedule},
     )
 
