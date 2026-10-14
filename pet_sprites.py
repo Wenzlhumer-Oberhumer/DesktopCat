@@ -2817,51 +2817,79 @@ HAND_SLOT_PRIORITY = (
 )
 
 
-def _draw_acc_cloud(p: QPainter, pose: Pose, char_id: str):
-    """Fluffige weiße Wolke unter der Figur mit Lakitu-Lächeln."""
+def _draw_acc_cloud(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer: str = "all"):
+    """Fluffige Lakitu-Wolke mit mehreren ueberlappenden Kreisen, sanftem Wippen und suessem Gesicht."""
     t = getattr(pose, "t", 0.0)
     bob = math.sin(t * 3.5) * 3.0
-    cy = 144.0 + bob
+    cy = 138.0 + bob
     cx = 80.0 + pose.dx * 0.3
 
     p.save()
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    # Dezente Schatten-Unterseite
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor("#D0D8E6"))
-    p.drawEllipse(QRectF(cx - 48, cy - 6, 96, 26))
+    if layer in ("under", "all"):
+        # 1. Zartblauer weicher Schatten / Unterseite
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#B8D0EE"))
+        p.drawEllipse(QRectF(cx - 54, cy + 2, 108, 22))
 
-    # Fluffige Wolken-Kugeln
-    p.setBrush(QColor("#FFFFFF"))
-    p.drawEllipse(QRectF(cx - 46, cy - 14, 34, 28))
-    p.drawEllipse(QRectF(cx + 12, cy - 14, 34, 28))
-    p.drawEllipse(QRectF(cx - 24, cy - 22, 48, 34))
-    p.drawEllipse(QRectF(cx - 38, cy - 8, 76, 22))
+        # 2. Fluffige ueberlappende Wolken-Puffs hinten & seitlich
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QRectF(cx - 58, cy - 22, 38, 30))
+        p.drawEllipse(QRectF(cx - 44, cy - 32, 42, 36))
+        p.drawEllipse(QRectF(cx - 24, cy - 38, 48, 40))
+        p.drawEllipse(QRectF(cx + 2, cy - 32, 42, 36))
+        p.drawEllipse(QRectF(cx + 20, cy - 22, 38, 30))
+        p.drawEllipse(QRectF(cx - 50, cy - 8, 100, 26))
 
-    # Zarte Kontur
-    p.setPen(_pen(QColor("#B8C6DC"), 1.8))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    cloud_path = QPainterPath()
-    cloud_path.addEllipse(QRectF(cx - 46, cy - 14, 34, 28))
-    cloud_path.addEllipse(QRectF(cx + 12, cy - 14, 34, 28))
-    cloud_path.addEllipse(QRectF(cx - 24, cy - 22, 48, 34))
-    cloud_path.addEllipse(QRectF(cx - 38, cy - 8, 76, 22))
-    p.drawPath(cloud_path.simplified())
+        # 3. Zarte zartblaue Kontur um die hintere Wolke
+        p.setPen(_pen(QColor("#A8C5E8"), 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        back_path = QPainterPath()
+        back_path.addEllipse(QRectF(cx - 58, cy - 22, 38, 30))
+        back_path.addEllipse(QRectF(cx - 44, cy - 32, 42, 36))
+        back_path.addEllipse(QRectF(cx - 24, cy - 38, 48, 40))
+        back_path.addEllipse(QRectF(cx + 2, cy - 32, 42, 36))
+        back_path.addEllipse(QRectF(cx + 20, cy - 22, 38, 30))
+        back_path.addEllipse(QRectF(cx - 50, cy - 8, 100, 26))
+        p.drawPath(back_path.simplified())
 
-    # Niedliches Lakitu-Gesichtchen
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor("#2C3440"))
-    p.drawEllipse(QPointF(cx - 7, cy - 5), 1.8, 2.2)
-    p.drawEllipse(QPointF(cx + 7, cy - 5), 1.8, 2.2)
-    # Wangenrot
-    p.setBrush(QColor("#FF9BB2"))
-    p.drawEllipse(QPointF(cx - 13, cy - 2), 3.2, 2.0)
-    p.drawEllipse(QPointF(cx + 13, cy - 2), 3.2, 2.0)
-    # Lächeln
-    p.setPen(_pen(QColor("#2C3440"), 1.6))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawArc(QRectF(cx - 5, cy - 7, 10, 7), 180 * 16, 180 * 16)
+    if layer in ("over", "all"):
+        # 4. Vordere Wolken-Puffs (vor den Pfoetchen, damit die Figur drin sitzt)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QRectF(cx - 46, cy - 4, 38, 22))
+        p.drawEllipse(QRectF(cx + 8, cy - 4, 38, 22))
+        p.drawEllipse(QRectF(cx - 30, cy - 6, 60, 26))
+
+        # Zarte Kontur fuer die vordere Wölbung
+        p.setPen(_pen(QColor("#A8C5E8"), 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        front_path = QPainterPath()
+        front_path.addEllipse(QRectF(cx - 46, cy - 4, 38, 22))
+        front_path.addEllipse(QRectF(cx + 8, cy - 4, 38, 22))
+        front_path.addEllipse(QRectF(cx - 30, cy - 6, 60, 26))
+        p.drawPath(front_path.simplified())
+
+        # 5. Niedliches Lakitu-Gesichtchen auf der vorderen Wolke
+        # Augen (Punkte mit Lichtreflex)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#242A36"))
+        p.drawEllipse(QPointF(cx - 8.5, cy + 3.0), 2.0, 2.7)
+        p.drawEllipse(QPointF(cx + 8.5, cy + 3.0), 2.0, 2.7)
+        p.setBrush(QColor("#FFFFFF"))
+        p.drawEllipse(QPointF(cx - 9.2, cy + 2.2), 0.8, 0.8)
+        p.drawEllipse(QPointF(cx + 7.8, cy + 2.2), 0.8, 0.8)
+
+        # Wangenrot
+        p.setBrush(QColor(255, 143, 177, 180))
+        p.drawEllipse(QPointF(cx - 15.5, cy + 5.5), 3.5, 2.2)
+        p.drawEllipse(QPointF(cx + 15.5, cy + 5.5), 3.5, 2.2)
+
+        # Froehliches Laecheln
+        p.setPen(_pen(QColor("#242A36"), 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(cx - 5.0, cy + 2.5, 10.0, 6.5), 200 * 16, 140 * 16)
 
     p.restore()
 
@@ -3351,9 +3379,11 @@ def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer:
 
     if layer in ("under", "all"):
         if "cloud" in accs:
-            _draw_acc_cloud(p, pose, char_id)
+            _draw_acc_cloud(p, pose, char_id, layer="under")
 
     if layer in ("over", "all"):
+        if "cloud" in accs:
+            _draw_acc_cloud(p, pose, char_id, layer="over")
         # 1. Kopf-Slot filtern (höchste Priorität gewinnt)
         active_head = None
         for item in HEAD_SLOT_PRIORITY:

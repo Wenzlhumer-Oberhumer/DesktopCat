@@ -129,8 +129,10 @@ class ChatHistoryDialog(QDialog):
         right_lay.addWidget(self.empty_label)
 
         splitter.addWidget(right_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(0, 35)
+        splitter.setStretchFactor(1, 65)
+        splitter.setSizes([270, 530])
+        self.splitter = splitter
         root.addWidget(splitter, 1)
 
         # Buttons unten
@@ -214,7 +216,7 @@ class ChatHistoryDialog(QDialog):
         for m in msgs:
             is_user = m["role"] == "user"
             bubble_box = QHBoxLayout()
-            bubble_box.setContentsMargins(0, 0, 0, 0)
+            bubble_box.setContentsMargins(0, 2, 0, 2)
 
             lbl = QLabel(m["text"])
             lbl.setWordWrap(True)
@@ -232,14 +234,15 @@ class ChatHistoryDialog(QDialog):
                     border-radius: 12px;
                     padding: 9px 13px;
                     font: 10pt "Segoe UI";
-                    max-width: 480px;
+                    max-width: 370px;
                 """)
                 bubble_box.addWidget(lbl)
             else:
                 c_info = get_character_info(self._current_convs[row].get("character", "cat_mochi"))
                 emo = c_info.get("emoji", "🐾")
                 emo_lbl = QLabel(emo)
-                emo_lbl.setStyleSheet("font-size: 14pt; background: transparent;")
+                emo_lbl.setStyleSheet("font-size: 15pt; background: transparent; margin-right: 4px;")
+                emo_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
                 bubble_box.addWidget(emo_lbl)
 
                 lbl.setStyleSheet("""
@@ -249,7 +252,7 @@ class ChatHistoryDialog(QDialog):
                     border-radius: 12px;
                     padding: 9px 13px;
                     font: 10pt "Segoe UI";
-                    max-width: 480px;
+                    max-width: 370px;
                 """)
                 bubble_box.addWidget(lbl)
                 bubble_box.addStretch(1)
@@ -260,6 +263,11 @@ class ChatHistoryDialog(QDialog):
         self.scroll_area.verticalScrollBar().setValue(
             self.scroll_area.verticalScrollBar().maximum()
         )
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if hasattr(self, "splitter"):
+            self.splitter.setSizes([270, 530])
 
     def _on_delete_conv(self) -> None:
         cid = self._selected_conv_id()

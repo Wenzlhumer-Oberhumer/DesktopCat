@@ -57,6 +57,8 @@ def test_name_reaction_who_are_you():
         assert res.kind == "who"
         assert "Kylie" in res
         assert res.reply is not None and "Kylie" in res.reply
+        assert "🐾! 🐾" not in res.reply
+        assert res.reply == "Ich bin Kylie, deine verschmuste Glückskatze! 🐾"
 
 
 def test_name_reaction_no_name_returns_none():

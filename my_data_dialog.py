@@ -36,6 +36,55 @@ QScrollArea { background: #2B2D31; border: 1px solid #3E4148; border-radius: 8px
 """
 
 
+MONTHS_DE = {1: "Jan.", 2: "Feb.", 3: "März", 4: "Apr.", 5: "Mai", 6: "Juni", 7: "Juli", 8: "Aug.", 9: "Sept.", 10: "Okt.", 11: "Nov.", 12: "Dez."}
+MONTHS_EN = {1: "Jan", 2: "Feb", 3: "March", 4: "April", 5: "May", 6: "June", 7: "July", 8: "Aug", 9: "Sept", 10: "Oct", 11: "Nov", 12: "Dec"}
+
+
+def _human_date(d_str: str) -> str:
+    """Wandelt '2026-10-20' oder '10-20' oder '03-14' in ein lesbares Datum um."""
+    if not d_str:
+        return ""
+    d_clean = str(d_str).strip()
+    parts = d_clean.split("-")
+    import i18n
+    m_dict = MONTHS_EN if i18n.lang() == "en" else MONTHS_DE
+    try:
+        if len(parts) == 3:
+            _, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+            return f"{d}. {m_dict.get(m, str(m))}"
+        elif len(parts) == 2:
+            m, d = int(parts[0]), int(parts[1])
+            return f"{d}. {m_dict.get(m, str(m))}"
+    except Exception:
+        pass
+    return d_clean
+
+
+def format_fact_display(f: dict) -> str:
+    """Formatiert Fakten menschenlesbar mit Emojis, ohne 'Frist' und ohne ISO-Datum."""
+    text = (f.get("text") or "").strip()
+    kind = f.get("kind", "fact")
+    due = f.get("due_date")
+
+    is_bday = kind == "birthday" or "geburtstag" in text.lower() or "birthday" in text.lower()
+    if is_bday:
+        prefix = "🎂 "
+        if due and not any(ch.isdigit() for ch in text):
+            return f"{prefix}{text} am {_human_date(due)}"
+        return f"{prefix}{text}"
+
+    is_date = kind in ("date", "appointment", "deadline", "event") or bool(due)
+    if is_date:
+        prefix = "📅 "
+        if due:
+            h_due = _human_date(due)
+            if h_due and h_due not in text:
+                return f"{prefix}{text} · {h_due}"
+        return f"{prefix}{text}"
+
+    return f"• {text}"
+
+
 class MyDataDialog(QDialog):
     """Verwaltung gespeicherter Fakten, Privatsphaere-Einstellungen und Loeschungen."""
 
@@ -46,7 +95,8 @@ class MyDataDialog(QDialog):
         self.char_name = str(cfg.get("pet", {}).get("name") or "Kylie")
 
         self.setWindowTitle("🔒 Meine Daten")
-        self.resize(720, 680)
+        self.resize(740, 780)
+        self.setMinimumHeight(680)
         self.setStyleSheet(STYLE)
 
         root = QVBoxLayout(self)
@@ -63,7 +113,7 @@ class MyDataDialog(QDialog):
         root.addWidget(sec_facts)
 
         self.facts_scroll = QScrollArea()
-        self.facts_scroll.setFixedHeight(170)
+        self.facts_scroll.setFixedHeight(150)
         self.facts_scroll.setWidgetResizable(True)
         self.facts_container = QWidget()
         self.facts_lay = QVBoxLayout(self.facts_container)
@@ -93,19 +143,26 @@ class MyDataDialog(QDialog):
         self.chk_use_history.toggled.connect(self._on_setting_changed)
         root.addWidget(self.chk_use_history)
 
-        # 3. Abschnitt: Transparenzhinweis / Info-Box
+        # 3. Abschnitt: Transparenzhinweis / Info-Box (vollstaendig sichtbar & scrollbar)
         info_frame = QFrame()
         info_frame.setObjectName("infobox")
         info_lay = QVBoxLayout(info_frame)
         info_lay.setContentsMargins(12, 10, 12, 10)
-        info_lay.setSpacing(8)
+        info_lay.setSpacing(6)
+
+        info_scroll = QScrollArea()
+        info_scroll.setWidgetResizable(True)
+        info_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        info_scroll.setStyleSheet("background: transparent; border: none;")
 
         info_text = tr("data.privacy_long", name=self.char_name)
         info_lbl = QLabel(info_text)
         info_lbl.setWordWrap(True)
         info_lbl.setTextFormat(Qt.TextFormat.RichText)
-        info_lay.addWidget(info_lbl)
-        root.addWidget(info_frame)
+        info_lbl.setStyleSheet("background: transparent; color: #F2F3F5; font: 9.5pt 'Segoe UI';")
+        info_scroll.setWidget(info_lbl)
+        info_lay.addWidget(info_scroll)
+        root.addWidget(info_frame, 1)
 
         # 4. Abschnitt: Buttons
         actions_lay = QHBoxLayout()
@@ -153,22 +210,37 @@ class MyDataDialog(QDialog):
             self.facts_lay.addWidget(empty)
             return
 
-
         for f in all_facts:
             row = QHBoxLayout()
             row.setContentsMargins(4, 2, 4, 2)
             dt_str = datetime.datetime.fromtimestamp(f["ts"]).strftime("%d.%m.%Y %H:%M")
-            due = f" (Frist: {f['due_date']})" if f.get("due_date") else ""
-            txt = f"• {f['text']}{due} <font color='#8D919B'>({dt_str})</font>"
+            display_text = format_fact_display(f)
+            txt = f"{display_text} <font color='#8D919B'>({dt_str})</font>"
 
             lbl = QLabel(txt)
             lbl.setTextFormat(Qt.TextFormat.RichText)
             lbl.setWordWrap(True)
             row.addWidget(lbl, 1)
 
-            del_btn = QPushButton("🗑️")
-            del_btn.setFixedSize(32, 28)
-            del_btn.setToolTip("Diesen Fakt vergessen")
+            del_btn = QPushButton("✕")
+            del_btn.setFixedSize(30, 26)
+            del_btn.setToolTip("Diesen Fakt löschen")
+            del_btn.setStyleSheet("""
+                QPushButton {
+                    background: #3A3C43;
+                    color: #F2F3F5;
+                    border: 1px solid #4E515A;
+                    border-radius: 6px;
+                    font: 11pt 'Segoe UI';
+                    font-weight: bold;
+                    padding: 0px;
+                }
+                QPushButton:hover {
+                    background: #5C3D44;
+                    color: #FF8FB1;
+                    border-color: #FF8FB1;
+                }
+            """)
             del_btn.clicked.connect(lambda _=False, fid=f["id"]: self._delete_single_fact(fid))
             row.addWidget(del_btn)
 

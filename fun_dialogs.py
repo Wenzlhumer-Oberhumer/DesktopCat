@@ -21,6 +21,7 @@ from fun import (
 import gemini
 import i18n
 from i18n import tr
+from settings_dialog import STYLE
 
 
 # ======================================================================================
@@ -40,29 +41,7 @@ class FriendshipDialog(QDialog):
         name = char_info.get("name", "Kylie")
         self.setWindowTitle(tr("friendship.title", name=name))
         self.setFixedSize(480, 560)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #FFFDF9;
-                font-family: 'Segoe UI', sans-serif;
-            }
-            QLabel {
-                color: #2D3139;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #E5E7EB;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 14px;
-                background-color: #FFFFFF;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 4px;
-                color: #4B5563;
-            }
-        """)
+        self.setStyleSheet(STYLE)
 
         self._setup_ui()
 
@@ -86,9 +65,9 @@ class FriendshipDialog(QDialog):
 
         info_layout = QVBoxLayout()
         lbl_title = QLabel(tr("friendship.header", name=name))
-        lbl_title.setStyleSheet("font-size: 18px; color: #1F2937;")
+        lbl_title.setObjectName("title")
         lbl_level = QLabel(tr("friendship.level_header", lvl=lvl, title=lvl_name))
-        lbl_level.setStyleSheet("font-size: 14px; font-weight: bold;")
+        lbl_level.setStyleSheet("font-size: 13px; font-weight: 600; color: #F2F3F5;")
         info_layout.addWidget(lbl_title)
         info_layout.addWidget(lbl_level)
         head_layout.addLayout(info_layout, 1)
@@ -103,33 +82,22 @@ class FriendshipDialog(QDialog):
         next_thresh = LEVEL_THRESHOLDS[lvl] if lvl < len(LEVEL_THRESHOLDS) else LEVEL_THRESHOLDS[-1]
 
         self.bar = QProgressBar()
-        self.bar.setFixedHeight(20)
+        self.bar.setFixedHeight(18)
         self.bar.setRange(0, 100)
         self.bar.setValue(int(prog * 100))
         self.bar.setTextVisible(False)
-        self.bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #F3F4F6;
-                border: 1px solid #E5E7EB;
-                border-radius: 10px;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #F472B6, stop:1 #FB7185);
-                border-radius: 9px;
-            }
-        """)
         prog_layout.addWidget(self.bar)
 
         if lvl < 8:
             lbl_pts = QLabel(tr("friendship.points_info", pts=pts, next_pts=next_thresh, pct=int(prog * 100), remain=next_thresh - pts, next_lvl=lvl + 1))
         else:
             lbl_pts = QLabel(tr("friendship.max_level", pts=pts))
-        lbl_pts.setStyleSheet("font-size: 11px; color: #6B7280;")
+        lbl_pts.setStyleSheet("font-size: 9pt; color: #8D919B;")
         prog_layout.addWidget(lbl_pts)
         layout.addWidget(prog_box)
 
         # Accessoires & Belohnungen
-        rew_box = QGroupBox(tr("friendship.rewards_box"))
+        rew_box = QGroupBox(tr("friendship.rewards_box").replace("&", "&&"))
         rew_layout = QVBoxLayout(rew_box)
         rew_layout.setSpacing(8)
 
@@ -144,9 +112,9 @@ class FriendshipDialog(QDialog):
             lbl_item = QLabel(f"{lock_text} Level {req_lvl}: <b>{title}</b>")
 
             if not is_unlocked:
-                lbl_item.setStyleSheet("color: #9CA3AF;")
+                lbl_item.setStyleSheet("color: #8D919B; font-size: 10pt;")
             else:
-                lbl_item.setStyleSheet("color: #1F2937;")
+                lbl_item.setStyleSheet("color: #F2F3F5; font-size: 10pt;")
             row.addWidget(lbl_item, 1)
 
             if is_unlocked and key:
@@ -155,16 +123,16 @@ class FriendshipDialog(QDialog):
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 if current_worn == key:
                     btn.setText(tr("friendship.unequip"))
-                    btn.setStyleSheet("background-color: #FCE7F3; color: #DB2777; font-weight: bold; border-radius: 6px; padding: 4px;")
+                    btn.setStyleSheet("background-color: #4A3338; color: #FF8FB1; font-weight: 600; border-radius: 6px; padding: 4px;")
                     btn.clicked.connect(lambda _=False, k="": self._set_worn(k))
                 else:
                     btn.setText(tr("friendship.equip"))
-                    btn.setStyleSheet("background-color: #F3F4F6; color: #374151; border-radius: 6px; padding: 4px;")
+                    btn.setStyleSheet("background-color: #3A3C43; color: #F2F3F5; font-weight: 600; border-radius: 6px; padding: 4px;")
                     btn.clicked.connect(lambda _=False, k=key: self._set_worn(k))
                 row.addWidget(btn)
             elif not is_unlocked:
                 lbl_lock = QLabel(tr("friendship.unlock_at", pts=LEVEL_THRESHOLDS[req_lvl-1]))
-                lbl_lock.setStyleSheet("font-size: 11px; color: #9CA3AF;")
+                lbl_lock.setStyleSheet("font-size: 9pt; color: #8D919B;")
                 row.addWidget(lbl_lock)
 
             rew_layout.addLayout(row)
@@ -173,18 +141,8 @@ class FriendshipDialog(QDialog):
 
         # Fusszeile
         btn_close = QPushButton(tr("common.close"))
+        btn_close.setObjectName("primary")
         btn_close.setFixedHeight(34)
-        btn_close.setStyleSheet("""
-            QPushButton {
-                background-color: #E5E7EB;
-                color: #1F2937;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #D1D5DB;
-            }
-        """)
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
@@ -223,7 +181,7 @@ class FocusBarChart(QWidget):
         slot_w = (w - 30) / max(1, n)
 
         # Grundlinie
-        p.setPen(QPen(QColor("#E5E7EB"), 1.0))
+        p.setPen(QPen(QColor("#3D3F46"), 1.0))
         p.drawLine(15, int(base_y), w - 15, int(base_y))
 
         for i, (date_str, label, mins, count) in enumerate(self.weekly):
@@ -233,11 +191,11 @@ class FocusBarChart(QWidget):
             bh = (mins / float(max_mins)) * (chart_h - 20)
             by = base_y - bh
 
-            # Balken
+            # Balken mit Pink-Rosa-Verlauf
             if mins > 0:
                 grad = QLinearGradient(bx, by, bx, base_y)
-                grad.setColorAt(0.0, QColor("#818CF8"))
-                grad.setColorAt(1.0, QColor("#6366F1"))
+                grad.setColorAt(0.0, QColor("#FF8FB1"))
+                grad.setColorAt(1.0, QColor("#FB7185"))
                 p.setBrush(QBrush(grad))
                 p.setPen(Qt.PenStyle.NoPen)
                 path = QPainterPath()
@@ -245,18 +203,18 @@ class FocusBarChart(QWidget):
                 p.drawPath(path)
 
                 # Minuten-Beschriftung über dem Balken
-                p.setFont(QFont("Segoe UI", 8))
-                p.setPen(QColor("#4F46E5"))
+                p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+                p.setPen(QColor("#FF8FB1"))
                 p.drawText(QRectF(bx - 10, by - 16, bar_w + 20, 14), Qt.AlignmentFlag.AlignCenter, f"{mins}m")
             else:
                 # Kleiner Platzhalter-Punkt
-                p.setBrush(QColor("#E5E7EB"))
+                p.setBrush(QColor("#3D3F46"))
                 p.setPen(Qt.PenStyle.NoPen)
                 p.drawEllipse(QPointF(cx, base_y - 3), 3, 3)
 
             # Wochentag unter der Grundlinie
             p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-            p.setPen(QColor("#6B7280"))
+            p.setPen(QColor("#8D919B"))
             p.drawText(QRectF(cx - 15, base_y + 4, 30, 20), Qt.AlignmentFlag.AlignCenter, label)
 
         p.end()
@@ -272,29 +230,7 @@ class FocusStatsDialog(QDialog):
 
         self.setWindowTitle(tr("focus.title"))
         self.setFixedSize(480, 520)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #F8FAFC;
-                font-family: 'Segoe UI', sans-serif;
-            }
-            QLabel {
-                color: #1E293B;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #E2E8F0;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 14px;
-                background-color: #FFFFFF;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 4px;
-                color: #475569;
-            }
-        """)
+        self.setStyleSheet(STYLE)
 
         self._setup_ui()
 
@@ -305,24 +241,26 @@ class FocusStatsDialog(QDialog):
 
         stats = get_focus_stats(self.store)
 
-        # Header Kacheln (Heute & Serie)
+        # Header Kacheln (Heute & Serie) - dunkle Karten mit farbigem Akzent
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(12)
 
         # Kachel 1: Heute
         card_today = QFrame()
         card_today.setObjectName("card_today")
-        card_today.setStyleSheet("QFrame#card_today { background: #EEF2FF; border-radius: 10px; }")
+        card_today.setStyleSheet("QFrame#card_today { background: #33353B; border: 1px solid #3E4148; border-radius: 10px; }")
         l_today = QVBoxLayout(card_today)
         l_today.setContentsMargins(14, 12, 14, 12)
         l_today.setSpacing(4)
-        l_today.addWidget(QLabel(tr("focus.today_title")))
+        lbl_today_t = QLabel(tr("focus.today_title"))
+        lbl_today_t.setStyleSheet("color: #8D919B; font-weight: 600; font-size: 10pt;")
+        l_today.addWidget(lbl_today_t)
         mins = stats["today_minutes"]
         cnt = stats["today_count"]
-        lbl_m = QLabel(f"<span style='font-size: 20px; font-weight: bold; color: #4F46E5;'>{tr('focus.minutes_label', mins=mins)}</span>")
+        lbl_m = QLabel(f"<span style='font-size: 20px; font-weight: bold; color: #FF8FB1;'>{tr('focus.minutes_label', mins=mins)}</span>")
         suffix = 's' if (cnt != 1 and i18n.lang() == "en") or (cnt != 1 and i18n.lang() == "de") else ''
         lbl_c = QLabel(tr("focus.sessions_label", count=cnt, suffix=suffix))
-        lbl_c.setStyleSheet("color: #64748B; font-size: 11px;")
+        lbl_c.setStyleSheet("color: #8D919B; font-size: 9pt;")
         l_today.addWidget(lbl_m)
         l_today.addWidget(lbl_c)
         cards_layout.addWidget(card_today, 1)
@@ -330,16 +268,18 @@ class FocusStatsDialog(QDialog):
         # Kachel 2: Serie
         card_streak = QFrame()
         card_streak.setObjectName("card_streak")
-        card_streak.setStyleSheet("QFrame#card_streak { background: #FEF3C7; border-radius: 10px; }")
+        card_streak.setStyleSheet("QFrame#card_streak { background: #33353B; border: 1px solid #3E4148; border-radius: 10px; }")
         l_streak = QVBoxLayout(card_streak)
         l_streak.setContentsMargins(14, 12, 14, 12)
         l_streak.setSpacing(4)
-        l_streak.addWidget(QLabel(tr("focus.streak_title")))
+        lbl_streak_t = QLabel(tr("focus.streak_title"))
+        lbl_streak_t.setStyleSheet("color: #8D919B; font-weight: 600; font-size: 10pt;")
+        l_streak.addWidget(lbl_streak_t)
         stk = stats["streak"]
         unit_str = tr("focus.day_singular") if stk == 1 else tr("focus.days_plural")
-        lbl_s = QLabel(f"<span style='font-size: 20px; font-weight: bold; color: #D97706;'>{tr('focus.streak_days', days=stk, unit=unit_str)}</span>")
+        lbl_s = QLabel(f"<span style='font-size: 20px; font-weight: bold; color: #FFB3C6;'>{tr('focus.streak_days', days=stk, unit=unit_str)}</span>")
         lbl_sub = QLabel(tr("focus.streak_sub_active") if stk > 0 else tr("focus.streak_sub_zero"))
-        lbl_sub.setStyleSheet("color: #78350F; font-size: 11px;")
+        lbl_sub.setStyleSheet("color: #8D919B; font-size: 9pt;")
         l_streak.addWidget(lbl_s)
         l_streak.addWidget(lbl_sub)
         cards_layout.addWidget(card_streak, 1)
@@ -355,7 +295,7 @@ class FocusStatsDialog(QDialog):
 
         # Lob in Figur-Stimme
         praise_box = QFrame()
-        praise_box.setStyleSheet("background: #F1F5F9; border-radius: 8px; padding: 10px;")
+        praise_box.setStyleSheet("background: #33353B; border: 1px solid #3E4148; border-radius: 8px; padding: 10px;")
         praise_l = QHBoxLayout(praise_box)
         name = self.char_info.get("name", "Kylie")
         emoji = self.char_info.get("emoji", "🐾")
@@ -369,24 +309,14 @@ class FocusStatsDialog(QDialog):
 
         lbl_quote = QLabel(f"<b>{name}:</b> {quote}")
         lbl_quote.setWordWrap(True)
-        lbl_quote.setStyleSheet("color: #334155; font-size: 12px;")
+        lbl_quote.setStyleSheet("color: #F2F3F5; font-size: 10pt;")
         praise_l.addWidget(lbl_quote)
         layout.addWidget(praise_box)
 
         # Schliessen Button
         btn_close = QPushButton(tr("common.done"))
+        btn_close.setObjectName("primary")
         btn_close.setFixedHeight(34)
-        btn_close.setStyleSheet("""
-            QPushButton {
-                background-color: #E2E8F0;
-                color: #1E293B;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #CBD5E1;
-            }
-        """)
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
@@ -443,54 +373,7 @@ class FlashcardsDialog(QDialog):
 
         self.setWindowTitle(tr("cards.title"))
         self.resize(600, 560)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #FAFAFA;
-                font-family: 'Segoe UI', sans-serif;
-            }
-            QLabel {
-                color: #2D3748;
-            }
-            QComboBox {
-                background-color: #FFFFFF;
-                color: #1A202C;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 4px 8px;
-            }
-            QLineEdit {
-                background-color: #FFFFFF;
-                color: #1A202C;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 5px 8px;
-            }
-            QTableWidget {
-                background: #FFFFFF;
-                color: #1A202C;
-                border: 1px solid #E2E8F0;
-                border-radius: 6px;
-                gridline-color: #EDF2F7;
-            }
-            QHeaderView::section {
-                background-color: #F1F5F9;
-                color: #334155;
-                padding: 6px;
-                font-weight: bold;
-                border: none;
-                border-bottom: 1px solid #E2E8F0;
-            }
-            QPushButton {
-                background-color: #F1F5F9;
-                color: #1F2937;
-                border: 1px solid #CBD5E1;
-                border-radius: 6px;
-                padding: 5px 10px;
-            }
-            QPushButton:hover {
-                background-color: #E2E8F0;
-            }
-        """)
+        self.setStyleSheet(STYLE)
 
         self._setup_ui()
         self._reload_decks()
@@ -515,8 +398,10 @@ class FlashcardsDialog(QDialog):
 
         layout.addLayout(deck_layout)
 
-        # Tabelle fuer Karten
+        # Tabelle fuer Karten (dunkel mit alternierenden Zeilen, ohne vertikalen Header)
         self.table = QTableWidget(0, 3)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setVisible(False)
         self.table.setHorizontalHeaderLabels([tr("cards.header_front"), tr("cards.header_back"), tr("cards.header_box")])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -530,7 +415,9 @@ class FlashcardsDialog(QDialog):
         self.edit_back = QLineEdit()
         self.edit_back.setPlaceholderText(tr("cards.ph_back"))
         btn_add = QPushButton(tr("cards.add"))
-        btn_add.setStyleSheet("background-color: #4F46E5; color: white; font-weight: bold; border-radius: 4px; padding: 5px 12px;")
+        btn_add.setObjectName("primary")
+        btn_add.setMinimumWidth(115)
+        btn_add.setStyleSheet("padding: 7px 12px;")
         btn_add.clicked.connect(self._add_card)
 
         add_layout.addWidget(self.edit_front, 1)
@@ -559,15 +446,15 @@ class FlashcardsDialog(QDialog):
         self.btn_quiz = QPushButton(tr("cards.start_quiz"))
         self.btn_quiz.setStyleSheet("""
             QPushButton {
-                background-color: #10B981;
-                color: white;
-                font-weight: bold;
-                font-size: 13px;
-                border-radius: 6px;
-                padding: 6px 16px;
+                background-color: #2E7D32;
+                color: #FFFFFF;
+                font-weight: 600;
+                font-size: 10pt;
+                border-radius: 8px;
+                padding: 7px 16px;
             }
             QPushButton:hover {
-                background-color: #059669;
+                background-color: #388E3C;
             }
         """)
         self.btn_quiz.clicked.connect(self._start_quiz)
@@ -648,16 +535,18 @@ class FlashcardsDialog(QDialog):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("cards.import_dlg_title"))
         dlg.resize(400, 320)
+        dlg.setStyleSheet(STYLE)
         l = QVBoxLayout(dlg)
         l.addWidget(QLabel(tr("cards.import_dlg_desc")))
 
         edit = QTextEdit()
+        edit.setStyleSheet("background: #33353B; color: #F2F3F5; border: 1px solid #55575F; border-radius: 8px; font: 10pt 'Segoe UI';")
         edit.setPlaceholderText(tr("cards.import_ph"))
         l.addWidget(edit, 1)
 
         btn_row = QHBoxLayout()
         btn_ok = QPushButton(tr("cards.btn_import"))
-        btn_ok.setStyleSheet("background-color: #4F46E5; color: white; font-weight: bold; border-radius: 4px; padding: 6px;")
+        btn_ok.setObjectName("primary")
         btn_row.addStretch()
         btn_row.addWidget(btn_ok)
         l.addLayout(btn_row)

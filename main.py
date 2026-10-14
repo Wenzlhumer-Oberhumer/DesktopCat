@@ -24,57 +24,68 @@ from i18n import tr
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-os.chdir(DATA_DIR)
+_is_test_mode = bool(
+    os.environ.get("DESKTOPCAT_TEST")
+    or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+    or os.environ.get("PYTEST_CURRENT_TEST")
+    or "unittest" in sys.modules
+    or "pytest" in sys.modules
+    or any("test" in arg.lower() for arg in sys.argv)
+)
+
+if not _is_test_mode:
+    os.chdir(DATA_DIR)
 
 # Unter pythonw.exe gibt es keine Konsole -> stdout/stderr in Logdatei umleiten
-# Logdatei bei > 2 MB beim Start nach buddy.log.1 rotieren
-log_path = DATA_DIR / "buddy.log"
-try:
-    if log_path.exists() and log_path.stat().st_size > 2 * 1024 * 1024:
-        backup = DATA_DIR / "buddy.log.1"
-        if backup.exists():
-            backup.unlink()
-        log_path.rename(backup)
-except Exception:
-    pass
+# Logdatei bei > 2 MB beim Start nach buddy.log.1 rotieren (nur im normalen Betrieb, nie in Tests)
+if not _is_test_mode and not os.environ.get("DESKTOPCAT_NO_LOG"):
+    log_path = DATA_DIR / "buddy.log"
+    try:
+        if log_path.exists() and log_path.stat().st_size > 2 * 1024 * 1024:
+            backup = DATA_DIR / "buddy.log.1"
+            if backup.exists():
+                backup.unlink()
+            log_path.rename(backup)
+    except Exception:
+        pass
 
-class _TeeStream:
-    """Schreibt Ausgaben sowohl in die Konsole (falls vorhanden) als auch in buddy.log."""
+    class _TeeStream:
+        """Schreibt Ausgaben sowohl in die Konsole (falls vorhanden) als auch in buddy.log."""
 
-    def __init__(self, console_stream, log_file):
-        self._console = console_stream
-        self._file = log_file
+        def __init__(self, console_stream, log_file):
+            self._console = console_stream
+            self._file = log_file
 
-    def write(self, data):
-        if self._console:
-            try:
-                self._console.write(data)
-            except Exception:
-                pass
-        if self._file:
-            try:
-                self._file.write(data)
-            except Exception:
-                pass
+        def write(self, data):
+            if self._console:
+                try:
+                    self._console.write(data)
+                except Exception:
+                    pass
+            if self._file:
+                try:
+                    self._file.write(data)
+                except Exception:
+                    pass
 
-    def flush(self):
-        if self._console:
-            try:
-                self._console.flush()
-            except Exception:
-                pass
-        if self._file:
-            try:
-                self._file.flush()
-            except Exception:
-                pass
+        def flush(self):
+            if self._console:
+                try:
+                    self._console.flush()
+                except Exception:
+                    pass
+            if self._file:
+                try:
+                    self._file.flush()
+                except Exception:
+                    pass
 
-try:
-    _log_file = open(log_path, "a", encoding="utf-8", buffering=1)
-    sys.stdout = _TeeStream(sys.stdout, _log_file)
-    sys.stderr = _TeeStream(sys.stderr, _log_file)
-except Exception:
-    pass
+    try:
+        _log_file = open(log_path, "a", encoding="utf-8", buffering=1)
+        sys.stdout = _TeeStream(sys.stdout, _log_file)
+        sys.stderr = _TeeStream(sys.stderr, _log_file)
+    except Exception:
+        pass
 
 import gemini
 from PyQt6.QtCore import (

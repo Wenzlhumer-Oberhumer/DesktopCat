@@ -45,6 +45,21 @@ QPushButton#danger { background: #4A3338; color: #FF8FB1; }
 QPushButton#danger:hover { background: #5C3D44; }
 QPushButton#primary { background: #FF8FB1; color: #26282C; font-weight: 600; }
 QPushButton#primary:hover { background: #FFA5C0; }
+QGroupBox { font: 600 10pt "Segoe UI"; border: 1px solid #3E4148; border-radius: 10px; margin-top: 10px;
+        padding-top: 14px; background-color: #2B2D31; color: #FFB3C6; }
+QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; color: #FFB3C6; }
+QProgressBar { background-color: #33353B; border: 1px solid #3E4148; border-radius: 10px; }
+QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FF8FB1, stop:1 #FB7185);
+        border-radius: 9px; }
+QTableWidget { background: #26282C; color: #F2F3F5; border: 1px solid #3E4148; border-radius: 8px;
+        gridline-color: #33353B; alternate-background-color: #2E3036; selection-background-color: #FF8FB1;
+        selection-color: #26282C; font: 10pt "Segoe UI"; }
+QHeaderView::section { background-color: #33353B; color: #F2F3F5; padding: 6px; font: 600 10pt "Segoe UI";
+        border: none; border-bottom: 1px solid #3E4148; }
+QScrollArea { background: #26282C; border: 1px solid #3E4148; border-radius: 8px; }
+QScrollBar:vertical { background: #26282C; width: 10px; margin: 0; }
+QScrollBar::handle:vertical { background: #474A52; min-height: 20px; border-radius: 5px; }
+QScrollBar::handle:vertical:hover { background: #5A5D66; }
 """
 
 

@@ -233,9 +233,9 @@ def name_reaction(text: str, char_name: str, user_name: str = "Boss") -> Optiona
             species, emoji = "Glückskatze", "🐾"
         import i18n
         if i18n.lang() == "en":
-            intro = f"I am {cname}, your cute {species} {emoji}! 🐾"
+            intro = f"I am {cname}, your cute {species}! {emoji}"
         else:
-            intro = f"Ich bin {cname}, deine verschmuste {species} {emoji}! 🐾" if cname == "Kylie" else f"Ich bin {cname}, dein treuer {species} {emoji}! 🐾"
+            intro = f"Ich bin {cname}, deine verschmuste {species}! {emoji}" if cname == "Kylie" else f"Ich bin {cname}, dein treuer {species}! {emoji}"
         return NameReaction(intro, kind="who", reply=intro)
 
     # 2. Text ist ausschliesslich der Name (z. B. "kylie", "KYLIE!", "kyliiie?", "Kylie.")

@@ -212,3 +212,27 @@ def test_stats_get_and_set():
         assert store.get_stat("focus_minutes") == "25"
         store.set_stat("focus_minutes", "50")
         assert store.get_stat("focus_minutes") == "50"
+
+
+def test_format_fact_display():
+    from my_data_dialog import format_fact_display
+
+    # Geburtstag
+    f_bday = {"text": "Geburtstag am 14. März", "due_date": "03-14", "kind": "birthday"}
+    res_bday = format_fact_display(f_bday)
+    assert res_bday == "🎂 Geburtstag am 14. März"
+    assert "Frist" not in res_bday
+    assert "03-14" not in res_bday
+
+    # Termin / Frist
+    f_date = {"text": "Prüfung", "due_date": "2026-10-20", "kind": "date"}
+    res_date = format_fact_display(f_date)
+    assert res_date == "📅 Prüfung · 20. Okt."
+    assert "Frist" not in res_date
+    assert "2026-10-20" not in res_date
+
+    # Normaler Fakt
+    f_fact = {"text": "Mag Katzen und Python", "due_date": None, "kind": "fact"}
+    res_fact = format_fact_display(f_fact)
+    assert res_fact == "• Mag Katzen und Python"
+
