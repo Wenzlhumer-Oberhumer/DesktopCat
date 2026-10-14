@@ -178,10 +178,30 @@ def test_photobox_filename_and_frame():
     test_img = QImage(200, 150, QImage.Format.Format_ARGB32_Premultiplied)
     test_img.fill(QColor("skyblue"))
 
-    framed = frame_photobox_image(test_img, "14.10.2026 15:30", "Kylie")
+    framed = frame_photobox_image(test_img, "Kylie & Flo – beste Freunde 🐾", "14.10.2026", angle=-3.0, size=300)
     assert not framed.isNull()
-    assert framed.width() > test_img.width()
-    assert framed.height() > test_img.height()
+    assert framed.width() > 300 and framed.height() > framed.width() * 0.9   # Polaroid: hoeher als breit
+    assert framed.pixelColor(0, 0).alpha() == 0                              # Ecke transparent (schief + Schatten)
+
+
+def test_photo_crop_rect_is_square_around_pet_and_inside_screen():
+    from fun import photo_crop_rect
+    x, y, w, h = photo_crop_rect(900, 700, 320, 320, 0, 0, 1920, 1040)       # Kylie auf der Taskleiste
+    assert w == h == int(320 * 1.7)
+    assert x <= 900 and x + w >= 1220 and y <= 700                           # Figur ganz drin
+    assert y + h <= 1040                                                      # nicht unter den Bildschirm
+    x, y, w, h = photo_crop_rect(1800, 700, 320, 320, 0, 0, 1920, 1040)      # ganz rechts am Rand
+    assert x + w <= 1920
+    x, y, w, h = photo_crop_rect(-1500, 300, 320, 320, -1920, 0, 1920, 1080) # zweiter Monitor links
+    assert -1920 <= x and x + w <= 0
+
+
+def test_shutter_sound_is_valid_wav_and_captions_fill_names():
+    from fun import photo_caption, shutter_wav
+    wav = shutter_wav()
+    assert wav[:4] == b"RIFF" and wav[8:12] == b"WAVE" and len(wav) > 2000
+    cap = photo_caption("Kylie", "Flo")
+    assert "{" not in cap and ("Kylie" in cap or "Flo" in cap or "Miau" in cap)
 
 
 def test_notes_crud_and_wipe():

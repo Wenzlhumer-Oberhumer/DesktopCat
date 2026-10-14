@@ -853,8 +853,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Later",
     },
     "onboarding.q2_language": {
-        "de": "Welche Sprache magst du?",
-        "en": "Which language do you prefer?",
+        "de": "Hi! 👋 Welche Sprache magst du?\nWhich language do you prefer?",
+        "en": "Hi! 👋 Welche Sprache magst du?\nWhich language do you prefer?",
     },
     "onboarding.q2_chip_de": {
         "de": "Deutsch 🇩🇪",
@@ -1231,6 +1231,14 @@ STRINGS: dict[str, dict[str, str]] = {
     "say.photo_done": {
         "de": "Klick! 📸 Wunderschön geworden! ✨",
         "en": "Click! 📸 It turned out beautifully! ✨",
+    },
+    "say.photo_done_clip": {
+        "de": "Klick! 📸 Wunderschön geworden! Liegt auch in der Zwischenablage ✨",
+        "en": "Click! 📸 It turned out beautifully! It's in your clipboard too ✨",
+    },
+    "photo.caption_prompt": {
+        "de": "Schreib eine kurze, süße Bildunterschrift für ein Polaroid-Selfie von {cname} (Desktop-Haustier) mit {user}. Max. 40 Zeichen, höchstens 1 Emoji, nur der Text, keine Anführungszeichen.",
+        "en": "Write a short, cute caption for a polaroid selfie of {cname} (desktop pet) with {user}. Max 40 characters, at most 1 emoji, text only, no quotes.",
     },
     "say.photo_failed": {
         "de": "Konnte kein Foto aufnehmen: {exc}",

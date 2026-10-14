@@ -314,52 +314,126 @@ def generate_photobox_filename(now: Optional[datetime.datetime] = None) -> str:
     return f"Foto_{now.strftime('%Y-%m-%d_%H-%M-%S')}.png"
 
 
-def frame_photobox_image(screenshot: QImage, date_time_str: str, char_name: str = "Kylie") -> QImage:
-    """Erstellt ein huebsches Polaroid-Foto mit weissem Rahmen, Datum und Stempel."""
-    sw, sh = screenshot.width(), screenshot.height()
+def photo_crop_rect(pet_x: int, pet_y: int, pet_w: int, pet_h: int,
+                    scr_x: int, scr_y: int, scr_w: int, scr_h: int) -> tuple[int, int, int, int]:
+    """Quadratischer Selfie-Ausschnitt rund um die Figur (ca. 1,7x ihre Groesse), immer ganz im Bildschirm."""
+    side = int(min(max(pet_w, pet_h) * 1.7, scr_w, scr_h))
+    x = pet_x + pet_w // 2 - side // 2
+    y = pet_y + pet_h + int(side * 0.06) - side          # Figur unten mittig, etwas Boden darunter
+    x = max(scr_x, min(x, scr_x + scr_w - side))
+    y = max(scr_y, min(y, scr_y + scr_h - side))
+    return x, y, side, side
 
-    border_side = max(18, int(sw * 0.025))
-    border_top = border_side
-    border_bottom = int(border_side * 2.8)
 
-    fw = sw + 2 * border_side
-    fh = sh + border_top + border_bottom
+_CAPTIONS_DE = [
+    "{pet} & {user} – beste Freunde 🐾", "Selfie-Time mit {pet}! 📸", "{user}s liebste Desktop-Katze 💖",
+    "Heute schon gekuschelt? {pet} schon! 😺", "Team {pet} & {user} ✨", "Bitte lächeln… Miau! 😸",
+    "{pet} war hier 🐾", "Arbeitspause mit {pet} ☕",
+]
+_CAPTIONS_EN = [
+    "{pet} & {user} – best friends 🐾", "Selfie time with {pet}! 📸", "{user}'s favourite desktop buddy 💖",
+    "Team {pet} & {user} ✨", "Say cheese… meow! 😸", "{pet} was here 🐾",
+]
 
-    framed = QImage(fw, fh, QImage.Format.Format_ARGB32_Premultiplied)
-    framed.fill(QColor(250, 248, 245))
 
-    p = QPainter(framed)
+def photo_caption(pet: str, user: str, rng=None) -> str:
+    """Offline-Spruch fuer den Polaroid-Rand (Gemini-Spruch ersetzt ihn, falls verfuegbar)."""
+    import random as _random
+    pool = _CAPTIONS_EN if i18n.lang() == "en" else _CAPTIONS_DE
+    return (rng or _random).choice(pool).format(pet=pet, user=user)
+
+
+def shutter_wav() -> bytes:
+    """Kurzes Kamera-"Klick-Klack" als WAV im Speicher (Windows hat keinen Ausloese-Sound)."""
+    import io
+    import random as _random
+    import struct
+    import wave
+    rate, rng = 22050, _random.Random(7)
+    samples = []
+    for start_ms, length_ms, vol in ((0, 45, 0.55), (85, 60, 0.4)):
+        while len(samples) < rate * start_ms // 1000:
+            samples.append(0)
+        n = rate * length_ms // 1000
+        for i in range(n):
+            samples.append(int(32767 * vol * (1 - i / n) ** 3 * (rng.random() * 2 - 1)))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(struct.pack(f"<{len(samples)}h", *samples))
+    return buf.getvalue()
+
+
+def frame_photobox_image(photo: QImage, caption: str, date_str: str, angle: float = -3.0,
+                         size: int = 900) -> QImage:
+    """Echtes Polaroid: quadratisches Foto, breiter Rand unten mit Handschrift, leicht schief, weicher Schatten.
+    Rueckgabe hat einen transparenten Hintergrund."""
+    from PyQt6.QtGui import QTransform
+    border = int(size * 0.06)
+    bottom = int(size * 0.26)
+    pw, ph = size + 2 * border, size + border + bottom
+
+    card = QImage(pw, ph, QImage.Format.Format_ARGB32_Premultiplied)
+    card.fill(QColor(252, 250, 245))
+    p = QPainter(card)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    side = min(photo.width(), photo.height())
+    src = photo.copy((photo.width() - side) // 2, (photo.height() - side) // 2, side, side)
+    p.drawImage(QRectF(border, border, size, size), src)
+    p.setPen(QPen(QColor(0, 0, 0, 30), 1.0))
+    p.drawRect(QRectF(border, border, size, size))
+    # leichter Glanz wie bei echtem Fotopapier
+    p.fillRect(QRectF(border, border, size, size * 0.35), QColor(255, 255, 255, 14))
 
-    # 1. Bild zeichnen
-    photo_rect = QRectF(border_side, border_top, sw, sh)
-    p.drawImage(photo_rect, screenshot)
-
-    # Sanfter Schatten/Rahmen um das Foto
-    p.setPen(QPen(QColor(0, 0, 0, 40), 1.5))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawRect(photo_rect)
-
-    # 2. Unterer Bereich mit Stempel
-    stamp_y = sh + border_top + int(border_bottom * 0.4)
-    font = QFont("Segoe UI", max(11, int(border_bottom * 0.22)))
-    font.setBold(True)
-    p.setFont(font)
-    p.setPen(QColor(60, 62, 68))
-
-    stamp_text = f"Desktop Cat 🐾  •  {char_name} & Du  •  {date_time_str}"
-    fm = QFontMetrics(font)
-    tw = fm.horizontalAdvance(stamp_text)
-    tx = (fw - tw) / 2.0
-    p.drawText(QPointF(tx, stamp_y), stamp_text)
-
-    # Kleine Deko-Herzen links und rechts
-    heart_font = QFont("Segoe UI", max(12, int(border_bottom * 0.26)))
-    p.setFont(heart_font)
-    p.setPen(QColor("#FF8FB1"))
-    p.drawText(QPointF(border_side + 10, stamp_y), "💖")
-    p.drawText(QPointF(fw - border_side - 30, stamp_y), "✨")
-
+    p.setPen(QColor(55, 55, 65))
+    cap_font = QFont("Segoe Print", 10)
+    cap_font.setPixelSize(int(bottom * 0.24))
+    while QFontMetrics(cap_font).horizontalAdvance(caption) > pw - 2 * border and cap_font.pixelSize() > 12:
+        cap_font.setPixelSize(cap_font.pixelSize() - 2)
+    p.setFont(cap_font)
+    p.drawText(QRectF(border, size + border + bottom * 0.12, size, bottom * 0.45),
+               Qt.AlignmentFlag.AlignCenter, caption)
+    date_font = QFont("Segoe Print", 10)
+    date_font.setPixelSize(int(bottom * 0.15))
+    p.setFont(date_font)
+    p.setPen(QColor(120, 120, 130))
+    p.drawText(QRectF(border, size + border + bottom * 0.58, size, bottom * 0.3),
+               Qt.AlignmentFlag.AlignCenter, f"{date_str}  ·  Desktop Cat 🐾")
     p.end()
-    return framed
+
+    rotated = card.transformed(QTransform().rotate(angle), Qt.TransformationMode.SmoothTransformation)
+    pad = int(size * 0.05)
+    out = QImage(rotated.width() + 2 * pad, rotated.height() + 2 * pad, QImage.Format.Format_ARGB32_Premultiplied)
+    out.fill(Qt.GlobalColor.transparent)
+    p = QPainter(out)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    # weicher Schatten: mehrere versetzte, halbtransparente Kopien der Kartenform
+    shadow = QImage(rotated.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    shadow.fill(Qt.GlobalColor.transparent)
+    sp = QPainter(shadow)
+    sp.drawImage(0, 0, rotated)
+    sp.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    sp.fillRect(shadow.rect(), QColor(0, 0, 0, 255))
+    sp.end()
+    for i, alpha in enumerate((0.05, 0.05, 0.05, 0.05, 0.04, 0.03)):
+        p.setOpacity(alpha)
+        off = pad * 0.25 + i * 3
+        p.drawImage(QPointF(pad + off * 0.4, pad + off), shadow)
+    p.setOpacity(1.0)
+    p.drawImage(QPointF(pad, pad), rotated)
+    p.end()
+    return out
+
+
+def flatten_on_white(img: QImage) -> QImage:
+    """Fuer die Zwischenablage: viele Apps zeigen Transparenz schwarz an."""
+    out = QImage(img.size(), QImage.Format.Format_RGB32)
+    out.fill(QColor(255, 255, 255))
+    p = QPainter(out)
+    p.drawImage(0, 0, img)
+    p.end()
+    return out
+

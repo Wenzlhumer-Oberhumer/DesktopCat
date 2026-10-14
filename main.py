@@ -1388,11 +1388,33 @@ class Buddy(QObject):
         self._say(tr("say.photo_warn", cname=cname), 2400)
         pose_choice = random.choice(["dance", "cool", "celebrate"])
         if pose_choice == "dance":
-            self.pet.dance(6.0)
+            self.pet.dance(7.0)
         elif pose_choice == "cool":
-            self.pet.be_cool(6.0)
+            self.pet.be_cool(7.0)
         else:
-            self.pet.celebrate(6.0)
+            self.pet.celebrate(7.0)
+        acc = random.choice(["sunglasses", "party_hat", "bow", "crown", "bandana", None])
+        if acc:
+            self.pet.set_accessory(acc, True, until=time.monotonic() + 8.0)
+        # Selfie: Kylie posiert kurz doppelt so gross (Fuesse bleiben stehen)
+        self._photo_old_scale = self.pet.scale
+        self.pet.set_scale(min(2.5, self.pet.scale * 2))
+
+        # Spruch: offline sofort, mit Gemini-Key wird er waehrend des Countdowns ersetzt
+        from fun import photo_caption
+        self._photo_caption = photo_caption(cname, self.user_name())
+        if gemini.has_key():
+            import threading
+            prompt = tr("photo.caption_prompt", cname=cname, user=self.user_name())
+
+            def _ask() -> None:
+                try:
+                    txt = gemini.ask(prompt, timeout_s=5).strip().strip('"„“')
+                    if 3 <= len(txt) <= 60:
+                        self._photo_caption = txt          # nur ein String - kein Qt-Objekt im Thread
+                except Exception:
+                    pass
+            threading.Thread(target=_ask, daemon=True).start()
 
         QTimer.singleShot(2400, lambda: self._say(tr("say.countdown_3"), 1000))
         QTimer.singleShot(3500, lambda: self._say(tr("say.countdown_2"), 1000))
@@ -1401,39 +1423,62 @@ class Buddy(QObject):
 
     def _snap_photobox(self) -> None:
         try:
-            from fun import frame_photobox_image, generate_photobox_filename
+            from fun import flatten_on_white, frame_photobox_image, generate_photobox_filename, photo_crop_rect
             self.bubble.hide_now()
-
-            screen = self.app.primaryScreen()
+            pet_geo = self.pet.frameGeometry()
+            screen = QGuiApplication.screenAt(pet_geo.center()) or self.app.primaryScreen()
             if not screen:
                 return
-            pix = screen.grabWindow(0)
-            img = pix.toImage()
+            sg = screen.geometry()
+            x, y, w, h = photo_crop_rect(pet_geo.x(), pet_geo.y(), pet_geo.width(), pet_geo.height(),
+                                         sg.x(), sg.y(), sg.width(), sg.height())
+            img = screen.grabWindow(0, x - sg.x(), y - sg.y(), w, h).toImage()
+            self._photo_flash(screen)
 
-            cname = self.char_info().get("name", "Kylie")
             now_dt = datetime.datetime.now()
-            date_time_str = now_dt.strftime("%d.%m.%Y %H:%M")
-            framed = frame_photobox_image(img, date_time_str, cname)
-
-            pics_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)
-            target_dir = Path(pics_dir) / "Desktop Cat"
+            framed = frame_photobox_image(img, self._photo_caption, now_dt.strftime("%d.%m.%Y"),
+                                          angle=random.uniform(-4.0, 4.0))
+            target_dir = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.PicturesLocation)) / "Desktop Cat"
             target_dir.mkdir(parents=True, exist_ok=True)
-            fname = generate_photobox_filename(now_dt)
-            out_path = target_dir / fname
+            out_path = target_dir / generate_photobox_filename(now_dt)
             framed.save(str(out_path))
+            QGuiApplication.clipboard().setImage(flatten_on_white(framed))
 
             self.pet.react_happy()
-            self._say(tr("say.photo_done"), 4000)
+            self._say(tr("say.photo_done_clip"), 4000)
             self._last_photo_folder = str(target_dir)
-            self.tray.showMessage(
-                "📸 Foto gespeichert!",
-                f"Gespeichert in: Bilder/Desktop Cat/{fname} (Klicken zum Öffnen)",
-                self.icon,
-                7000,
-            )
+            os.startfile(str(out_path))                    # mit dem Standard-Bildprogramm oeffnen
         except Exception as exc:
             print(f"[photobox] Fehler: {exc}")
             self._say(tr("say.photo_failed", exc=exc), 4000)
+        finally:
+            QTimer.singleShot(400, lambda: self.pet.set_scale(getattr(self, "_photo_old_scale", 1.0)))
+
+    def _photo_flash(self, screen) -> None:
+        """Weisser Blitz + Klick-Klack (nach dem Foto, damit beides nicht drauf ist)."""
+        from PyQt6.QtCore import QPropertyAnimation, Qt
+        from PyQt6.QtWidgets import QWidget
+        flash = QWidget(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+                        | Qt.WindowType.Tool | Qt.WindowType.WindowTransparentForInput)
+        flash.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        flash.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        flash.setStyleSheet("background: white;")
+        flash.setGeometry(screen.geometry())
+        flash.setWindowOpacity(0.85)
+        flash.show()
+        anim = QPropertyAnimation(flash, b"windowOpacity", flash)
+        anim.setDuration(380)
+        anim.setStartValue(0.85)
+        anim.setEndValue(0.0)
+        anim.finished.connect(flash.close)
+        anim.start()
+        try:
+            import threading
+            import winsound
+            from fun import shutter_wav
+            threading.Thread(target=winsound.PlaySound, args=(shutter_wav(), winsound.SND_MEMORY), daemon=True).start()
+        except Exception:
+            pass
 
     def _on_tray_message_clicked(self) -> None:
         if getattr(self, "_last_photo_folder", None):

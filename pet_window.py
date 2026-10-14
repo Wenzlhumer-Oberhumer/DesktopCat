@@ -854,17 +854,25 @@ class PetWindow(QWidget):
             delta = 0.05 if e.angleDelta().y() > 0 else -0.05
             new_scale = round(max(0.6, min(2.5, self.scale + delta)), 2)
             if abs(new_scale - self.scale) > 1e-4:
-                old_bottom = self._py + self.height()
-                self.scale = new_scale
-                self.setFixedSize(int(BASE * new_scale), int(BASE * new_scale))
-                self._py = old_bottom - self.height()
-                self._apply_pos()
+                self.set_scale(new_scale)
                 self.cfg.set("pet.scale", new_scale)
                 self.cfg.save()
-                self.moved.emit()
             e.accept()
             return
         super().wheelEvent(e)
+
+    def set_scale(self, new_scale: float) -> None:
+        """Groesse aendern, Fuesse bleiben am selben Platz (auch fuer das Fotobox-Selfie)."""
+        old_bottom = self._py + self.height()
+        old_cx = self._px + self.width() / 2
+        self.scale = new_scale
+        self.setFixedSize(int(BASE * new_scale), int(BASE * new_scale))
+        self._py = old_bottom - self.height()
+        lo, hi = self._x_bounds()
+        self._px = max(lo, min(hi, old_cx - self.width() / 2))
+        self._apply_pos()
+        self.moved.emit()
+        self.update()
 
     def contextMenuEvent(self, e) -> None:
         self._click_timer.stop()

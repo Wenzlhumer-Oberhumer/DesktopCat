@@ -57,12 +57,14 @@ class OnboardingFlow:
     """Zustandsmaschine fuer die 15 Onboarding-Schritte, komplett ohne GUI-Klassen testbar."""
 
     TOTAL_STEPS = 15
+    # Reihenfolge der Schritt-IDs: Sprache zuerst; 14 (Autostart) entfaellt - fragt schon der Installer
+    ORDER = (2, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15)
 
     def __init__(self, cfg: Any, has_key_fn: Optional[Callable[[], bool]] = None, is_update: bool = False):
         self.cfg = cfg
         self.has_key_fn = has_key_fn if has_key_fn is not None else gemini.has_key
         self.is_update = is_update
-        self.step = 1
+        self.step = self.ORDER[0]
         self.answers: dict[str, Any] = {}
 
         if is_update and hasattr(cfg, "get"):
@@ -96,13 +98,18 @@ class OnboardingFlow:
         if not self.can_skip():
             return False
         # Falls von Schritt 10 weitergegangen wird und bereits ein Key da ist -> Schritt 11 ueberspringen
-        if self.step == 10 and self.has_key_fn():
-            self.step = 12
-        else:
-            self.step += 1
-        if self.step > self.TOTAL_STEPS:
-            self.step = self.TOTAL_STEPS
+        self.step = self._next(self.step)
         return True
+
+    def _next(self, step: int) -> int:
+        nxt = self.ORDER[min(self.ORDER.index(step) + 1, len(self.ORDER) - 1)]
+        if nxt == 11 and self.has_key_fn():      # Key schon da -> Key-Frage ueberspringen
+            nxt = 12
+        return nxt
+
+    def position(self) -> tuple[int, int]:
+        """(aktuelle Position ab 1, Anzahl Schritte) fuer die Pfoten-Fortschrittsleiste."""
+        return self.ORDER.index(self.step) + 1, len(self.ORDER)
 
     def submit_answer(self, answer: Any) -> bool:
         """Verarbeitet eine Antwort fuer den aktuellen Schritt und schaltet weiter."""
@@ -113,7 +120,7 @@ class OnboardingFlow:
             if ans_str in ("later", "später", "spaeter"):
                 self.skip_later()
                 return False
-            self.step = 2
+            self.step = self._next(1)
             return True
 
         elif s == 2:
@@ -123,7 +130,7 @@ class OnboardingFlow:
                 self.cfg.set("language", lang)
             i18n.set_language(lang)
             self.answers["language"] = lang
-            self.step = 3
+            self.step = self._next(2)
             return True
 
         elif s == 3:
@@ -240,15 +247,7 @@ class OnboardingFlow:
                     self.cfg.set("privacy.remember", bool(answer["remember"]))
                 if "use_history" in answer:
                     self.cfg.set("privacy.use_history", bool(answer["use_history"]))
-            self.step = 14
-            return True
-
-        elif s == 14:
-            ans_str = str(answer).lower()
-            auto = not ("nein" in ans_str or "no" in ans_str)
-            if hasattr(self.cfg, "set"):
-                self.cfg.set("autostart", auto)
-            self.step = 15
+            self.step = self._next(13)
             return True
 
         elif s == 15:
@@ -613,9 +612,8 @@ class OnboardingDialog(QDialog):
             self.move(geo.center().x() - self.width() // 2, geo.center().y() - self.height() // 2)
 
     def _update_progress(self) -> None:
-        step = self.flow.current_step()
-        total = self.flow.TOTAL_STEPS
-        # ohne Leerzeichen: 15 Pfoten passen neben den Schliessen-Button
+        step, total = self.flow.position()
+        # ohne Leerzeichen: alle Pfoten passen neben den Schliessen-Button
         self.lbl_progress.setText("🐾" * step + "◦" * (total - step))
 
     def _add_pet_bubble(self, text: str) -> None:
@@ -878,13 +876,6 @@ class OnboardingDialog(QDialog):
         elif step == 13:
             self._add_pet_bubble(tr("onboarding.q13_privacy"))
             self._render_privacy_toggles()
-
-        elif step == 14:
-            self._add_pet_bubble(tr("onboarding.q14_autostart"))
-            self._render_chips([
-                (tr("onboarding.q14_chip_yes"), "ja"),
-                (tr("onboarding.q14_chip_no"), "nein"),
-            ], can_skip=True)
 
         elif step == 15:
             self._add_pet_bubble(tr("onboarding.q15_done", user_name=u_name))

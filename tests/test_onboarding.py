@@ -68,17 +68,18 @@ def test_onboarding_flow_sequence():
 
         # Flow ohne Key (Schritt 11 soll nicht uebersprungen werden)
         flow = OnboardingFlow(cfg, has_key_fn=lambda: False)
-        assert flow.current_step() == 1
+        assert flow.current_step() == 2          # Sprache kommt zuerst
+        assert flow.position() == (1, 14)
         assert not flow.is_done()
-
-        # Schritt 1: Willkommen
-        assert flow.submit_answer("Klar! 😺")
-        assert flow.current_step() == 2
 
         # Schritt 2: Sprache
         assert flow.submit_answer("English 🇬🇧")
-        assert flow.current_step() == 3
+        assert flow.current_step() == 1
         assert cfg.get("language") == "en"
+
+        # Schritt 1: Willkommen
+        assert flow.submit_answer("Klar! 😺")
+        assert flow.current_step() == 3
 
         # Schritt 3: Name (Pflichtfeld)
         assert not flow.submit_answer("")  # leere Eingabe darf nicht weitergehen
@@ -134,12 +135,8 @@ def test_onboarding_flow_sequence():
 
         # Schritt 13: Privacy
         assert flow.submit_answer({"save_chats": True, "remember": True, "use_history": True})
-        assert flow.current_step() == 14
-
-        # Schritt 14: Autostart
-        assert flow.submit_answer("Ja, immer dabei!")
-        assert flow.current_step() == 15
-        assert cfg.get("autostart") is True
+        assert flow.current_step() == 15         # keine Autostart-Frage mehr (fragt der Installer)
+        assert flow.position() == (14, 14)
 
         # Schritt 15: Fertig
         assert flow.submit_answer("Los")
