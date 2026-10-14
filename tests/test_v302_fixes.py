@@ -113,11 +113,51 @@ def test_restore_windows_wallpaper_fallback():
 
 
 def test_close_lively_wallpaper_command():
-    """Testet, dass close_lively_wallpaper 'closewp -1' an Lively.exe sendet."""
+    """Testet, dass close_lively_wallpaper 'closewp -1' und taskkill aufruft."""
     with patch("lively_wallpaper.find_lively_exe", return_value=Path("C:/Mock/Lively.exe")), \
          patch("subprocess.run") as mock_run:
         lively_wallpaper.close_lively_wallpaper()
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert "closewp" in args
-        assert "-1" in args
+        assert mock_run.call_count == 2
+        args0 = mock_run.call_args_list[0][0][0]
+        assert "closewp" in args0
+        assert "-1" in args0
+        args1 = mock_run.call_args_list[1][0][0]
+        assert "taskkill" in args1
+
+
+def test_perch_levels_includes_bed_without_room_mode():
+    """Testet, dass das Katzenbett auch ohne room_mode als Ebene erkannt wird."""
+    _ensure_qapp()
+    cfg = Config()
+    cfg.set("pet.room_mode", False)
+    win = PetWindow(cfg, APP_DIR)
+    mock_bed = MagicMock()
+    mock_bed.isVisible.return_value = True
+    mock_bed.get_dock_position.return_value = (500.0, 320.0)
+    win.pet_bed = mock_bed
+
+    levels = win._perch_levels()
+    assert 320.0 in levels
+
+
+def test_walk_approaching_bed_steps_up_smoothly():
+    """Testet, dass die Katze beim Annähern an das Bettchen sanft in der Höhe einsteigt."""
+    _ensure_qapp()
+    cfg = Config()
+    cfg.set("pet.room_mode", False)
+    win = PetWindow(cfg, APP_DIR)
+    mock_bed = MagicMock()
+    mock_bed.isVisible.return_value = True
+    mock_bed.get_dock_position.return_value = (400.0, 300.0)
+    win.pet_bed = mock_bed
+
+    win._going_to_bed = True
+    win._walk_target = 400.0
+    win._px = 350.0  # 50px vor dem Bett (< 90px Distanz)
+    win._py = 340.0  # 40px tiefer als das Bett
+
+    win._walk(0.1)  # Ein Schritt
+    # _py muss sich sanft nach oben (300.0) bewegt haben, ohne schlagartig auf 300.0 zu springen
+    assert win._py < 340.0
+    assert win._py >= 300.0
+

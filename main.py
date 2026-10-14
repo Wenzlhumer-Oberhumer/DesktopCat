@@ -774,10 +774,13 @@ class Buddy(QObject):
         self._say(tr("about.text", version=__version__), 6000)
 
     def quit(self) -> None:
-        if bool(self.cfg.get("lively.auto_sync", False)):
+        if bool(self.cfg.get("lively.auto_sync", False)) or bool(self.cfg.get("pet.is_at_home", False)) or bool(self.cfg.get("lively.prev_wallpaper", "")):
             try:
                 import lively_wallpaper
                 lively_wallpaper.restore_original_wallpaper(self.cfg)
+                self.cfg.set("pet.is_at_home", False)
+                self.cfg.set("pet.room_mode", False)
+                self.cfg.save()
             except Exception:
                 pass
         self.note_manager.close_all()

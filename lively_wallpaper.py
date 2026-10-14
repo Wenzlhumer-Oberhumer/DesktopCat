@@ -114,21 +114,35 @@ def restore_windows_wallpaper(path: str) -> bool:
 def close_lively_wallpaper() -> bool:
     """Schliesst aktive Lively-Hintergruende zuverlaessig."""
     lively_exe = find_lively_exe()
-    if not lively_exe:
-        return False
+    closed = False
+    if lively_exe:
+        try:
+            # Lively CLI schliesst Hintergruende mit 'closewp -1'
+            subprocess.run(
+                [str(lively_exe), "closewp", "-1"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=4,
+            )
+            closed = True
+        except Exception:
+            pass
+
+    # Sicherheits-Cleanup: Falls Lively.Player.WebView2 noch den Desktop verdeckt
     try:
-        # Lively CLI schliesst Hintergruende mit 'closewp -1'
         subprocess.run(
-            [str(lively_exe), "closewp", "-1"],
+            ["taskkill", "/F", "/IM", "Lively.Player.WebView2.exe"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            timeout=5,
+            timeout=2,
         )
-        return True
+        closed = True
     except Exception:
         pass
-    return False
+
+    return closed
 
 
 def apply_lively_wallpaper(cfg=None, store=None) -> tuple[bool, str]:

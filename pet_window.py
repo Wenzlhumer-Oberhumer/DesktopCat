@@ -448,19 +448,19 @@ class PetWindow(QWidget):
         return self._avail().bottom() + 1 - FLOOR * self.scale
 
     def _perch_levels(self) -> list[float]:
-        """Gibt die verfuegbaren Hoehenebenen im Raum zurueck (Boden, Bett, Fensterbrett, Wandregal)."""
+        """Gibt die verfuegbaren Hoehenebenen zurueck (Boden, Bett, und im Raum-Modus Wandregal / Fensterbrett)."""
         avail = self._avail()
         ground = self._ground_y()
-        if not bool(self.cfg.get("pet.room_mode", False)):
-            return [ground]
-        h = float(avail.height())
-        shelf = float(avail.top() + h * 0.22)
-        window_sill = float(avail.top() + h * 0.48)
-        levels = [ground, window_sill, shelf]
+        levels = [ground]
         if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
             _, bed_y = self.pet_bed.get_dock_position()
             levels.append(bed_y)
-        return sorted(levels)
+        if bool(self.cfg.get("pet.room_mode", False)):
+            h = float(avail.height())
+            shelf = float(avail.top() + h * 0.22)
+            window_sill = float(avail.top() + h * 0.48)
+            levels.extend([window_sill, shelf])
+        return sorted(set(levels))
 
     def _closest_perch_y(self, y: float) -> float:
         """Findet die naechstgelegene Hoehenebene unterhalb oder nahe von y."""
@@ -564,18 +564,29 @@ class PetWindow(QWidget):
 
     def go_to_sleep(self) -> None:
         """Laesst die Katze zum Katzenbettchen spazieren und sich dort schlafen legen (ohne Teleport!)."""
+        if self.state == PetState.SLEEP:
+            return
+        if self.state == PetState.DRAGGED or self._dragging or self.frozen:
+            return
+
         if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
             bed_x, bed_y = self.pet_bed.get_dock_position()
             dist_x = abs(self._px - bed_x)
             dist_y = abs(self._py - bed_y)
             # Falls die Katze noch nicht im Bettchen ist: gemuetlich hinlaufen!
-            if dist_x > 18 or dist_y > 22:
+            if dist_x > 18 or dist_y > 18:
                 self.wake()
                 self._going_to_bed = True
                 self._walk_target = bed_x
                 direction = 1 if bed_x > self._px else -1
+                self.facing = direction
                 self.set_state(PetState.WALK_RIGHT if direction > 0 else PetState.WALK_LEFT)
                 return
+            else:
+                self._px = bed_x
+                self._py = bed_y
+                self._apply_pos()
+
         # Falls kein Bett da ist oder sie schon dort steht: direkt schlafen
         self._going_to_bed = False
         self.set_state(PetState.SLEEP)
@@ -781,7 +792,12 @@ class PetWindow(QWidget):
         )
 
     def _walk(self, dt: float) -> None:
-        lo, hi = self._x_bounds()
+        if self._going_to_bed:
+            vrect = self._virtual_rect()
+            lo, hi = float(vrect.left()), float(vrect.right() + 1 - self.width())
+        else:
+            lo, hi = self._x_bounds()
+
         step = self.speed * dt
         diff = self._walk_target - self._px
         if abs(diff) <= step:
@@ -801,11 +817,20 @@ class PetWindow(QWidget):
         self._px += math.copysign(step, diff)
         self._px = max(lo, min(hi, self._px))
 
-        # Falls die Katze zum Bettchen laeuft und ein Hoehensprung noetig ist
+        # Falls die Katze zum Bettchen laeuft: sanftes Einsteigen statt Sprung
         if self._going_to_bed and getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
             _, bed_y = self.pet_bed.get_dock_position()
-            if abs(self._px - self._walk_target) < 60 and abs(self._py - bed_y) > 25 and self._vy == 0:
+            dist_to_bed = abs(self._px - self._walk_target)
+            dy = bed_y - self._py
+            if dist_to_bed < 90.0 and abs(dy) > 1.0:
+                # Sanftes Hochsteigen/Hineinkuscheln ins Bettchen
+                step_y = max(40.0, self.speed * 0.9) * dt
+                self._py += math.copysign(min(abs(dy), step_y), dy)
+            elif dist_to_bed < 140.0 and abs(dy) > 45 and self._vy == 0:
+                # Bei grossen Hoehenunterschieden ein gezielter Sprung
                 self._leap_to_perch(bed_y)
+            else:
+                self._py = self._closest_perch_y(self._py)
         else:
             self._py = self._closest_perch_y(self._py)
 
