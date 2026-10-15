@@ -253,3 +253,31 @@ def test_restore_wallpaper_tool_registered():
     from tools import TOOLS
     assert "restore_wallpaper" in TOOLS
 
+
+def test_deploy_room_to_lively_library():
+    """Testet, dass deploy_room_to_lively_library das Paket in die Lively Library spiegelt."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fake_lib = Path(tmpdir) / "wallpapers"
+        with patch("lively_wallpaper.get_lively_library_wallpapers_dir", return_value=fake_lib):
+            target = lively_wallpaper.deploy_room_to_lively_library()
+            assert target is not None
+            assert target.is_dir()
+            assert (target / "LivelyInfo.json").is_file()
+            assert (target / "index.html").is_file()
+
+
+def test_offline_parser_wallpaper_fix_phrases():
+    """Testet, dass der Offline-Parser Nutzeranfragen wie 'das wallpaler funktioniert immer noch nicht fix das!' erkennt."""
+    from agent_brain import parse_offline
+    for query in [
+        "das wallpaler funktioniert immer noch nicht fix das!",
+        "mein hintergrund ist weg",
+        "hintergrund wiederherstellen",
+        "wallpaper fixen",
+        "hintergrund geht nicht",
+    ]:
+        plan = parse_offline(query)
+        assert plan is not None, f"Query '{query}' not matched"
+        assert plan.tool == "restore_wallpaper", f"Expected restore_wallpaper for '{query}', got {plan.tool}"
+
+
