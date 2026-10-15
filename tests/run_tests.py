@@ -64,6 +64,10 @@ def main():
         "test_pet_interactions",
         "test_friendship_progress",
         "test_v321_usability",
+        "test_play_coordinator",
+        "test_play_store",
+        "test_play_stories",
+        "test_game_room",
     ]
 
     total = 0

@@ -15,14 +15,14 @@ from memory_store import MemoryStore
 
 
 def test_yarn_points_have_their_own_ten_action_limit():
-    from main import Buddy
+    from play_coordinator import PlayCoordinator
     from fun import add_friendship_points
     with tempfile.TemporaryDirectory() as td:
         store = MemoryStore(Path(td)/'memory.db')
-        buddy = SimpleNamespace(pet=MagicMock(), _say=MagicMock(), char_info=lambda: {'name':'Kylie'})
+        buddy = SimpleNamespace(active=True, clock=SimpleNamespace(paused=False), store=store, score=0, pet=MagicMock(), room=MagicMock(), t=lambda de,en: de)
         with patch('memory_store.get_memory_store', return_value=store):
             for _ in range(10):
-                Buddy._on_yarn_kicked(buddy)
+                PlayCoordinator._caught(buddy)
         before = store.get_friendship_points()
         assert store.get_daily_friendship_count('yarn', datetime.date.today().isoformat()) == 10
         assert store.get_daily_friendship_count('treat', datetime.date.today().isoformat()) == 0

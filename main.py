@@ -506,6 +506,7 @@ class Buddy(QObject):
         self.pet.character_tree_requested.connect(self.open_character_tree)
         self.pet.bubble_game_requested.connect(self.start_bubble_game)
         self.pet.yarn_game_requested.connect(self.start_yarn_game)
+        self.pet.play_requested.connect(self.open_game_room)
         self.pet.wallpaper_requested.connect(self.activate_lively_wallpaper)
         self.pet.restore_wallpaper_requested.connect(self.restore_desktop_wallpaper)
         self.pet.pet_bed_requested.connect(self.toggle_pet_bed)
@@ -542,6 +543,8 @@ class Buddy(QObject):
         from minigames import BubblePopGameManager, YarnBallWidget
         self.bubble_mgr = BubblePopGameManager(get_memory_store(), cfg)
         self.yarn_ball: Optional[YarnBallWidget] = None
+        from play_coordinator import PlayCoordinator
+        self.play = PlayCoordinator(self, get_memory_store())
 
         self._wallpaper_worker = None
         if bool(cfg.get("lively.auto_sync", False)):
@@ -669,6 +672,7 @@ class Buddy(QObject):
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, tr("menu.input"), self.open_input)
         self._act(self.tray_menu, '🐾  Time together' if i18n.lang() == 'en' else '🐾  Zeit miteinander', self.start_pet_interaction)
+        self._act(self.tray_menu, '🎮  Play…' if i18n.lang() == 'en' else '🎮  Spielen…', self.open_game_room)
         pause_until = float(self.cfg.get('daily.interaction_pause_until', 0))
         if pause_until > time.time():
             stamp = datetime.datetime.fromtimestamp(pause_until).strftime('%H:%M')
@@ -792,6 +796,9 @@ class Buddy(QObject):
         self.note_manager.load_notes()
 
     def _on_data_wiped(self) -> None:
+        self.play.cancel()
+        if self.play.room:
+            self.play.room.show_hub()
         self._dismiss_interaction()
         self.brain.clear_history()          # sonst geht der alte Verlauf bei der naechsten KI-Frage noch mit
         self.note_manager.close_all()
@@ -816,6 +823,9 @@ class Buddy(QObject):
         self._say(tr("about.text", version=__version__), 6000)
 
     def quit(self) -> None:
+        self.play.cancel()
+        if self.play.room:
+            self.play.room.close()
         self._dismiss_interaction()
         if getattr(self, '_wallpaper_worker', None) and self._wallpaper_worker.isRunning():
             self._say('Der Hintergrund wird noch umgestellt. Bitte kurz warten.', 4000)
@@ -878,6 +888,10 @@ class Buddy(QObject):
             self.cfg.save()
 
     def _offer_update(self, force: bool = False) -> None:
+        if getattr(getattr(self, 'play', None), 'active', False):
+            if not force:
+                return
+            self.play.pause()
         if getattr(self, '_choosing_update_reminder', False) or QApplication.activeModalWidget() is not None:
             return
         if not force and (getattr(self, '_focus_mode', False) or not self.pet.isVisible()):
@@ -1009,6 +1023,7 @@ class Buddy(QObject):
         self.bubble.say(text, duration_ms, persistent)
 
     def open_input(self, reply_mode: bool = False) -> None:
+        self.play.pause()
         self._dismiss_interaction()
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
@@ -1136,6 +1151,7 @@ class Buddy(QObject):
 
     # -- Aufgaben-Lebenszyklus --------------------------------------------------------------
     def _on_task_started(self, _text: str) -> None:
+        self.play.pause()
         self.pet.freeze(True)
         self.pet.set_working()
         self._say(tr("say.working"), persistent=True)
@@ -1197,6 +1213,9 @@ class Buddy(QObject):
                 print(f"[focus] Fehler beim Zählen: {exc}")
 
     def _on_character_changed(self, _cid: str) -> None:
+        self.play.cancel()
+        if self.play.room:
+            self.play.room.show_hub()
         self._dismiss_interaction()
         ci = self.char_info()
         self._say(tr("say.i_am", sound=ci.get('sound', ''), name=ci.get('name', 'Kylie'), emoji=ci.get('emoji', '')), 3000)
@@ -1328,6 +1347,8 @@ class Buddy(QObject):
         self._start_pet_interaction(manual=True)
 
     def _can_offer_interaction(self, manual: bool = False) -> bool:
+        if getattr(self, 'play', None) and self.play.active:
+            return False
         if (getattr(self, '_focus_mode', False) or not self.pet.isVisible()
                 or self.brain.busy or self.brain.pending_action or self._settings_open
                 or self._quiz_session or self._guide_session
@@ -1370,6 +1391,21 @@ class Buddy(QObject):
                 count = int(stats['curious_count']) if stats['curious_date'] == now.date().isoformat() else 0
             except (ValueError, TypeError):
                 count = 0
+            if not manual and (count+1) % 3 == 0:
+                from pet_interactions import Interaction, Choice
+                game = random.choice(('yarn', 'cups', 'memory', 'story_picnic', 'story_sock', 'story_stars'))
+                if self.cfg.get('privacy.remember', True):
+                    prefs = store.get_play_preferences()
+                    if prefs:
+                        game = max(prefs, key=prefs.get)
+                if game not in ('yarn', 'cups', 'memory', 'story_picnic', 'story_sock', 'story_stars'):
+                    game = 'cups'
+                en = i18n.lang() == 'en'
+                item = Interaction('play_offer',
+                    'A little game or story together?' if en else 'Lust auf ein kleines Spiel oder eine Geschichte zusammen?', (
+                        Choice('Let’s play!' if en else 'Zusammen spielen!', '', 'play:'+game),
+                        Choice('Later' if en else 'Später', 'I will stay nearby. 🐾' if en else 'Dann bleibe ich einfach gemütlich bei dir. 🐾')),
+                    remember=False)
             if not manual:
                 store.set_stat('curious_date', now.date().isoformat())
                 store.set_stat('curious_count', str(count+1))
@@ -1431,6 +1467,9 @@ class Buddy(QObject):
             return
         reply, action = result
         self._dismiss_interaction()
+        if action.startswith('play:'):
+            self.play.start(action.split(':', 1)[1], 'cozy')
+            return
         try:
             from memory_store import get_memory_store
             save_answer(get_memory_store(), self.cfg, item, answer, reply, self.pet.character)
@@ -1529,6 +1568,8 @@ class Buddy(QObject):
                 self.pet.set_accessory(o, True)
 
     def _check_pc_fever(self) -> None:
+        if getattr(getattr(self, 'play', None), 'active', False):
+            return
         try:
             cur_times = get_system_times()
             cpu = 0.0
@@ -1564,6 +1605,8 @@ class Buddy(QObject):
             self._wellbeing.start(max(1, int(wb.get("break_min", 60))) * 60000)
 
     def _on_wellbeing(self) -> None:
+        if getattr(getattr(self, 'play', None), 'active', False):
+            return
         wb = self.cfg.get("wellbeing", {}) or {}
         if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy or self.input.isVisible():
             return
@@ -1611,6 +1654,7 @@ class Buddy(QObject):
         self._say(random.choice(lines), 2500)
 
     def hide_pet(self) -> None:
+        self.play.pause()
         self._dismiss_interaction()
         self.pet.hide()
         self.update_prompt.hide_now()
@@ -1637,6 +1681,7 @@ class Buddy(QObject):
         self._update_tray_menu()
 
     def start_focus_mode(self) -> None:
+        self.play.pause()
         self._dismiss_interaction()
         self._focus_mode = True
         self.update_prompt.hide_now()
@@ -1676,6 +1721,7 @@ class Buddy(QObject):
                 self.open_input()
 
     def open_settings(self) -> None:
+        self.play.pause()
         self._dismiss_interaction()
         if self._settings_open:
             return
@@ -1792,6 +1838,7 @@ class Buddy(QObject):
             if new_lvl is not None:
                 if (self.brain.busy or self.brain.pending_action or self.input.isVisible()
                         or self.update_prompt.isVisible() or getattr(self, '_active_interaction', None)
+                          or getattr(getattr(self, 'play', None), 'active', False)
                         or getattr(self, '_focus_mode', False) or not self.pet.isVisible()
                         or QApplication.activeModalWidget() is not None):
                     return
@@ -1882,40 +1929,15 @@ class Buddy(QObject):
         self._say(msg, 6000)
 
     # -- v2.4.0: Minispiele, Lively Wallpaper & Möbel ----------------------------------
+    def open_game_room(self) -> None:
+        self._dismiss_interaction()
+        self.play.open()
+
     def start_bubble_game(self) -> None:
-        if not hasattr(self, "bubble_mgr") or not self.bubble_mgr:
-            from minigames import BubblePopGameManager
-            from memory_store import get_memory_store
-            self.bubble_mgr = BubblePopGameManager(get_memory_store(), self.cfg)
-        self.bubble_mgr.spawn_wave(14)
-        self._say("🫧 Seifenblasen-Welle gestartet! Klicke die Blasen an, um sie mit *Plopp!* zu zerplatzen!", 4500)
+        self.play.start('bubble', 'cozy')
 
     def start_yarn_game(self) -> None:
-        from minigames import YarnBallWidget
-        if not getattr(self, "yarn_ball", None):
-            self.yarn_ball = YarnBallWidget()
-            self.yarn_ball.kicked.connect(self._on_yarn_kicked)
-
-        hx = self.pet.x() + (120 if self.pet.facing > 0 else -120)
-        hy = self.pet.y() - 80
-        self.yarn_ball.launch(float(hx), float(hy), 280.0 if self.pet.facing > 0 else -280.0, -220.0)
-        self.pet.wake()
-        self.pet.chase_mouse(12.0)
-        self._say("🧶 Fang das Wollknäuel! Klicke und wirf es mit Schwung über den Desktop!", 4500)
-
-    def _on_yarn_kicked(self) -> None:
-        from memory_store import get_memory_store
-        from achievements import record_achievement_event
-        from fun import add_friendship_points
-        try:
-            store = get_memory_store()
-            add_friendship_points(store, "yarn")
-            record_achievement_event(store, "yarn_catches", 1)
-        except Exception:
-            pass
-        self.pet.react_happy()
-        cname = self.char_info().get("name", "Kylie")
-        self._say(f"Yay! 🐾 {cname} hat das Wollknäuel gefangen und weggestupst!", 3500)
+        self.play.start('yarn', 'cozy')
 
     def activate_lively_wallpaper(self) -> None:
         self._change_wallpaper(True)
@@ -2703,6 +2725,9 @@ class Buddy(QObject):
             self._chatter.start(random.randint(90, 180) * 1000)
 
     def _on_chatter(self) -> None:
+        if getattr(getattr(self, 'play', None), 'active', False):
+            self._schedule_chatter()
+            return
         if self.update_prompt.isVisible() or self.interaction_card.isVisible():
             self._schedule_chatter()
             return
@@ -2745,6 +2770,9 @@ class Buddy(QObject):
             self._vision_timer.start(delay * 1000)
 
     def _on_autonomous_vision(self) -> None:
+        if getattr(getattr(self, 'play', None), 'active', False):
+            self._schedule_vision()
+            return
         if not self.cfg.get('ai.enabled', True) or not self.cfg.get('privacy.auto_vision', False) or not gemini.has_key():
             self._schedule_vision()
             return
@@ -2788,6 +2816,8 @@ class Buddy(QObject):
             t.deleteLater()
 
     def _on_ambient_vision_done(self, comment: str) -> None:
+        if getattr(getattr(self, 'play', None), 'active', False):
+            return
         comment = (comment or "").strip()
         if not comment:
             return

@@ -4,6 +4,13 @@
 
 ---
 
+## Neu in v3.3.0
+
+- **Spielzimmer:** Rechtsklick auf Pet oder Tray → „Spielen…“ öffnet Spiele, drei kleine Entscheidungsgeschichten und High Five, Winken oder Tanzen. Alles funktioniert lokal, ohne KI-Key oder zusätzliche Dienste.
+- **Zusammen spielen:** Das Pet jagt jetzt wirklich dem Wollknäuel nach und stupst es bei Pfotenkontakt an. Bechersuche und Memory bieten gemütliche Runden mit Hinweisen oder Arcade-Herausforderungen; Ball und Memory haben im Arcade-Modus 60 Sekunden Zeit.
+- **Fairer Fortschritt:** Persönliche Rekorde und sechs dekorative Abzeichen bleiben von Freundschaftspunkten getrennt. Abgeschlossene Becher-, Memory- und Geschichtenrunden geben je drei Punkte, gemeinsam höchstens zehnmal täglich. Ballkontakte und Seifenblasen behalten ihre eigenen Tageslimits.
+- **Ruhe und Datenschutz:** Fokusmodus, Vollbild oder Desktop-Aufgaben pausieren Spiel und Uhr; „Weiter“ setzt die Runde fort. Escape, Schließen oder Figurenwechsel bricht ohne Rundenbelohnung ab. Spielvorlieben werden nur mit aktivierter Merken-Funktion gelernt und lassen sich im Spielzimmer zurücksetzen. Höchstens jedes dritte automatische Gesprächsangebot schlägt ein Spiel vor; die Fragenpause gilt weiterhin.
+
 ## Neu in v3.2.1
 
 - **Getrennte Spielpunkte:** Wollknäuel-Aktionen bringen zwei Punkte, bis zu zehnmal täglich, ohne das Leckerli-Kontingent zu verbrauchen.

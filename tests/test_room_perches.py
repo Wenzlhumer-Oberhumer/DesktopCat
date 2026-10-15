@@ -8,7 +8,7 @@ from pet_sprites import FLOOR
 
 def _pet(primary=True):
     screen = SimpleNamespace(geometry=lambda: QRect(0, 0, 1000, 800))
-    pet = SimpleNamespace(cfg=SimpleNamespace(get=lambda key, default=None: True),
+    pet = SimpleNamespace(_play_screen=None, cfg=SimpleNamespace(get=lambda key, default=None: True),
         _px=500, scale=1, width=lambda: 200, pet_bed=None,
         _screen_for_x=lambda x: screen, _ground_y=lambda: 800-FLOOR,
         _room_surfaces=lambda: PetWindow._room_surfaces(pet))

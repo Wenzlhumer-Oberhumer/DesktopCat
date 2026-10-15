@@ -31,6 +31,7 @@ class BubbleWidget(QWidget):
     """Einzelne, aufsteigende Seifenblase, die per Klick zerplatzt."""
 
     popped = pyqtSignal(int, int)
+    cancel_requested = pyqtSignal()
 
     def __init__(self, x: float, y: float, size: int = 56, parent: Optional[QWidget] = None):
         super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
@@ -72,7 +73,7 @@ class BubbleWidget(QWidget):
         self.move(int(self.px), int(self.py))
 
         # Oben aus dem Bildschirm geflogen
-        if self.py < -80:
+        if self.py < getattr(self, 'top_edge', 0) - 80:
             self.timer.stop()
             self.close()
             self.deleteLater()
@@ -85,6 +86,13 @@ class BubbleWidget(QWidget):
             center = self.geometry().center()
             self.popped.emit(center.x(), center.y())
             self.update()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.cancel_requested.emit()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def paintEvent(self, _event) -> None:
         p = QPainter(self)
@@ -133,9 +141,11 @@ class BubblePopGameManager:
         self.store = store
         self.cfg = cfg
         self.active_bubbles: list[BubbleWidget] = []
+        self.cancel_callback = self.clear
 
-    def spawn_wave(self, count: int = 12) -> None:
-        screen = QApplication.primaryScreen()
+    def spawn_wave(self, count: int = 12, screen=None) -> None:
+        self.clear()
+        screen = screen or QApplication.primaryScreen()
         if not screen:
             return
         geom = screen.availableGeometry()
@@ -145,9 +155,32 @@ class BubblePopGameManager:
             y = random.uniform(geom.bottom() - 40, geom.bottom() + 150)
             size = random.choice([42, 50, 58, 66])
             b = BubbleWidget(x, y, size)
+            b.top_edge = geom.top()
             b.popped.connect(self._on_bubble_popped)
+            b.cancel_requested.connect(lambda: self.cancel_callback())
+            b.destroyed.connect(lambda _=None, bubble=b: self.active_bubbles.remove(bubble) if bubble in self.active_bubbles else None)
             b.show()
             self.active_bubbles.append(b)
+
+    def set_paused(self, paused: bool) -> None:
+        for bubble in self.active_bubbles:
+            if paused:
+                bubble.timer.stop()
+                bubble.setEnabled(False)
+                bubble.hide()
+            else:
+                if bubble._popping:
+                    bubble._pop_t = time.monotonic()
+                bubble.setEnabled(True)
+                bubble.show()
+                bubble.timer.start(20)
+
+    def clear(self) -> None:
+        for bubble in self.active_bubbles:
+            bubble.timer.stop()
+            bubble.close()
+            bubble.deleteLater()
+        self.active_bubbles.clear()
 
     def _on_bubble_popped(self, x: int, y: int) -> None:
         self.active_bubbles = [b for b in self.active_bubbles if b.isVisible()]   # zerplatzte nicht sammeln
@@ -171,6 +204,7 @@ class YarnBallWidget(QWidget):
     """Physikalischer Spielball, der geworfen werden kann und dem die Katze nachjagt."""
 
     kicked = pyqtSignal()
+    cancel_requested = pyqtSignal()
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
@@ -186,6 +220,8 @@ class YarnBallWidget(QWidget):
         self._dragging = False
         self._drag_start = QPointF()
         self._samples: list[tuple[float, float, float]] = []
+        self.play_geometry = None
+        self._paused = False
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._physics_step)
@@ -205,7 +241,7 @@ class YarnBallWidget(QWidget):
         self.kicked.emit()
 
     def _physics_step(self) -> None:
-        if self._dragging:
+        if self._dragging or self._paused:
             return
 
         dt = 0.016
@@ -217,10 +253,13 @@ class YarnBallWidget(QWidget):
 
         screen = QApplication.primaryScreen()
         if screen:
-            geom = screen.availableGeometry()
-            ground = float(geom.bottom() - self.height())
+            geom = self.play_geometry if self.play_geometry is not None else screen.availableGeometry()
+            ground = float(geom.bottom() + 1 - self.height())
             lo = float(geom.left())
-            hi = float(geom.right() - self.width())
+            hi = float(geom.right() + 1 - self.width())
+            if self.py < geom.top():
+                self.py = float(geom.top())
+                self.vy = abs(self.vy)*0.7
 
             # Boden-Abprall
             if self.py >= ground:
@@ -243,6 +282,30 @@ class YarnBallWidget(QWidget):
                 self.vx = -self.vx * 0.7
 
         self.move(int(self.px), int(self.py))
+
+    def set_paused(self, paused: bool) -> None:
+        self._paused = paused
+        self._dragging = False
+        self._samples.clear()
+        self.setEnabled(not paused)
+        if paused:
+            self.timer.stop()
+            self.hide()
+        else:
+            self.show()
+            self.timer.start(16)
+
+    def closeEvent(self, event) -> None:
+        self.timer.stop()
+        self.cancel_requested.emit()
+        super().closeEvent(event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.cancel_requested.emit()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def mousePressEvent(self, e) -> None:
         if e.button() == Qt.MouseButton.LeftButton:

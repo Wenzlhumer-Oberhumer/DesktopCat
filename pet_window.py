@@ -164,6 +164,7 @@ class PetWindow(QWidget):
     character_tree_requested = pyqtSignal()
     bubble_game_requested = pyqtSignal()
     yarn_game_requested = pyqtSignal()
+    play_requested = pyqtSignal()
     wallpaper_requested = pyqtSignal()
     pet_bed_requested = pyqtSignal()
     scripts_requested = pyqtSignal()
@@ -189,6 +190,10 @@ class PetWindow(QWidget):
         self.cfg = cfg
         self.character = str(cfg.get("pet.character", "cat_mochi"))
         self._chase_until = 0.0
+        self._ball_target_x = None
+        self._play_screen = None
+        self._trick_until = 0.0
+        self._trick_name = ''
         self.sprites = SpriteLibrary(base_dir, cfg.get("animations", {}) or {})
 
         self.state = PetState.IDLE
@@ -320,6 +325,26 @@ class PetWindow(QWidget):
         """Spielmodus: folgt dem Mauszeiger (x) mit der normalen Lauflogik."""
         self.wake()
         self._chase_until = time.monotonic() + seconds
+        self._ball_target_x = None
+
+    def chase_ball(self, x: float) -> None:
+        self._ball_target_x = x
+        self._chase_until = time.monotonic() + 0.2
+
+    def stop_ball_chase(self) -> None:
+        self._ball_target_x = None
+        self._chase_until = 0.0
+        if self.state in WALKING:
+            self.calm()
+
+    def perform_trick(self, name: str) -> None:
+        if name not in ('highfive', 'wave'):
+            return
+        self.wake()
+        self.calm()
+        self._trick_name = name
+        self._trick_until = time.monotonic()+2.5
+        self.react_happy()
 
     def give_treat(self) -> None:
         self.cfg.set("treats", int(self.cfg.get("treats", 0)) + 1)
@@ -441,6 +466,8 @@ class PetWindow(QWidget):
 
     def _screen_for_x(self, cx: float):
         screens = QGuiApplication.screens()
+        if self._play_screen in screens:
+            return self._play_screen
         for s in screens:
             g = s.geometry()
             if g.left() <= cx <= g.right():
@@ -455,6 +482,8 @@ class PetWindow(QWidget):
         return self._avail().bottom() + 1 - FLOOR * self.scale
 
     def _room_surfaces(self) -> list[tuple[float, float, float]]:
+        if self._play_screen is not None:
+            return []
         if not (self.cfg.get('pet.room_mode', False) and self.cfg.get('lively.active', False)):
             return []
         screen = self._screen_for_x(self._px + self.width() / 2)
@@ -784,7 +813,8 @@ class PetWindow(QWidget):
 
         if now < self._chase_until and not self.frozen and not self._dragging                 and self.state in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
             lo, hi = self._x_bounds()
-            self._walk_target = max(lo, min(hi, QCursor.pos().x() - self.width() / 2))
+            target_x = self._ball_target_x if self._ball_target_x is not None else QCursor.pos().x()
+            self._walk_target = max(lo, min(hi, target_x - self.width() / 2))
             if abs(self._walk_target - self._px) > 12:
                 self.set_state(PetState.WALK_RIGHT if self._walk_target > self._px else PetState.WALK_LEFT)
 
@@ -994,6 +1024,10 @@ class PetWindow(QWidget):
                           squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until,
                           speaking=self._is_speaking)
         pose = compute_pose(ctx)
+        if now < self._trick_until:
+            pose.paw_r = 25 if self._trick_name == 'highfive' else 18+8*math.sin(now*12)
+            pose.eyes = 'happy'
+            pose.mouth = 'smile'
         if self.state == PetState.FALLING:          # im Flug in Wurfrichtung kippen
             pose.rot += max(-25.0, min(25.0, self._vx / 60.0)) * self.facing
         active_accs = set(self._accessories)
@@ -1061,6 +1095,20 @@ class PetWindow(QWidget):
             if flip:
                 pose.zzz, pose.dots, pose.sparkles, pose.hearts, pose.confetti = effects
                 _draw_effects(p, pose)
+
+        if now < self._trick_until:
+            # The raised paw remains visible even on characters with tiny/hidden feet.
+            p.save()
+            p.translate(120 if self.facing > 0 else 40, 62)
+            p.rotate(0 if self._trick_name == 'highfive' else math.sin(now*12)*25)
+            p.setPen(QColor('#76566c'))
+            p.setBrush(QColor('#ffdae5'))
+            p.drawEllipse(QRectF(-12, -5, 24, 23))
+            for x, y in ((-10, -11), (-3, -16), (5, -15), (11, -9)):
+                p.drawEllipse(QRectF(x-4, y-4, 8, 10))
+            p.setBrush(QColor('#c67b9a'))
+            p.drawEllipse(QRectF(-6, 2, 12, 10))
+            p.restore()
 
         # v3.0.0 Visueller Mikrofon-Indikator beim Push-to-Talk Zuhören
         if self._is_listening:
@@ -1290,6 +1338,7 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.wash_pet", name=name)).triggered.connect(self.wash_requested.emit)
         tricks.addAction(tr("menu.bubble_game")).triggered.connect(self.bubble_game_requested.emit)
         tricks.addAction(tr("menu.yarn_game")).triggered.connect(self.yarn_game_requested.emit)
+        tricks.addAction('🎮  Play…' if i18n.lang() == 'en' else '🎮  Spielen…').triggered.connect(self.play_requested.emit)
         tricks.addAction(tr("menu.lively_wallpaper")).triggered.connect(self.wallpaper_requested.emit)
         tricks.addAction("🖼️  Hintergrund wiederherstellen").triggered.connect(self.restore_wallpaper_requested.emit)
         is_home = bool(self.cfg.get("pet.is_at_home", False))

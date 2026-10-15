@@ -42,6 +42,10 @@ STOP_WORDS = {
     "zwischen"
 }
 
+PLAY_GAMES = frozenset(('ball', 'bubbles', 'yarn', 'bubble', 'cups', 'memory', 'tricks',
+                        'story', 'story_picnic', 'story_sock', 'story_stars'))
+PLAY_BADGES = frozenset(('first_ball', 'spurnase', 'merkmeister', 'highfive', 'adventurer', 'playmates'))
+
 
 class MemoryStore:
     """Thread-sicherer lokaler Speicher basierend auf SQLite."""
@@ -75,6 +79,10 @@ class MemoryStore:
             db.execute("CREATE TABLE IF NOT EXISTS focus(date TEXT, minutes INTEGER, count INTEGER);")
             db.execute("CREATE TABLE IF NOT EXISTS cards(id INTEGER PRIMARY KEY AUTOINCREMENT, deck TEXT, front TEXT, back TEXT, box INTEGER DEFAULT 1, due REAL DEFAULT 0.0);")
             db.execute("CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, color TEXT, x INTEGER, y INTEGER, done INTEGER DEFAULT 0);")
+            db.execute("CREATE TABLE IF NOT EXISTS play_sessions(session_id TEXT PRIMARY KEY, game TEXT, mode TEXT, score INTEGER, turns INTEGER, completed INTEGER, awarded INTEGER);")
+            db.execute("CREATE TABLE IF NOT EXISTS play_records(game TEXT, mode TEXT, score INTEGER, turns INTEGER, completed INTEGER, rounds INTEGER, completed_rounds INTEGER, PRIMARY KEY(game, mode));")
+            db.execute("CREATE TABLE IF NOT EXISTS play_preferences(game TEXT PRIMARY KEY, count INTEGER);")
+            db.execute("CREATE TABLE IF NOT EXISTS play_badges(name TEXT PRIMARY KEY);")
 
     # -- Conversations & Messages ------------------------------------------------------
     def add_message(self, role: str, text: str, character: str = "cat_mochi") -> None:
@@ -313,6 +321,85 @@ class MemoryStore:
 
         out_path.write_text("\n".join(lines), encoding="utf-8")
 
+    # -- Lokale Spielrunden ------------------------------------------------------------
+    def finish_play_session(self, session_id: str, game: str, mode: str, score: int,
+                            completed: bool = True, remember: bool = False, turns: int = 0) -> dict:
+        """Commit one result, record and reward together; retries never pay twice."""
+        if (not isinstance(session_id, str) or not session_id.strip() or len(session_id) > 200
+                or game not in PLAY_GAMES or not isinstance(mode, str) or not mode.strip()
+                or len(mode) > 40 or type(score) is not int or not 0 <= score <= 2**63 - 1
+                or type(turns) is not int or not 0 <= turns <= 2**63 - 1
+                or type(completed) is not bool or type(remember) is not bool):
+            raise ValueError('Invalid play result')
+        today = datetime.date.today().isoformat()
+        result = dict(duplicate=False, awarded=0, record=False, badges=[])
+        with self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM play_sessions WHERE session_id = ?', (session_id,)).fetchone():
+                result['duplicate'] = True
+                return result
+            db.execute('INSERT INTO play_sessions VALUES(?, ?, ?, ?, ?, ?, 0)',
+                       (session_id, game, mode, score, turns, int(completed)))
+            if not completed:
+                return result
+
+            previous = db.execute('SELECT * FROM play_records WHERE game = ? AND mode = ?', (game, mode)).fetchone()
+            fewer_turns = game == 'memory' and mode == 'cozy'
+            best = previous is None or (turns < previous['turns'] if fewer_turns else score > previous['score'])
+            result['record'] = best
+            if previous is None:
+                db.execute('INSERT INTO play_records VALUES(?, ?, ?, ?, 1, 1, 1)', (game, mode, score, turns))
+            else:
+                db.execute('UPDATE play_records SET score = ?, turns = ?, rounds = rounds + 1, '
+                           'completed_rounds = completed_rounds + 1 WHERE game = ? AND mode = ?',
+                           (score if best else previous['score'], turns if best else previous['turns'], game, mode))
+            if remember:
+                db.execute('INSERT INTO play_preferences VALUES(?, 1) '
+                           'ON CONFLICT(game) DO UPDATE SET count = count + 1', (game,))
+
+            if game in ('cups', 'memory', 'story') or game.startswith('story_'):
+                allowance = db.execute("SELECT count FROM friendship_daily WHERE date = ? AND kind = 'play'", (today,)).fetchone()
+                if allowance is None or allowance['count'] < 10:
+                    db.execute("INSERT INTO friendship_daily VALUES(?, 'play', 1) "
+                               'ON CONFLICT(date, kind) DO UPDATE SET count = count + 1', (today,))
+                    db.execute('INSERT INTO friendship VALUES(1, 3, ?) '
+                               'ON CONFLICT(id) DO UPDATE SET points = points + 3, last_update = excluded.last_update', (today,))
+                    db.execute('UPDATE play_sessions SET awarded = 3 WHERE session_id = ?', (session_id,))
+                    result['awarded'] = 3
+            badge = ('adventurer' if game == 'story' or game.startswith('story_') else
+                     'spurnase' if game == 'cups' else
+                     'merkmeister' if game == 'memory' and score >= 6 else None)
+            badges = [badge] if badge else []
+            if db.execute('SELECT SUM(completed_rounds) AS count FROM play_records').fetchone()['count'] >= 10:
+                badges.append('playmates')
+            for name in badges:
+                if db.execute('INSERT OR IGNORE INTO play_badges VALUES(?)', (name,)).rowcount:
+                    result['badges'].append(name)
+        return result
+
+    def get_play_records(self) -> list[dict]:
+        with self._db() as db:
+            return [dict(row) for row in db.execute('SELECT * FROM play_records ORDER BY game, mode')]
+
+    def get_play_preferences(self) -> dict:
+        with self._db() as db:
+            return {row['game']: row['count'] for row in db.execute('SELECT * FROM play_preferences ORDER BY game')}
+
+    def reset_play_preferences(self) -> None:
+        with self._db() as db:
+            db.execute('DELETE FROM play_preferences')
+
+    def get_play_badges(self) -> list[str]:
+        with self._db() as db:
+            return [row['name'] for row in db.execute('SELECT name FROM play_badges ORDER BY name')]
+
+    def unlock_play_badge(self, name: str) -> bool:
+        if name not in PLAY_BADGES:
+            raise ValueError('Unknown play badge')
+        with self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            return bool(db.execute('INSERT OR IGNORE INTO play_badges VALUES(?)', (name,)).rowcount)
+
     # -- Freundschaft & Belohnungen (Phase 6) -------------------------------------------
     def get_friendship_points(self) -> int:
         with self._db() as db:
@@ -506,6 +593,10 @@ class MemoryStore:
                 conn.execute("DELETE FROM focus")
                 conn.execute("DELETE FROM cards")
                 conn.execute("DELETE FROM notes")
+                conn.execute("DELETE FROM play_sessions")
+                conn.execute("DELETE FROM play_records")
+                conn.execute("DELETE FROM play_preferences")
+                conn.execute("DELETE FROM play_badges")
             conn.isolation_level = None
             conn.execute("VACUUM")
         finally:
