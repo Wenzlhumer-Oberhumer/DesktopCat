@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fun import add_friendship_points
-
 ACHIEVEMENTS: list[dict[str, Any]] = [
     {
         "id": "bubble_king",
@@ -146,8 +144,7 @@ def record_achievement_event(store, stat_key: str, count: int = 1) -> list[dict[
     if store is None:
         return []
     try:
-        cur = int(store.get_stat(stat_key) or 0) + count
-        store.set_stat(stat_key, str(cur))
+        cur = store.increment_stat(stat_key, count)
     except Exception:
         return []
 
@@ -157,13 +154,8 @@ def record_achievement_event(store, stat_key: str, count: int = 1) -> list[dict[
             ach_key = f"ach_unlocked_{ach['id']}"
             if store.get_stat(ach_key) != "1":
                 if cur >= ach["target"]:
-                    store.set_stat(ach_key, "1")
-                    newly_unlocked.append(ach)
-                    # Belohnungs-FP gutschreiben
-                    try:
-                        add_friendship_points(store, "treat")  # Event trigger
-                    except Exception:
-                        pass
+                    if store.claim_achievement(ach['id'], ach['stat'], ach['target'], ach['fp_reward']):
+                        newly_unlocked.append(ach)
     return newly_unlocked
 
 
@@ -173,10 +165,7 @@ def unlock_achievement_direct(store, ach_id: str) -> Optional[dict[str, Any]]:
         return None
     for ach in ACHIEVEMENTS:
         if ach["id"] == ach_id:
-            ach_key = f"ach_unlocked_{ach_id}"
-            if store.get_stat(ach_key) != "1":
-                store.set_stat(ach_key, "1")
-                store.set_stat(ach["stat"], str(ach["target"]))
+            if store.claim_achievement(ach['id'], ach['stat'], ach['target'], ach['fp_reward']):
                 return ach
             return None
     return None

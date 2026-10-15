@@ -42,7 +42,7 @@ def get_unlocked_characters(store=None) -> set[str]:
     current_lvl = 1
     if store is not None:
         try:
-            pts = int(store.get_stat("friendship_points") or 0)
+            pts = store.get_friendship_points()
             current_lvl, _ = level_for(pts)
         except Exception:
             current_lvl = 1
@@ -67,7 +67,7 @@ def is_character_unlocked(char_id: str, store=None) -> tuple[bool, int, int]:
     current_lvl = 1
     if store is not None:
         try:
-            pts = int(store.get_stat("friendship_points") or 0)
+            pts = store.get_friendship_points()
             current_lvl, _ = level_for(pts)
         except Exception:
             current_lvl = 1

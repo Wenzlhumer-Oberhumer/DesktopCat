@@ -449,6 +449,12 @@ class Buddy(QObject):
         self.bubble = SpeechBubble(cfg)
         self.briefing_card = BriefingCard()
         self.input = InputBar()
+        from interaction_card import InteractionCard
+        self.interaction_card = InteractionCard()
+        self._active_interaction = None
+        self._interaction_ready_at = time.time() + 180
+        self._interaction_watchdog = QTimer(self)
+        self._interaction_watchdog.timeout.connect(self._check_active_interaction)
         self.brain = AgentBrain(cfg)
         self._settings_open = False
 
@@ -482,6 +488,9 @@ class Buddy(QObject):
         self.bubble.clicked.connect(self._on_bubble_clicked)
         self.input.submitted.connect(self._on_submit)
         self.input.closed.connect(self._on_input_closed)
+        self.interaction_card.answered.connect(self._complete_interaction)
+        self.interaction_card.dismissed.connect(self._dismiss_interaction)
+        self.pet.interaction_requested.connect(self.start_pet_interaction)
         self.brain.started.connect(self._on_task_started)
         self.brain.finished.connect(self._on_task_finished)
         self.brain.it_guide_requested.connect(self.start_it_guide)
@@ -653,6 +662,7 @@ class Buddy(QObject):
             self._act(self.tray_menu, tr("menu.enter_key"), self.open_settings)
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, tr("menu.input"), self.open_input)
+        self._act(self.tray_menu, '🐾  Time together' if i18n.lang() == 'en' else '🐾  Zeit miteinander', self.start_pet_interaction)
         self._act(self.tray_menu, tr("menu.feed_pet", name=cname), self.pet.give_treat)
         if self.pet.isVisible():
             self._act(self.tray_menu, tr("menu.hide_pet", name=cname), self.hide_pet)
@@ -753,7 +763,7 @@ class Buddy(QObject):
         self._schedule_vision(initial_delay_s=50)
         self._schedule_wellbeing()
         self._battery_timer.start(60000)
-        self._curious_timer.start(1800000)
+        self._curious_timer.start(60000)
         self._reminder_timer.start(900000)
         self._bedtime_timer.start(300000)
         self._weather_timer.start(3600000)
@@ -766,6 +776,7 @@ class Buddy(QObject):
         self.note_manager.load_notes()
 
     def _on_data_wiped(self) -> None:
+        self._dismiss_interaction()
         self.brain.clear_history()          # sonst geht der alte Verlauf bei der naechsten KI-Frage noch mit
         self.note_manager.close_all()
         # Auch die laufende Config zuruecksetzen - sonst ueberschreibt sie beim naechsten Speichern das Loeschen
@@ -789,6 +800,7 @@ class Buddy(QObject):
         self._say(tr("about.text", version=__version__), 6000)
 
     def quit(self) -> None:
+        self._dismiss_interaction()
         if getattr(self, '_wallpaper_worker', None) and self._wallpaper_worker.isRunning():
             self._say('Der Hintergrund wird noch umgestellt. Bitte kurz warten.', 4000)
             QTimer.singleShot(1000, self.quit)
@@ -854,6 +866,10 @@ class Buddy(QObject):
             return
         if not force and (getattr(self, '_focus_mode', False) or not self.pet.isVisible()):
             return
+        if getattr(self, '_active_interaction', None):
+            if not force:
+                return
+            self._dismiss_interaction()
         if not self._pending_update or self.update_prompt.isVisible():
             return
         if self._download_worker is not None and self._download_worker.isRunning():
@@ -936,6 +952,8 @@ class Buddy(QObject):
     def _follow(self) -> None:
         a = self.pet.head_anchor()
         self.bubble.anchor_to(a)
+        if hasattr(self, 'interaction_card'):
+            self.interaction_card.anchor_to(a)
         if hasattr(self, 'update_prompt'):
             self.update_prompt.anchor_to(a)
         self.briefing_card.anchor_to(a)
@@ -948,6 +966,8 @@ class Buddy(QObject):
     def _say(self, text: str, duration_ms=None, persistent: bool = False) -> None:
         if self.input.isVisible():
             return
+        if getattr(self, '_active_interaction', None):
+            self._dismiss_interaction()
         self._follow()
         if hasattr(self, 'update_prompt') and self.update_prompt.isVisible():
             self.update_prompt.hide_now()
@@ -955,6 +975,7 @@ class Buddy(QObject):
         self.bubble.say(text, duration_ms, persistent)
 
     def open_input(self, reply_mode: bool = False) -> None:
+        self._dismiss_interaction()
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
         if self.input.isVisible():
@@ -1142,6 +1163,7 @@ class Buddy(QObject):
                 print(f"[focus] Fehler beim Zählen: {exc}")
 
     def _on_character_changed(self, _cid: str) -> None:
+        self._dismiss_interaction()
         ci = self.char_info()
         self._say(tr("say.i_am", sound=ci.get('sound', ''), name=ci.get('name', 'Kylie'), emoji=ci.get('emoji', '')), 3000)
 
@@ -1259,46 +1281,124 @@ class Buddy(QObject):
         )
 
     def _on_curious_check(self) -> None:
-        if is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy or self.input.isVisible():
+        self._start_pet_interaction(manual=False)
+
+    def start_pet_interaction(self) -> None:
+        if getattr(self, '_focus_mode', False):
+            return
+        if not self.pet.isVisible():
+            self.show_pet()
+        if self.interaction_card.isVisible():
+            self.interaction_card.raise_()
+            return
+        self._start_pet_interaction(manual=True)
+
+    def _can_offer_interaction(self, manual: bool = False) -> bool:
+        if (getattr(self, '_focus_mode', False) or not self.pet.isVisible()
+                or self.brain.busy or self.brain.pending_action or self._settings_open
+                or self._quiz_session or self._guide_session
+                or self.pet.frozen or self.pet._dragging
+                or QApplication.activeModalWidget() is not None
+                or _is_fullscreen_foreground()):
+            return False
+        cards = [self.input, self.update_prompt, self.interaction_card, self.explain_card, self.briefing_card]
+        if any(card.isVisible() for card in cards):
+            return False
+        if not manual and (is_night(self.cfg) or self.bubble.isVisible()
+                           or QApplication.activePopupWidget() is not None):
+            return False
+        return True
+
+    def _start_pet_interaction(self, manual: bool = False) -> None:
+        if not self._can_offer_interaction(manual):
+            return
+        if not manual and time.time() < self._interaction_ready_at:
             return
         try:
+            import json
+            from daily import should_ask_curious
+            from pet_interactions import choose_interaction
             from memory_store import get_memory_store
-            from daily import should_ask_curious, curious_question_for
             store = get_memory_store()
             now = datetime.datetime.now()
-            today_str = now.strftime("%Y-%m-%d")
-            stats = {
-                "curious_date": store.get_stat("curious_date", ""),
-                "curious_count": store.get_stat("curious_count", "0"),
-                "curious_last_ts": store.get_stat("curious_last_ts", "0"),
-            }
-            if not should_ask_curious(now, stats, self.cfg.snapshot()):
+            stats = {key: store.get_stat(key, default) for key, default in (
+                ('curious_date', ''), ('curious_count', '0'), ('curious_last_ts', '0'))}
+            if not manual and not should_ask_curious(now, stats, self.cfg.snapshot()):
                 return
-
-            hard_cards = [c for c in store.get_cards() if c["box"] == 1]
-            if len(hard_cards) >= 3 and (getattr(self, "_difficult_cards_count", 0) >= 3 or random.random() < 0.4):
-                self._difficult_cards_count = 0
-                q = f"Wollen wir die {len(hard_cards)} kniffligen Lernkarten nochmal üben, {self.user_name()}? 📚 Sag einfach 'quiz starten'!"
-                self.pet.wake()
-                self._say(q, duration_ms=7500)
-                self.brain.record_assistant_message(q)
-                return
-
-            facts = store.facts()[:5]
-            q = curious_question_for(self.pet.character, self.user_name(), facts)
-
-            count = int(stats["curious_count"]) if stats["curious_date"] == today_str else 0
-            store.set_stat("curious_date", today_str)
-            store.set_stat("curious_count", str(count + 1))
-            store.set_stat("curious_last_ts", str(now.timestamp()))
-
+            try:
+                recent = json.loads(store.get_stat('curious_recent', '[]'))
+                if not isinstance(recent, list):
+                    recent = []
+            except (ValueError, TypeError):
+                recent = []
+            item = choose_interaction(recent, i18n.lang())
+            try:
+                count = int(stats['curious_count']) if stats['curious_date'] == now.date().isoformat() else 0
+            except (ValueError, TypeError):
+                count = 0
+            store.set_stat('curious_date', now.date().isoformat())
+            store.set_stat('curious_count', str(count+1))
+            store.set_stat('curious_last_ts', str(now.timestamp()))
+            store.set_stat('curious_recent', json.dumps((recent+[item.id])[-6:]))
+            self.bubble.hide_now()
+            self._mochi_asked_question = False
             self.pet.wake()
-            self._say(q, duration_ms=8000)
-            self.brain.record_assistant_message(q)
-            self._mochi_asked_question = True
-            QTimer.singleShot(1500, lambda: self.open_input(reply_mode=True))
-        except Exception:
-            pass
+            self.pet.freeze(True)
+            self._active_interaction = item
+            self._interaction_manual = manual
+            self.interaction_card.present(item, self.char_info().get('name', 'Kylie'), self.pet.head_anchor(), i18n.lang())
+            self._interaction_watchdog.start(2000)
+        except Exception as exc:
+            self._dismiss_interaction()
+            print(f'[pet] Kleine Interaktion konnte nicht gestartet werden: {exc}')
+
+    def _check_active_interaction(self) -> None:
+        if self._active_interaction is None:
+            return
+        if (self._focus_mode or not self.pet.isVisible() or self.brain.busy
+                or self.brain.pending_action or self.input.isVisible()
+                or QApplication.activeModalWidget() is not None
+                or _is_fullscreen_foreground()
+                or (not self._interaction_manual and is_night(self.cfg))):
+            self._dismiss_interaction()
+
+    def _dismiss_interaction(self) -> None:
+        if getattr(self, '_active_interaction', None) is None:
+            return
+        self._active_interaction = None
+        self._interaction_watchdog.stop()
+        self.interaction_card.hide_now()
+        if not self.brain.busy:
+            self.pet.freeze(False)
+
+    def _complete_interaction(self, key: str, answer) -> None:
+        from pet_interactions import reaction_for, save_answer
+        item = self._active_interaction
+        if item is None or item.id != key:
+            return
+        result = reaction_for(item, answer, self.pet.character, self.char_info().get('name', 'Kylie'), i18n.lang())
+        if result is None:
+            return
+        reply, action = result
+        self._dismiss_interaction()
+        try:
+            from memory_store import get_memory_store
+            save_answer(get_memory_store(), self.cfg, item, answer, reply, self.pet.character)
+        except Exception as exc:
+            print(f'[pet] Antwort konnte nicht lokal gespeichert werden: {exc}')
+        actions = {
+            'happy': self.pet.react_happy, 'dance': self.pet.dance,
+            'stretch': self.pet.wake_with_stretch, 'sleep': self.pet.go_to_sleep,
+            'celebrate': self.pet.celebrate_confetti, 'treat': self.pet.eat_treat,
+        }
+        if action == 'treat':
+            import pet_care
+            pet_care.feed_pet(self.cfg)
+        actions[action]()
+        added, level_up, _ = self._award_friendship('curious')
+        if not level_up:
+            points = (f'  +{added} friendship' if i18n.lang() == 'en' else f'  +{added} Freundschaft') if added else ''
+            self._say(reply+points, 9000)
 
     def _on_reminders_check(self) -> None:
         if is_night(self.cfg) or _is_fullscreen_foreground() or self.brain.busy:
@@ -1461,6 +1561,7 @@ class Buddy(QObject):
         self._say(random.choice(lines), 2500)
 
     def hide_pet(self) -> None:
+        self._dismiss_interaction()
         self.pet.hide()
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
@@ -1486,6 +1587,7 @@ class Buddy(QObject):
         self._update_tray_menu()
 
     def start_focus_mode(self) -> None:
+        self._dismiss_interaction()
         self._focus_mode = True
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
@@ -1524,6 +1626,7 @@ class Buddy(QObject):
                 self.open_input()
 
     def open_settings(self) -> None:
+        self._dismiss_interaction()
         if self._settings_open:
             return
         self._settings_open = True
@@ -1567,6 +1670,7 @@ class Buddy(QObject):
             self._settings_open = False
 
     def open_chat_history(self) -> None:
+        self._dismiss_interaction()
         from chat_history import ChatHistoryDialog
         dlg = ChatHistoryDialog(self.cfg)
         dlg.setWindowIcon(self.icon)
@@ -1579,6 +1683,7 @@ class Buddy(QObject):
         self.open_input()
 
     def open_my_data(self) -> None:
+        self._dismiss_interaction()
         from my_data_dialog import MyDataDialog
         dlg = MyDataDialog(self.cfg)
         dlg.setWindowIcon(self.icon)
@@ -1604,12 +1709,15 @@ class Buddy(QObject):
             print(f"[main] Fehler beim Öffnen des Onboardings: {e}")
 
     # -- Phase 6: Freundschaft, Fokus, Lernkarten, Fotobox & Notizen ------------------
-    def _award_friendship(self, kind: str) -> None:
+    def _award_friendship(self, kind: str) -> tuple[int, bool, int]:
         try:
             from fun import LEVEL_NAMES, LEVEL_REWARDS, add_friendship_points
             from memory_store import get_memory_store
             store = get_memory_store()
             pts_added, did_lvl_up, new_lvl = add_friendship_points(store, kind)
+            dialog = getattr(self, '_character_dialog', None)
+            if pts_added and dialog is not None and dialog.isVisible():
+                dialog.refresh_all()
             if did_lvl_up:
                 self.pet.celebrate_confetti(5.0)
                 lvl_title = LEVEL_NAMES.get(new_lvl, "Freunde")
@@ -1618,10 +1726,13 @@ class Buddy(QObject):
                 msg = f"Level {new_lvl}! Wir sind jetzt {lvl_title}, {self.user_name()} 💖{rew_text}"
                 self._say(msg, 6000)
                 self.brain.record_assistant_message(msg)
+            return pts_added, did_lvl_up, new_lvl
         except Exception as exc:
             print(f"[friendship] Fehler beim Vergeben von Punkten: {exc}")
+            return 0, False, 1
 
     def open_character_tree(self) -> None:
+        self._dismiss_interaction()
         from character_tree_dialog import CharacterTreeDialog
         from memory_store import get_memory_store
         try:
@@ -1790,6 +1901,7 @@ class Buddy(QObject):
         self._update_tray_menu()
 
     def open_friendship_dialog(self) -> None:
+        self._dismiss_interaction()
         from fun_dialogs import FriendshipDialog
         from memory_store import get_memory_store
         dlg = FriendshipDialog(get_memory_store(), self.cfg, self.char_info(), self.pet)
@@ -1797,12 +1909,14 @@ class Buddy(QObject):
         dlg.exec()
 
     def open_focus_stats_dialog(self) -> None:
+        self._dismiss_interaction()
         from fun_dialogs import FocusStatsDialog
         from memory_store import get_memory_store
         dlg = FocusStatsDialog(get_memory_store(), self.char_info(), self.pet)
         dlg.exec()
 
     def open_flashcards_dialog(self) -> None:
+        self._dismiss_interaction()
         from fun_dialogs import FlashcardsDialog
         from memory_store import get_memory_store
         dlg = FlashcardsDialog(get_memory_store(), self.pet, cfg=self.cfg)

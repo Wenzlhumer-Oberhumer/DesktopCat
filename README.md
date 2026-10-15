@@ -4,6 +4,14 @@
 
 ---
 
+## Neu in v3.2.0
+
+- **Zeit miteinander:** 20 lokale Entweder-oder-Fragen, freiwillige Freitextfragen und kleine Mitmachaktionen. Das Pet tanzt, streckt sich, knabbert oder macht eine Kuschelpause. Rechtsklick auf das Pet oder Tray → „Zeit miteinander“ startet sofort eine Runde.
+- **Freiwillig und ruhig:** „Überspringen“ oder Escape schließt die Frage ohne Punktabzug. Freitext öffnet sich erst nach „Erzählen“. Automatische Angebote warten bei Gesprächen, Vollbild, Fokusmodus, verstecktem Pet und nachts. Die letzten sechs Angebote wiederholen sich nicht direkt.
+- **Häufigkeit:** Einstellungen → Wohlbefinden → „Zeit miteinander“: selten (frühestens 90 Minuten, maximal 4 pro Tag), normal (45 Minuten, maximal 12) oder öfter (20 Minuten, maximal 24). Automatische Angebote lassen sich ausschalten; manuell bleibt die Funktion verfügbar.
+- **Freundschaft repariert:** Figurenbaum, Freischaltung und Freundschaftsfenster lesen denselben gespeicherten Punktestand. Gleichzeitige Vergaben verlieren keine Punkte und überschreiten keine Tageslimits. Füttern im Figurenbaum zählt einmal; Trophäen zahlen ihre angegebene Belohnung genau einmal aus.
+- **Kein zusätzlicher KI-Aufruf:** Die Interaktion selbst wird lokal beantwortet. Merken und Chat-Speicherung folgen den vorhandenen Datenschutzschaltern; aktivierte Erinnerungen und Chatverläufe können wie bisher bei späteren KI-Anfragen als Kontext verwendet werden.
+
 ## Neu in v3.1.0
 
 - **Update-Buttons:** „Ja, installieren“ startet den geprüften Download; „Später…“ bietet 15 Minuten, eine oder vier Stunden, morgen 09:00 oder einen eigenen Zeitpunkt. Erinnerungen bleiben nach Neustart gespeichert.

@@ -255,7 +255,7 @@ class CharacterTreeDialog(QDialog):
         current_fp = 0
         if self.store is not None:
             try:
-                current_fp = int(self.store.get_stat("friendship_points") or 0)
+                current_fp = self.store.get_friendship_points()
             except Exception:
                 current_fp = 0
         lvl, pct = level_for(current_fp)
@@ -614,9 +614,10 @@ class CharacterTreeDialog(QDialog):
         self.refresh_all()
 
     def _on_feed_clicked(self) -> None:
-        pet_care.feed_pet(self.cfg, self.store)
         if self.pet is not None:
             self.pet.give_treat()
+        else:
+            pet_care.feed_pet(self.cfg, self.store)
         self.refresh_all()
 
     def _on_wash_clicked(self) -> None:

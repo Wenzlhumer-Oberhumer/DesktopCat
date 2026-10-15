@@ -30,8 +30,8 @@ def test_should_ask_curious():
     now_early = datetime.datetime(2026, 10, 14, 4, 0, 0)
     assert should_ask_curious(now_early, stats_empty, cfg) is False
 
-    # Max 2 Fragen am selben Tag erreicht
-    stats_limit = {"curious_date": "2026-10-14", "curious_count": "2", "curious_last_ts": "0"}
+    # Tageslimit fuer die normale Haeufigkeit erreicht
+    stats_limit = {"curious_date": "2026-10-14", "curious_count": "12", "curious_last_ts": "0"}
     assert should_ask_curious(now_day, stats_limit, cfg) is False
 
     # 1 Frage gestellt, aber erst 30 Min her (< 2h)
@@ -52,7 +52,7 @@ def test_should_ask_curious():
 
     # Schalter deaktiviert
     assert should_ask_curious(now_day, stats_empty, {"daily": {"curious": False}, "privacy": {"remember": True}}) is False
-    assert should_ask_curious(now_day, stats_empty, {"daily": {"curious": True}, "privacy": {"remember": False}}) is False
+    assert should_ask_curious(now_day, stats_empty, {"daily": {"curious": True}, "privacy": {"remember": False}}) is True
 
 
 def test_next_birthday():

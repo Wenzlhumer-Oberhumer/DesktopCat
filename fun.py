@@ -124,24 +124,14 @@ def add_friendship_points(
         date_str = datetime.date.today().isoformat()
 
     limit = DAILY_LIMITS.get(kind, 9999)
-    current_count = store.get_daily_friendship_count(kind, date_str)
-    if current_count >= limit:
-        cur_pts = store.get_friendship_points()
-        cur_lvl, _ = level_for(cur_pts)
-        return 0, False, cur_lvl
-
     pts_to_add = POINTS_PER_EVENT.get(kind, 1)
-    store.increment_daily_friendship(kind, date_str)
-
-    old_pts = store.get_friendship_points()
-    new_pts = old_pts + pts_to_add
-    store.set_friendship_points(new_pts)
+    old_pts, new_pts = store.award_friendship(kind, date_str, limit, pts_to_add)
 
     old_lvl, _ = level_for(old_pts)
     new_lvl, _ = level_for(new_pts)
     did_level_up = bool(new_lvl > old_lvl)
 
-    return pts_to_add, did_level_up, new_lvl
+    return new_pts - old_pts, did_level_up, new_lvl
 
 
 # ======================================================================================

@@ -17,6 +17,7 @@ from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from i18n import tr
+import i18n
 import sound_effects
 import tools
 
@@ -139,6 +140,7 @@ def style_menu(menu: QMenu) -> QMenu:
 
 class PetWindow(QWidget):
     input_requested = pyqtSignal()
+    interaction_requested = pyqtSignal()
     chats_requested = pyqtSignal()
     data_requested = pyqtSignal()
     command_requested = pyqtSignal(str)
@@ -1223,6 +1225,7 @@ class PetWindow(QWidget):
             menu.addSeparator()
 
         menu.addAction(tr("menu.input")).triggered.connect(self.input_requested.emit)
+        menu.addAction('🐾  Time together' if i18n.lang() == 'en' else '🐾  Zeit miteinander').triggered.connect(self.interaction_requested.emit)
         menu.addAction(tr("menu.feed_pet", name=cname)).triggered.connect(self.give_treat)
         menu.addAction(tr("menu.wash_pet", name=cname)).triggered.connect(self.wash_requested.emit)
         menu.addAction(tr("menu.hide_pet", name=cname)).triggered.connect(self.hide_requested.emit)

@@ -84,18 +84,17 @@ def should_ask_curious(now: datetime.datetime, stats: dict, cfg: dict) -> bool:
     """Prueft, ob eine Neugier-Frage gestellt werden soll.
 
     Bedingungen:
-    - daily.curious und privacy.remember muessen True sein.
+    - daily.curious muss True sein; lokale Fragen gehen auch ohne Erinnern.
     - Nicht nachts (zwischen 23:00 und 07:00).
-    - Max. 2 Fragen pro Tag.
-    - Mindestens 2 Stunden Abstand zur letzten Frage.
+    - Abstand und Tageslimit richten sich nach der gewaehlten Haeufigkeit.
     """
     daily_cfg = cfg.get("daily", {}) if isinstance(cfg.get("daily"), dict) else {}
     if not daily_cfg.get("curious", True):
         return False
 
-    priv = cfg.get("privacy", {}) if isinstance(cfg.get("privacy"), dict) else {}
-    if not priv.get("remember", True):
-        return False
+    interval, daily_limit = {
+        'calm': (5400, 4), 'normal': (2700, 12), 'often': (1200, 24),
+    }.get(daily_cfg.get('interaction_frequency', 'normal'), (2700, 12))
 
     # Nachtruhe
     if now.hour >= 23 or now.hour < 7:
@@ -108,7 +107,7 @@ def should_ask_curious(now: datetime.datetime, stats: dict, cfg: dict) -> bool:
     except ValueError:
         count = 0
 
-    if count >= 2:
+    if count >= daily_limit:
         return False
 
     try:
@@ -116,7 +115,7 @@ def should_ask_curious(now: datetime.datetime, stats: dict, cfg: dict) -> bool:
     except ValueError:
         last_ts = 0.0
 
-    if (now.timestamp() - last_ts) < 7200:  # 2 Stunden
+    if (now.timestamp() - last_ts) < interval:
         return False
 
     return True

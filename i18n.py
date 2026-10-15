@@ -85,8 +85,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "🌳 Character Tree & Pet Care",
     },
     "care.tree_subtitle": {
-        "de": "Pflege deine Katze, sammle Freundschaftspunkte und schalte alle 15 Gefährten frei!",
-        "en": "Care for your pet, earn friendship points, and unlock all 15 companions!",
+        "de": "Pflege deine Katze, sammle Freundschaftspunkte und schalte alle 17 Gefährten frei!",
+        "en": "Care for your pet, earn friendship points, and unlock all 17 companions!",
     },
     "care.status_hungry": {
         "de": "Ich habe ganz doll Hunger! 🐟",

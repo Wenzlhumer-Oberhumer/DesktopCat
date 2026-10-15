@@ -46,6 +46,19 @@ class DummyMemoryStore:
     def set_stat(self, key, val):
         self._stats[key] = str(val)
 
+    def increment_stat(self, key, amount=1):
+        value = int(self.get_stat(key)) + amount
+        self.set_stat(key, value)
+        return value
+
+    def claim_achievement(self, ach_id, stat, target, reward):
+        key = f'ach_unlocked_{ach_id}'
+        if self.get_stat(key) == '1':
+            return False
+        self.set_stat(key, '1')
+        self.set_stat(stat, max(int(self.get_stat(stat)), target))
+        return True
+
 
 # ==============================================================================
 #  1. Sound-Effekte

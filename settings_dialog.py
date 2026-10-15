@@ -748,9 +748,23 @@ class SettingsDialog(QDialog):
         self.briefing_chk.setChecked(bool(daily.get("briefing", True)))
         form.addRow("", self.briefing_chk)
 
-        self.curious_chk = QCheckBox("Gelegentlich neugierige Alltags-Fragen stellen")
+        self.curious_chk = QCheckBox('Kleine Fragen & Mitmachaktionen automatisch anbieten')
         self.curious_chk.setChecked(bool(daily.get("curious", True)))
         form.addRow("", self.curious_chk)
+        self.interaction_frequency = QComboBox()
+        for key, label in [('calm', 'Selten · frühestens alle 90 Min.'),
+                           ('normal', 'Normal · frühestens alle 45 Min.'),
+                           ('often', 'Öfter · frühestens alle 20 Min.')]:
+            self.interaction_frequency.addItem(label, key)
+        self.interaction_frequency.setCurrentIndex(max(0, self.interaction_frequency.findData(daily.get('interaction_frequency', 'normal'))))
+        self.interaction_frequency.setEnabled(self.curious_chk.isChecked())
+        self.curious_chk.toggled.connect(self.interaction_frequency.setEnabled)
+        form.addRow('Zeit miteinander:', self.interaction_frequency)
+        interaction_hint = QLabel('Immer freiwillig und ohne KI-Key. Antworten werden gemäß „Meine Daten“ lokal gespeichert. '
+                                 'Rechtsklick auf das Pet → „Zeit miteinander“ startet auch von Hand eine Runde.')
+        interaction_hint.setWordWrap(True)
+        interaction_hint.setObjectName('hint')
+        form.addRow(interaction_hint)
 
         self.bedtime_edit = QLineEdit(str(daily.get("bedtime", "23:00")))
         self.bedtime_edit.setPlaceholderText("z. B. 23:00 (leer = aus)")
@@ -980,6 +994,7 @@ class SettingsDialog(QDialog):
 
         c.set("daily.briefing", self.briefing_chk.isChecked())
         c.set("daily.curious", self.curious_chk.isChecked())
+        c.set('daily.interaction_frequency', self.interaction_frequency.currentData())
         c.set("daily.bedtime", self.bedtime_edit.text().strip())
 
         c.set("autostart", self.autostart.isChecked())

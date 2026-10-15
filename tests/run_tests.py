@@ -61,6 +61,8 @@ def main():
         "test_cozy_cosmetics",
         "test_room_visuals",
         "test_wallpaper_ui",
+        "test_pet_interactions",
+        "test_friendship_progress",
     ]
 
     total = 0

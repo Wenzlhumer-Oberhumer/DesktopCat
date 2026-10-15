@@ -263,6 +263,13 @@ class MemoryStore:
                 (key, str(value)),
             )
 
+    def increment_stat(self, key: str, amount: int = 1) -> int:
+        with self._db() as db:
+            db.execute('INSERT INTO stats(key, value) VALUES(?, ?) '
+                       'ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + excluded.value',
+                       (key, str(amount)))
+            return int(db.execute('SELECT value FROM stats WHERE key = ?', (key,)).fetchone()['value'])
+
     # -- Export & Wipe -----------------------------------------------------------------
     def export_text(self, path: Path | str) -> None:
         """Exportiert alle Chats und Fakten als uebersichtliche Textdatei."""
@@ -321,6 +328,44 @@ class MemoryStore:
                 "ON CONFLICT(id) DO UPDATE SET points = excluded.points, last_update = excluded.last_update",
                 (points, today_str),
             )
+
+    def award_friendship(self, kind: str, date_str: str, limit: int, points: int) -> tuple[int, int]:
+        """Keep the daily allowance and point total in one serialized transaction."""
+        with self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT points FROM friendship WHERE id = 1').fetchone()
+            old = int(row['points']) if row else 0
+            row = db.execute('SELECT count FROM friendship_daily WHERE date = ? AND kind = ?',
+                             (date_str, kind)).fetchone()
+            count = int(row['count']) if row else 0
+            if count >= limit:
+                return old, old
+            new = old + points
+            db.execute('INSERT INTO friendship_daily(date, kind, count) VALUES(?, ?, 1) '
+                       'ON CONFLICT(date, kind) DO UPDATE SET count = count + 1', (date_str, kind))
+            db.execute('INSERT INTO friendship(id, points, last_update) VALUES(1, ?, ?) '
+                       'ON CONFLICT(id) DO UPDATE SET points = excluded.points, last_update = excluded.last_update',
+                       (new, date_str))
+            return old, new
+
+    def claim_achievement(self, ach_id: str, stat: str, target: int, reward: int) -> bool:
+        """Unlock and pay a trophy once, even when two events arrive together."""
+        with self._db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            key = f'ach_unlocked_{ach_id}'
+            row = db.execute('SELECT value FROM stats WHERE key = ?', (key,)).fetchone()
+            if row and row['value'] == '1':
+                return False
+            db.execute('INSERT INTO stats(key, value) VALUES(?, ?) '
+                       'ON CONFLICT(key) DO UPDATE SET value = excluded.value', (key, '1'))
+            row = db.execute('SELECT value FROM stats WHERE key = ?', (stat,)).fetchone()
+            progress = max(int(row['value'] or 0) if row else 0, target)
+            db.execute('INSERT INTO stats(key, value) VALUES(?, ?) '
+                       'ON CONFLICT(key) DO UPDATE SET value = excluded.value', (stat, str(progress)))
+            db.execute('INSERT INTO friendship(id, points, last_update) VALUES(1, ?, ?) '
+                       'ON CONFLICT(id) DO UPDATE SET points = points + excluded.points, last_update = excluded.last_update',
+                       (reward, datetime.date.today().isoformat()))
+            return True
 
     def get_daily_friendship_count(self, kind: str, date_str: str) -> int:
         with self._db() as db:

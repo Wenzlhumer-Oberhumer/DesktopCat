@@ -33,7 +33,7 @@ def test_unlock_tiers_cover_all_characters():
 
 def test_kylie_always_unlocked():
     store = MagicMock()
-    store.get_stat.return_value = "0"
+    store.get_friendship_points.return_value = 0
     unlocked, lvl, pts = pet_care.is_character_unlocked("cat_mochi", store)
     assert unlocked is True
     assert lvl == 1
@@ -43,19 +43,19 @@ def test_kylie_always_unlocked():
 def test_tier_unlock_progression():
     store = MagicMock()
     # 0 FP -> Level 1 -> Kylie und die beiden neuen Kuschelfiguren
-    store.get_stat.return_value = "0"
+    store.get_friendship_points.return_value = 0
     unlocked_chars = pet_care.get_unlocked_characters(store)
     assert unlocked_chars == {"cat_mochi", "animal_arctic_fox", "animal_cocoa_bunny"}
 
     # 30 FP -> Level 2 -> Kylie + Hachi (dog_shiba) + Mimi (animal_bunny)
-    store.get_stat.return_value = "30"
+    store.get_friendship_points.return_value = 30
     unlocked_chars = pet_care.get_unlocked_characters(store)
     assert "dog_shiba" in unlocked_chars
     assert "animal_bunny" in unlocked_chars
     assert "cat_luna" not in unlocked_chars
 
     # 1300 FP -> Level 8 -> alle 17 Charaktere freigeschaltet
-    store.get_stat.return_value = "1300"
+    store.get_friendship_points.return_value = 1300
     unlocked_chars = pet_care.get_unlocked_characters(store)
     assert len(unlocked_chars) == 17
     assert set(CHARACTERS.keys()) == unlocked_chars

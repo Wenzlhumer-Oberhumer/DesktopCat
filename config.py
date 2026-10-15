@@ -76,6 +76,7 @@ DEFAULTS: dict[str, Any] = {
         "briefing": True,
         "bedtime": "23:00",
         "curious": True,
+        "interaction_frequency": "normal",
     },
     "fun": {
         "weather_outfits": True,
