@@ -113,17 +113,15 @@ def test_restore_windows_wallpaper_fallback():
 
 
 def test_close_lively_wallpaper_command():
-    """Testet, dass close_lively_wallpaper 'closewp -1' und taskkill aufruft."""
+    """Close only the room's monitor, never force-kill unrelated players."""
     with patch("lively_wallpaper.find_lively_exe", return_value=Path("C:/Mock/Lively.exe")), \
          patch("subprocess.run") as mock_run:
-        lively_wallpaper.close_lively_wallpaper()
-        assert mock_run.call_count >= 2
+        mock_run.return_value.returncode = 0
+        assert lively_wallpaper.close_lively_wallpaper(2)
+        assert mock_run.call_count == 1
         args0 = mock_run.call_args_list[0][0][0]
         assert "closewp" in args0
-        assert "-1" in args0
-        # Prüfen, dass Player-Prozesse beendet werden
-        all_taskkills = [args[0][0] for args in mock_run.call_args_list[1:]]
-        assert any("Lively.Player.WebView2.exe" in tk for tk in all_taskkills)
+        assert args0[-2:] == ['--monitor', '2']
 
 
 def test_perch_levels_includes_bed_without_room_mode():

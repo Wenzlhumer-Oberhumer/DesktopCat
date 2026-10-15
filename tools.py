@@ -1667,7 +1667,7 @@ def restore_wallpaper() -> ToolResult:
     import lively_wallpaper
     try:
         cfg = Config()
-        ok = lively_wallpaper.restore_original_wallpaper(cfg)
+        ok = lively_wallpaper.restore_original_wallpaper(cfg, force=True)
         if ok:
             return ToolResult(True, "Ich habe dein Desktop-Hintergrundbild wiederhergestellt! 🖼️✨")
         else:

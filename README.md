@@ -4,6 +4,14 @@
 
 ---
 
+## Neu in v3.0.7
+
+- **Gemini im Browser:** Über Tray-Menü oder Einstellungen „Gemini im Browser öffnen“ wählen. Optional eine Anfrage eingeben, kopieren und bei Gemini mit Strg+V einfügen. Dort nutzt du dein eigenes Google-Konto und dessen Abo. Im Chat funktioniert auch `gemini: deine Frage`. Antworten werden manuell gelesen; Desktop-Aktionen werden nicht automatisch aus Browser-Antworten ausgeführt. BYOK bleibt separat erhalten, ohne Entwickler-Key oder eigenen KI-Server.
+- **Updates per Antwort:** Kylie bietet neue GitHub-Releases an. `ja` startet Download, SHA256-Prüfung und Installation; `später` verschiebt die Erinnerung um sechs Stunden. Der normale Klick auf eine Sprechblase öffnet die Eingabe. Neue Releases werden auch während längerer Laufzeiten geprüft.
+- **Hintergrund:** Aktivierung wird anhand des Lively-Status geprüft. Desktop Cat schließt nur das eigene Katzenzimmer auf dessen Bildschirm und respektiert manuelle Hintergrundwechsel. Lively muss laufen und auf „Pro Bildschirm“ eingestellt sein.
+- **Datenschutz:** Automatische Bildschirm-Tipps sind standardmäßig aus und benötigen eine eigene Freigabe unter Einstellungen → KI. Der KI-Schalter sperrt auch die übrigen KI-Einstiegspunkte.
+- **Zuverlässigkeit:** Kein erneutes Ausführen erledigter Aktionen nach einem KI-Timeout. Lokale Builds brechen bei fehlgeschlagenen Schritten ab.
+
 ## 🆕 Neu in v3.0
 
 - **🎙️ Mit Kylie sprechen (Push-to-Talk):** Hotkey gedrückt halten, sprechen, loslassen. Die Aufnahme geht an Gemini (wie eine getippte Frage) und wird danach sofort gelöscht. Funktioniert nur mit Gemini-Key und eingeschalteter KI.
@@ -100,7 +108,7 @@
   - Jeder Nutzer verwendet sein eigenes Gratis-Kontingent; keine Kosten für den Entwickler.
   - Sicheres JSON-Tool-Protokoll: die KI kann nur Desktop Cats eigene Werkzeuge auslösen.
   - Ohne Key oder ohne Internet arbeitet Kylie automatisch im **100 % Offline-Modus**.
-  - Hinweis: Der frühere „Mit Google anmelden“-Weg über die Gemini CLI funktioniert seit dem 18.06.2026 für private Google-Konten nicht mehr (Google hat ihn abgeschaltet).
+  - Das eigene Gemini-Abo nutzt du über die separate Browser-Option. Desktop Cat übernimmt dabei keine Google-Zugangsdaten oder Browser-Antworten.
 
 - **⚡ 20 Echte Windows-Aktionen (`tools.py`):**
   1. **Word-Dokumente erstellen (`create_file`):** Erstellt formatiertes `.docx` direkt am Desktop.
@@ -179,6 +187,8 @@ Das Skript:
 3. Kompiliert das Inno-Setup-Installationsprogramm (`dist\DesktopCat-Setup-<version>.exe`) inklusive `.sha256`-Prüfsumme.
 
 ### Release auf GitHub veröffentlichen
+Releases werden lokal gebaut. Der GitHub-Workflow hat nur noch einen manuellen Start (`workflow_dispatch`); Branch- und Tag-Pushes starten keinen Build und verbrauchen keine Actions-Minuten.
+
 1. Version in `version.py` erhöhen (z. B. `"2.0.1"`).
 2. `.\build.ps1` ausführen.
 3. Release auf GitHub erstellen und die beiden Dateien aus `dist\` hochladen:

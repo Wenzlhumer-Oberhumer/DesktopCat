@@ -573,6 +573,20 @@ class SettingsDialog(QDialog):
         self.ai_enabled.setChecked(bool(self.cfg.get("ai.enabled", True)))
         ai_lay.addWidget(self.ai_enabled)
 
+        self.auto_vision_chk = QCheckBox('Automatische Bildschirm-Tipps über Gemini erlauben')
+        self.auto_vision_chk.setToolTip('Sendet alle paar Minuten einen Screenshot an Gemini. Nur bei eingeschalteter KI.')
+        self.auto_vision_chk.setChecked(bool(self.cfg.get('privacy.auto_vision', False)))
+        ai_lay.addWidget(self.auto_vision_chk)
+
+        browser_hint = QLabel('Eigenes Gemini-Abo? Öffne Gemini im Browser und melde dich dort mit Google an.\n'
+                             'Optional eine Anfrage kopieren und dort einfügen. Dein API-Key bleibt separat nutzbar.')
+        browser_hint.setWordWrap(True)
+        ai_lay.addWidget(browser_hint)
+        browser_btn = QPushButton('🌐 Gemini im Browser öffnen …')
+        from gemini_browser import show_browser_dialog
+        browser_btn.clicked.connect(lambda: show_browser_dialog(self))
+        ai_lay.addWidget(browser_btn)
+
         lay.addWidget(card_ai)
 
         # Card 2: 🎙️ Sprachausgabe (TTS) & Lip-Sync (v3.0.0)
@@ -923,6 +937,7 @@ class SettingsDialog(QDialog):
         c.set("fun.weather_outfits", self.weather_outfits_chk.isChecked())
         c.set("fun.pc_fever", self.pc_fever_chk.isChecked())
         c.set("ai.enabled", self.ai_enabled.isChecked())
+        c.set('privacy.auto_vision', self.auto_vision_chk.isChecked())
 
         c.set("wellbeing.breaks", self.breaks.isChecked())
         c.set("wellbeing.water", self.water.isChecked())

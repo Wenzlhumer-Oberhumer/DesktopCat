@@ -262,7 +262,9 @@ class AmbientVisionWorker(QObject):
         who = cinfo.get("ai_persona") or "Du bist Kylie, ein extrem neugieriger, süßer Katzen-Buddy."
 
         # Schritt 1: Cloud-Vision ueber die Gemini API, falls ein Key hinterlegt ist
-        if gemini.has_key() and self.b64_img:
+        if (self.cfg.get('ai', {}).get('enabled', True)
+                and self.cfg.get('privacy', {}).get('auto_vision', False)
+                and gemini.has_key() and self.b64_img):
             try:
                 prompt = (
                     f"{who} Du lebst als Desktop-Buddy auf dem Windows-Desktop des Nutzers ('{user}'). "
@@ -534,8 +536,8 @@ class Buddy(QObject):
         if bool(cfg.get("lively.auto_sync", False)):
             import lively_wallpaper
             lively_wallpaper.apply_lively_wallpaper(cfg, get_memory_store())
-        elif not bool(cfg.get("pet.is_at_home", False)):
-            # Sicherstellen, dass der normale Windows-Hintergrund aktiv und sichtbar ist
+        elif cfg.get('lively.active', False):
+            # Recover only a wallpaper session owned by Desktop Cat.
             import lively_wallpaper
             lively_wallpaper.restore_original_wallpaper(cfg)
 
@@ -550,8 +552,12 @@ class Buddy(QObject):
         self._mochi_asked_question = False
         self._vision_threads: set[QThread] = set()
         self._pending_update: dict | None = None
+        self._awaiting_update_reply = False
         self._update_worker: QThread | None = None
         self._download_worker: QThread | None = None
+        self._update_timer = QTimer(self)
+        self._update_timer.timeout.connect(lambda: self._check_update(manual=False))
+        self._update_timer.start(15 * 60 * 1000)
 
         # Globales Tastenkuerzel
         self.hotkey = HotkeyFilter(self._hotkey_pressed)
@@ -645,6 +651,7 @@ class Buddy(QObject):
             self._act(self.tray_menu, tr("menu.enter_key"), self.open_settings)
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, tr("menu.input"), self.open_input)
+        self._act(self.tray_menu, '🌐 Gemini im Browser öffnen …', self.open_gemini_browser)
         self._act(self.tray_menu, tr("menu.feed_pet", name=cname), self.pet.give_treat)
         if self.pet.isVisible():
             self._act(self.tray_menu, tr("menu.hide_pet", name=cname), self.hide_pet)
@@ -677,7 +684,7 @@ class Buddy(QObject):
         self.tray_menu.addSeparator()
         if getattr(self, "_pending_update", None):
             ver = self._pending_update.get("version", "")
-            self._act(self.tray_menu, tr("menu.install_update", version=ver), self._start_update_download)
+            self._act(self.tray_menu, tr("menu.install_update", version=ver), lambda: self._offer_update(force=True))
         self._act(self.tray_menu, tr("menu.check_updates"), lambda: self._check_update(manual=True))
         self._act(self.tray_menu, tr("menu.settings"), self.open_settings)
         self._act(self.tray_menu, tr("menu.about", version=__version__), self._about)
@@ -779,7 +786,7 @@ class Buddy(QObject):
         self._say(tr("about.text", version=__version__), 6000)
 
     def quit(self) -> None:
-        if bool(self.cfg.get("lively.auto_sync", False)) or bool(self.cfg.get("pet.is_at_home", False)) or bool(self.cfg.get("lively.prev_wallpaper", "")):
+        if self.cfg.get('lively.active', False):
             try:
                 import lively_wallpaper
                 lively_wallpaper.restore_original_wallpaper(self.cfg)
@@ -795,15 +802,15 @@ class Buddy(QObject):
 
     # -- Auto-Update -------------------------------------------------------------------
     def _check_update(self, manual: bool = False) -> None:
+        if self._update_worker is not None and self._update_worker.isRunning():
+            return
         if not manual:
             if not FROZEN or not self.cfg.get("update.auto", True):
                 return
             last_check = float(self.cfg.get("update.last_check", 0.0))
-            if time.time() - last_check < 86400:
+            if time.time() - last_check < 21600:
+                self._offer_update()
                 return
-        self.cfg.set("update.last_check", time.time())
-        self.cfg.save()
-
         if manual:
             self._say(tr("say.update_checking"), 3000)
 
@@ -815,18 +822,46 @@ class Buddy(QObject):
         status = res.get("status")
         manual = res.get("manual", False)
         if status == "update_available":
+            if not self._pending_update or self._pending_update.get('version') != res.get('version'):
+                self._awaiting_update_reply = False
             self._pending_update = res
-            ver = res.get("version", "")
-            self._say(tr("say.update_available", ver=ver), 10000)
+            self._offer_update(force=manual)
             self._update_tray_menu()
-        elif status == "up_to_date" and manual:
-            self._say(tr("say.update_latest"), 5000)
+        elif status == "up_to_date":
+            self._pending_update = None
+            self._awaiting_update_reply = False
+            self._update_tray_menu()
+            if manual:
+                self._say(tr("say.update_latest"), 5000)
         elif status == "error" and manual:
             self._say(tr("say.update_check_failed"), 5000)
+        if status != 'error':
+            self.cfg.set('update.last_check', time.time())
+            self.cfg.save()
+
+    def _offer_update(self, force: bool = False) -> None:
+        if not self._pending_update or self._awaiting_update_reply:
+            return
+        if self._download_worker is not None and self._download_worker.isRunning():
+            return
+        if not force and (not self.cfg.get('update.auto', True)
+                          or time.time() < self.cfg.get('update.remind_after', 0)):
+            return
+        if self.brain.busy or self.brain.pending_action or self.input.isVisible() or self._quiz_session:
+            return
+        self._say(tr('say.update_available', ver=self._pending_update['version']), persistent=True)
+        self._awaiting_update_reply = True
+
+    def open_gemini_browser(self) -> None:
+        from gemini_browser import show_browser_dialog
+        show_browser_dialog(self.pet)
 
     def _start_update_download(self) -> None:
         if not getattr(self, "_pending_update", None):
             return
+        if self._download_worker is not None and self._download_worker.isRunning():
+            return
+        self._awaiting_update_reply = False
         self._say(tr("say.update_downloading"), 8000)
         self._download_worker = DownloadUpdateWorker(
             self._pending_update["setup_url"],
@@ -861,6 +896,7 @@ class Buddy(QObject):
     def _say(self, text: str, duration_ms=None, persistent: bool = False) -> None:
         if self.input.isVisible():
             return
+        self._awaiting_update_reply = False
         self._follow()
         self.bubble.say(text, duration_ms, persistent)
 
@@ -879,10 +915,7 @@ class Buddy(QObject):
         self.input.popup(self.pet.head_anchor(), placeholder)
 
     def _on_bubble_clicked(self) -> None:
-        """Klick auf die Sprechblase: laedt Update herunter falls anstehend, sonst Eingabe oeffnen."""
-        if getattr(self, "_pending_update", None):
-            self._start_update_download()
-            return
+        """A bubble click opens input; installation requires an explicit reply."""
         if not self.brain.busy:
             self.open_input(reply_mode=True)
 
@@ -899,6 +932,20 @@ class Buddy(QObject):
         self.open_input()
 
     def _on_submit(self, text: str) -> None:
+        awaiting_update = self._awaiting_update_reply
+        self._awaiting_update_reply = False
+        if awaiting_update and self._pending_update and not self.brain.pending_action:
+            answer = text.strip().lower().strip(' .!?')
+            if answer in {'ja', 'yes', 'update installieren'}:
+                self.input.hide_now()
+                self._start_update_download()
+                return
+            if answer in {'später', 'spaeter', 'later', 'nein', 'no'}:
+                self.input.hide_now()
+                self.cfg.set('update.remind_after', time.time() + 21600)
+                self.cfg.save()
+                self._say('Okay, ich erinnere dich später an das Update. 🐾', 5000)
+                return
         was_question = getattr(self, "_mochi_asked_question", False)
         self._mochi_asked_question = False
         self.input.hide_now()       # sofort weg, damit die "Ich bin dran"-Blase erscheinen darf
@@ -911,6 +958,12 @@ class Buddy(QObject):
             return
 
         low_txt = text.strip().lower()
+        if low_txt.startswith(('gemini:', 'gemini im browser:', 'gemini im browser öffnen', 'open gemini')):
+            from gemini_browser import show_browser_dialog
+            prompt = text.split(':', 1)[1].strip() if ':' in text else ''
+            show_browser_dialog(self.pet, prompt)
+            self.pet.freeze(False)
+            return
         if any(k in low_txt for k in ("was bedeutet diese fehlermeldung", "was heißt dieser fehler", "was heisst dieser fehler", "fehlermeldung erklären", "fehlermeldung erklaeren")):
             self.start_error_doctor()
             return
@@ -1564,7 +1617,12 @@ class Buddy(QObject):
             self.pet.celebrate(3.0)
         else:
             import lively_wallpaper
-            lively_wallpaper.restore_original_wallpaper(self.cfg)
+            if not lively_wallpaper.restore_original_wallpaper(self.cfg):
+                self.cfg.set('pet.is_at_home', True)
+                self.cfg.set('pet.room_mode', True)
+                self.cfg.save()
+                self._say('Der Hintergrund konnte noch nicht wiederhergestellt werden. Bitte erneut versuchen.', 6000)
+                return
             if hasattr(self, "pet_bed") and self.pet_bed:
                 self.pet_bed.hide()
                 self.pet.on_bed_hidden()
@@ -1662,7 +1720,7 @@ class Buddy(QObject):
 
     def restore_desktop_wallpaper(self) -> None:
         import lively_wallpaper
-        ok = lively_wallpaper.restore_original_wallpaper(self.cfg)
+        ok = lively_wallpaper.restore_original_wallpaper(self.cfg, force=True)
         if ok:
             self._say("🖼️ Dein Desktop-Hintergrundbild wurde erfolgreich wiederhergestellt!", 4000)
             self.pet.celebrate(2.5)
@@ -1702,7 +1760,7 @@ class Buddy(QObject):
     def open_flashcards_dialog(self) -> None:
         from fun_dialogs import FlashcardsDialog
         from memory_store import get_memory_store
-        dlg = FlashcardsDialog(get_memory_store(), self.pet)
+        dlg = FlashcardsDialog(get_memory_store(), self.pet, cfg=self.cfg)
         dlg.quiz_requested.connect(self.start_flashcard_quiz)
         dlg.exec()
 
@@ -1814,7 +1872,7 @@ class Buddy(QObject):
             pass
 
     def _create_ai_flashcards(self, topic: str, count: int = 10) -> None:
-        if not gemini.has_key():
+        if not self.cfg.get('ai.enabled', True) or not gemini.has_key():
             self._say(tr("say.cards_need_key"), 4500)
             return
 
@@ -1860,7 +1918,7 @@ class Buddy(QObject):
         # Spruch: offline sofort, mit Gemini-Key wird er waehrend des Countdowns ersetzt
         from fun import photo_caption
         self._photo_caption = photo_caption(cname, self.user_name())
-        if gemini.has_key():
+        if self.cfg.get('ai.enabled', True) and gemini.has_key():
             import threading
             prompt = tr("photo.caption_prompt", cname=cname, user=self.user_name())
 
@@ -2097,7 +2155,7 @@ class Buddy(QObject):
         self._run_clipboard_action(mode, text)
 
     def _run_clipboard_action(self, mode: str, text: str) -> None:
-        if not gemini.has_key():
+        if not self.cfg.get('ai.enabled', True) or not gemini.has_key():
             self._say(tr("say.explain_need_key"), 4000)
             return
 
@@ -2133,7 +2191,7 @@ class Buddy(QObject):
 
     # -- Fehler-Doktor -----------------------------------------------------------------
     def start_error_doctor(self) -> None:
-        if not gemini.has_key():
+        if not self.cfg.get('ai.enabled', True) or not gemini.has_key():
             self._say(tr("say.doctor_need_key"), 4000)
             return
 
@@ -2193,7 +2251,7 @@ class Buddy(QObject):
 
     # -- IT-Support / Klick-Anleitung --------------------------------------------------
     def start_it_guide(self, question: str) -> None:
-        if not gemini.has_key():
+        if not self.cfg.get('ai.enabled', True) or not gemini.has_key():
             self._say(tr("say.guide_need_key"), 4000)
             return
 
@@ -2209,6 +2267,9 @@ class Buddy(QObject):
         QTimer.singleShot(1500, self._guide_capture_and_step)
 
     def _guide_capture_and_step(self) -> None:
+        if not self.cfg.get('ai.enabled', True):
+            self._guide_finish(celebrate=False)
+            return
         if self._guide_session is None or self._guide_session.done:
             self._guide_finish(celebrate=True)
             return
@@ -2446,6 +2507,9 @@ class Buddy(QObject):
             self._vision_timer.start(delay * 1000)
 
     def _on_autonomous_vision(self) -> None:
+        if not self.cfg.get('ai.enabled', True) or not self.cfg.get('privacy.auto_vision', False) or not gemini.has_key():
+            self._schedule_vision()
+            return
         if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg) or self.brain.busy or self.input.isVisible() or self.pet.state == PetState.WORKING:
             self._schedule_vision()
             return
@@ -2457,7 +2521,7 @@ class Buddy(QObject):
                 pix = screen.grabWindow(0).scaled(720, 405)
                 buf = QBuffer()
                 buf.open(QBuffer.OpenModeFlag.WriteOnly)
-                pix.save(buf, "JPEG", 55)
+                pix.save(buf, "PNG")
                 b64_img = base64.b64encode(buf.data().data()).decode("utf-8")
         except Exception:
             pass

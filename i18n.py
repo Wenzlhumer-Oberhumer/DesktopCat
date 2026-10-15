@@ -1365,8 +1365,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Checking for updates... 🔍",
     },
     "say.update_available": {
-        "de": "Es gibt ein Update auf v{ver}! Klick mich zum Installieren ✨",
-        "en": "There's an update to v{ver}! Click me to install it ✨",
+        "de": "Hey! Ich habe ein neues Update auf v{ver} gefunden 🐾 Schreib ja, wenn ich es jetzt installieren soll, oder später.",
+        "en": "Hey! I found a new update to v{ver} 🐾 Reply yes to install it now, or later.",
     },
     "say.update_latest": {
         "de": "Du hast die neueste Version 😺",

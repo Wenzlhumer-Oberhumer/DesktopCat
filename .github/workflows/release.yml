@@ -1,9 +1,8 @@
 name: Build and Release Desktop Cat
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Releases are built locally; tags must not consume Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: write

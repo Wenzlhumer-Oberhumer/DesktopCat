@@ -1238,7 +1238,8 @@ class OnboardingDialog(QDialog):
             return
 
         # Bei Schritt 15 oder wenn kein Key da ist: direkt weiter
-        if self.flow.is_done() or not gemini.has_key() or step_before in (1, 2, 11, 13, 14, 15):
+        if (self.flow.is_done() or not self.cfg.get('ai.enabled', True)
+                or not gemini.has_key() or step_before in (1, 2, 11, 13, 14, 15)):
             self._clear_input_area()
             self._show_typing()
             QTimer.singleShot(450, self._render_current_step)

@@ -371,9 +371,10 @@ class FlashcardsDialog(QDialog):
 
     quiz_requested = pyqtSignal(str)
 
-    def __init__(self, store, parent: Optional[QWidget] = None):
+    def __init__(self, store, parent: Optional[QWidget] = None, cfg=None):
         super().__init__(parent)
         self.store = store
+        self.cfg = cfg
 
         self.setWindowTitle(tr("cards.title"))
         self.resize(600, 560)
@@ -572,7 +573,7 @@ class FlashcardsDialog(QDialog):
         dlg.exec()
 
     def _generate_ai_cards(self) -> None:
-        if not gemini.has_key():
+        if (self.cfg is not None and not self.cfg.get('ai.enabled', True)) or not gemini.has_key():
             QMessageBox.warning(
                 self,
                 tr("cards.ai_nokey_title"),

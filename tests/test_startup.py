@@ -18,9 +18,13 @@ def test_buddy_start_runs_without_exception():
         cfg = Config(Path(td) / "config.json")
         cfg.set("update.auto", False)
         store = memory_store.MemoryStore(Path(td) / "test.db")
-        with patch.object(memory_store, "_STORE", store), patch("main.set_autostart"):
+        with patch.object(memory_store, "_STORE", store), patch("main.set_autostart"), \
+             patch('lively_wallpaper.restore_original_wallpaper') as restore, \
+             patch('lively_wallpaper.apply_lively_wallpaper') as apply:
             buddy = main.Buddy(app, cfg)
             buddy.start()
+            restore.assert_not_called()
+            apply.assert_not_called()
             app.processEvents()
             buddy.pet.hide()
             buddy.tray.hide()

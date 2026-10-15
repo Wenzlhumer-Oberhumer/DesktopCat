@@ -9,13 +9,15 @@ und stellt beim Beenden automatisch das vorherige Wallpaper wieder her.
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
 from achievements import record_achievement_event
-from paths import APP_DIR
+from paths import APP_DIR, DATA_DIR
 
 LIVELY_CANDIDATES = [
     Path("C:/Program Files/Lively Wallpaper/Lively.exe"),
@@ -30,7 +32,58 @@ def find_lively_exe() -> Optional[Path]:
         if p.is_file():
             return p
     found = shutil.which("livelycu") or shutil.which("lively")
-    return Path(found) if found else None
+    if found:
+        return Path(found)
+    # Store installs are not in Program Files or necessarily on PATH.
+    try:
+        result = subprocess.run(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+             '(Get-Process -Name Lively -ErrorAction SilentlyContinue | Select-Object -First 1).Path'],
+            capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        candidate = Path(result.stdout.strip())
+        if result.returncode == 0 and candidate.is_file():
+            return candidate
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def get_lively_data_dir() -> Path:
+    local = Path(os.environ.get('LOCALAPPDATA', ''))
+    regular = local / 'Lively Wallpaper'
+    store = local / 'Packages' / '12030rocksdanister.LivelyWallpaper_97hta09mmv6hy' / 'LocalCache' / 'Local' / 'Lively Wallpaper'
+    return regular if (regular / 'Settings.json').is_file() else store if (store / 'Settings.json').is_file() else regular
+
+
+def _read_layout() -> list[dict]:
+    path = get_lively_data_dir() / 'WallpaperLayout.json'
+    if not path.is_file():
+        raise ValueError('Lively bitte einmal starten, bevor du das Katzenzimmer aktivierst.')
+    layout = json.loads(path.read_text(encoding='utf-8-sig'))
+    if not isinstance(layout, list) or any(not isinstance(item, dict) for item in layout):
+        raise ValueError('Der Lively-Hintergrundstatus konnte nicht gelesen werden.')
+    return layout
+
+
+def _same_path(left: str, right: str) -> bool:
+    return bool(left and right) and os.path.normcase(os.path.abspath(left)) == os.path.normcase(os.path.abspath(right))
+
+
+def _wait_for_room(room: str, monitor: int, present: bool) -> bool:
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            found = any(_same_path(item.get('LivelyInfoPath', ''), room)
+                        and int(item.get('LivelyScreen', {}).get('Index', 1)) == monitor
+                        for item in _read_layout())
+            if found == present:
+                return True
+        except (OSError, ValueError, TypeError):
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.1)
 
 
 def is_lively_installed() -> bool:
@@ -44,8 +97,7 @@ def get_room_package_dir() -> Path:
 
 def get_lively_library_wallpapers_dir() -> Optional[Path]:
     """Ermittelt das Wallpaper-Library-Verzeichnis von Lively Wallpaper."""
-    local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
-    settings_file = local_app_data / "Lively Wallpaper" / "Settings.json"
+    settings_file = get_lively_data_dir() / 'Settings.json'
     if settings_file.is_file():
         try:
             import json
@@ -60,7 +112,7 @@ def get_lively_library_wallpapers_dir() -> Optional[Path]:
         except Exception:
             pass
 
-    default_cand = local_app_data / "Lively Wallpaper" / "Library" / "wallpapers"
+    default_cand = get_lively_data_dir() / "Library" / "wallpapers"
     try:
         default_cand.mkdir(parents=True, exist_ok=True)
         return default_cand
@@ -187,93 +239,114 @@ def restore_windows_wallpaper(path: str) -> bool:
         return False
 
 
-def close_lively_wallpaper() -> bool:
-    """Schliesst aktive Lively-Hintergruende zuverlaessig."""
+def close_lively_wallpaper(monitor: int = 1) -> bool:
+    """Close only the display occupied by our room; never kill Lively players."""
     lively_exe = find_lively_exe()
-    closed = False
-    if lively_exe:
-        try:
-            # Lively CLI schliesst Hintergruende mit 'closewp --monitor -1'
-            subprocess.run(
-                [str(lively_exe), "closewp", "--monitor", "-1"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                timeout=4,
-            )
-            closed = True
-        except Exception:
-            pass
-
-    # Sicherheits-Cleanup: Falls Lively Player (WebView2 oder CefSharp) noch den Desktop verdecken
-    for player_exe in ("Lively.Player.WebView2.exe", "Lively.Player.CefSharp.exe"):
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/IM", player_exe],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                timeout=2,
-            )
-            closed = True
-        except Exception:
-            pass
-
-    return closed
+    if not lively_exe:
+        return False
+    try:
+        result = subprocess.run(
+            [str(lively_exe), "closewp", "--monitor", str(monitor)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), timeout=5)
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def apply_lively_wallpaper(cfg=None, store=None) -> tuple[bool, str]:
-    """Aktiviert das HTML5-Katzenzimmer in Lively Wallpaper und speichert den vorherigen Hintergrund."""
+    """Activate the room and verify Lively's persisted display layout."""
     lively_exe = find_lively_exe()
     if not lively_exe:
-        return False, "Lively Wallpaper wurde auf deinem PC nicht gefunden."
-
-    room_dir = get_room_package_dir()
-    if not room_dir.is_dir() or not (room_dir / "LivelyInfo.json").is_file():
-        return False, f"Katzenzimmer-Paket nicht gefunden unter: {room_dir}"
-
-    # Vorherigen Hintergrund sichern (nur wenn valide Datei und kein temporäres Lively-Paket)
-    if cfg is not None and not cfg.get("lively.prev_wallpaper"):
-        current_wp = get_current_windows_wallpaper()
-        if current_wp and os.path.isfile(current_wp) and "lively" not in current_wp.lower():
-            cfg.set("lively.prev_wallpaper", current_wp)
-            cfg.save()
-
-    # Lively verlangt Ordner innerhalb der eigenen Library (sonst wird setwp ignoriert)
-    deployed_dir = deploy_room_to_lively_library()
-    target_dir = deployed_dir if (deployed_dir and (deployed_dir / "LivelyInfo.json").is_file()) else room_dir
-
-    abs_path = str(target_dir.resolve())
+        return False, "Lively Wallpaper wurde nicht gefunden. Bitte Lively zuerst starten."
     try:
-        # Lively setzt Wallpaper via 'setwp --file <path>'
-        subprocess.Popen(
-            [str(lively_exe), "setwp", "--file", abs_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-
-        if store is not None:
-            record_achievement_event(store, "wallpaper_activated", 1)
-
-        return True, "Cozy-Room Live-Wallpaper erfolgreich in Lively aktiviert! 🖼️✨"
-    except Exception as exc:
-        return False, f"Fehler beim Starten von Lively: {exc}"
-
-
-def restore_original_wallpaper(cfg) -> bool:
-    """Stellt das urspruengliche Hintergrundbild wieder her, wenn Desktop Cat beendet wird."""
-    prev_wp = cfg.get("lively.prev_wallpaper", "") if cfg is not None else ""
-    if not prev_wp or not os.path.isfile(prev_wp):
-        cand = get_current_windows_wallpaper()
-        if cand and os.path.isfile(cand) and "lively" not in cand.lower():
-            prev_wp = cand
+        layout = _read_layout()
+        settings_path = get_lively_data_dir() / 'Settings.json'
+        settings = json.loads(settings_path.read_text(encoding='utf-8-sig')) if settings_path.is_file() else {}
+        if settings.get('WallpaperArrangement', 0) != 0:
+            return False, 'Bitte in Lively die Anordnung „Pro Bildschirm“ wählen, damit andere Monitore unverändert bleiben.'
+        monitor = next((int(item['LivelyScreen']['Index']) for item in layout
+                        if item.get('LivelyScreen', {}).get('IsPrimary')), 1)
+        room_dir = deploy_room_to_lively_library()
+        if not room_dir or not (room_dir / 'LivelyInfo.json').is_file():
+            return False, 'Das Katzenzimmer konnte nicht in die Lively-Bibliothek kopiert werden.'
+        room = str(room_dir.resolve())
+        already_ours = any(_same_path(item.get('LivelyInfoPath', ''), room)
+                           and int(item.get('LivelyScreen', {}).get('Index', 1)) == monitor for item in layout)
+        if cfg is not None and not already_ours:
+            original = get_current_windows_wallpaper()
+            # Windows can overwrite TranscodedWallpaper while a live wallpaper runs.
+            if original and Path(original).name.lower() == 'transcodedwallpaper':
+                backup = DATA_DIR / 'wallpaper-original.jpg'
+                shutil.copy2(original, backup)
+                original = str(backup)
+            cfg.set('lively.prev_wallpaper', original)
+            previous = next((item.get('LivelyInfoPath', '') for item in layout
+                             if int(item.get('LivelyScreen', {}).get('Index', 1)) == monitor), '')
+            cfg.set('lively.prev_lively', previous)
+        if cfg is not None:
+            # Persist ownership before sending the command, for crash recovery.
+            cfg.set('lively.room_path', room)
+            cfg.set('lively.monitor', monitor)
+            cfg.set('lively.active', True)
+            cfg.save()
+        result = subprocess.run(
+            [str(lively_exe), 'setwp', '--file', room, '--monitor', str(monitor)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), timeout=8)
+        if result.returncode != 0 or not _wait_for_room(room, monitor, True):
+            # Keep ownership if Lively did change the layout despite a command error.
             if cfg is not None:
-                cfg.set("lively.prev_wallpaper", prev_wp)
+                owned = any(_same_path(item.get('LivelyInfoPath', ''), room) for item in _read_layout())
+                cfg.set('lively.active', owned)
                 cfg.save()
+            return False, 'Lively hat das Katzenzimmer nicht bestätigt. Bitte Lively öffnen und den Hintergrund prüfen.'
+        if store is not None:
+            record_achievement_event(store, 'wallpaper_activated', 1)
+        return True, 'Katzenzimmer in Lively aktiviert! 🖼️✨'
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
+        return False, f'Katzenzimmer konnte nicht aktiviert werden: {exc}'
 
-    close_lively_wallpaper()
-    res = restore_windows_wallpaper(prev_wp)
-    # WICHTIG: prev_wallpaper bewusst NICHT löschen, damit das Originalbild dauerhaft
-    # als sichere Referenz erhalten bleibt und jederzeit wiederhergestellt werden kann!
-    return res
+
+def restore_original_wallpaper(cfg, force: bool = False) -> bool:
+    """Restore only our room. A manual Lively selection always takes precedence."""
+    if cfg is None or not (cfg.get('lively.active', False) or force):
+        return True
+    try:
+        room = cfg.get('lively.room_path', '')
+        if not room:
+            room = str(get_lively_library_wallpapers_dir() / 'mochi_cozy_room')
+        monitor = int(cfg.get('lively.monitor', 1))
+        ours = any(_same_path(item.get('LivelyInfoPath', ''), room)
+                   and int(item.get('LivelyScreen', {}).get('Index', 1)) == monitor for item in _read_layout())
+        restore_static = bool(cfg.get('lively.restore_pending', False))
+        if not ours and any(int(item.get('LivelyScreen', {}).get('Index', 1)) == monitor for item in _read_layout()):
+            restore_static = False  # The user's newer live wallpaper takes precedence.
+        if ours:
+            previous = cfg.get('lively.prev_lively', '')
+            if previous:
+                lively_exe = find_lively_exe()
+                if not lively_exe or not Path(previous).is_dir():
+                    return False
+                result = subprocess.run(
+                    [str(lively_exe), 'setwp', '--file', previous, '--monitor', str(monitor)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), timeout=8)
+                if result.returncode != 0 or not _wait_for_room(previous, monitor, True):
+                    return False
+            else:
+                if not close_lively_wallpaper(monitor) or not _wait_for_room(room, monitor, False):
+                    return False
+                restore_static = True
+                cfg.set('lively.restore_pending', True)
+                cfg.save()
+        if restore_static and not restore_windows_wallpaper(cfg.get('lively.prev_wallpaper', '')):
+            return False
+        for key, value in [('lively.active', False), ('lively.prev_wallpaper', ''),
+                           ('lively.prev_lively', ''), ('lively.restore_pending', False),
+                           ('pet.is_at_home', False), ('pet.room_mode', False)]:
+            cfg.set(key, value)
+        cfg.save()
+        return True
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError):
+        return False

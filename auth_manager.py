@@ -4,8 +4,8 @@
 
 Der Key liegt in der Windows-Anmeldeinformationsverwaltung (win32cred).
 Ein "Google-Konto-Login" (OAuth) ist bewusst NICHT eingebaut: Ein privates Google-Abo
-(Google One / AI Pro) schaltet die Gemini-API nicht frei, und OAuth braeuchte pro Nutzer ein
-eigenes Google-Cloud-Projekt - ohne Vorteil gegenueber dem Gratis-Key.
+(Google One / AI Pro) schaltet die direkte Gemini-API nicht pauschal frei.
+Die separate Browser-Option verwendet die Google-Sitzung nur im Browser.
 """
 from __future__ import annotations
 

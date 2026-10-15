@@ -53,6 +53,7 @@ def main():
         "test_v250_features",
         "test_v300_features",
         "test_v302_fixes",
+        "test_v307_fixes",
     ]
 
     total = 0

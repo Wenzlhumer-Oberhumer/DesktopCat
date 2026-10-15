@@ -957,6 +957,9 @@ class AgentWorker(QObject):
                 return ok, text, self._notify_title()
             except LLMError as exc:
                 llm_error = str(exc)
+                if self.results:
+                    # An action already happened; replaying the request offline can duplicate it.
+                    return all(r.ok for r in self.results), '\n'.join(r.message for r in self.results) + '\n' + llm_error, self._notify_title()
                 self.results.clear()
                 self.new_pending = None
                 if "api-key" in llm_error.lower():
