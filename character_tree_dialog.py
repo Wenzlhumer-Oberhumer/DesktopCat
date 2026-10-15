@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDesktopServices, QFont
 from PyQt6.QtWidgets import (
     QCheckBox, QDialog, QFrame, QGroupBox, QHBoxLayout, QLabel,
     QProgressBar, QPushButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget,
@@ -87,6 +87,7 @@ class CharacterTreeDialog(QDialog):
     bubble_game_requested = pyqtSignal()
     yarn_game_requested = pyqtSignal()
     wallpaper_requested = pyqtSignal()
+    wallpaper_restore_requested = pyqtSignal()
     bed_toggled = pyqtSignal(bool)
     home_mode_toggled = pyqtSignal(bool)
     scripts_requested = pyqtSignal()
@@ -96,6 +97,8 @@ class CharacterTreeDialog(QDialog):
         self.cfg = cfg
         self.store = store
         self.pet = pet
+        self._wallpaper_busy = False
+        self._wallpaper_message = ""
 
         self.setWindowTitle(tr("care.tree_title"))
         self.resize(680, 750)
@@ -489,14 +492,17 @@ class CharacterTreeDialog(QDialog):
 
         lbl_rw = QLabel(tr("lively.title"))
         lbl_rw.setStyleSheet("font-weight: bold; color: #FFD166; font-size: 11pt;")
-        lbl_rd = QLabel(tr("lively.desc"))
+        lbl_rd = QLabel("Ein ruhiges Waldzimmer mit Licht passend zur Tageszeit. "
+                        "Zum Aktivieren wird Lively Wallpaper benötigt; das Zimmer erscheint auf dem primären Bildschirm. "
+                        "Die Vorschau öffnet sich im Browser, ohne den Hintergrund zu ändern.")
+        lbl_rd.setWordWrap(True)
         lbl_rd.setStyleSheet("color: #A0A5B0; font-size: 9pt;")
         r_layout.addWidget(lbl_rw)
         r_layout.addWidget(lbl_rd)
 
         is_at_home = bool(self.cfg.get("pet.is_at_home", False))
         home_btn_text = "🏠  Katze ist ZU HAUSE im Zimmer (Klick: Rausgehen)" if is_at_home else "🌿  Katze ist DRAUSSEN auf dem Desktop (Klick: Nach Hause)"
-        btn_home_mode = QPushButton(home_btn_text)
+        self.btn_home_mode = btn_home_mode = QPushButton(home_btn_text)
         btn_home_mode.setStyleSheet("background: #4ECCA3; color: #121316; font-weight: bold; border-radius: 6px; padding: 8px;" if is_at_home else "background: #3A3D46; color: #F2F3F5; font-weight: bold; border-radius: 6px; padding: 8px;")
         btn_home_mode.clicked.connect(self._on_home_mode_clicked)
         r_layout.addWidget(btn_home_mode)
@@ -506,10 +512,21 @@ class CharacterTreeDialog(QDialog):
         self.chk_auto_lively.toggled.connect(self._on_auto_lively_toggled)
         r_layout.addWidget(self.chk_auto_lively)
 
-        btn_act_lively = QPushButton(tr("lively.activate_btn"))
+        self.btn_act_lively = btn_act_lively = QPushButton(tr("lively.activate_btn"))
         btn_act_lively.setStyleSheet("background: #FF8FB1; color: #202226; font-weight: bold; border-radius: 6px; padding: 7px;")
         btn_act_lively.clicked.connect(self._on_activate_lively)
         r_layout.addWidget(btn_act_lively)
+        self.btn_preview_room = btn_preview = QPushButton("Zimmer ansehen")
+        btn_preview.clicked.connect(self._on_preview_room)
+        r_layout.addWidget(btn_preview)
+        self.btn_restore_wallpaper = btn_restore = QPushButton("Vorherigen Hintergrund wiederherstellen")
+        btn_restore.clicked.connect(self.wallpaper_restore_requested.emit)
+        r_layout.addWidget(btn_restore)
+        self.lbl_wallpaper_status = QLabel()
+        self.lbl_wallpaper_status.setWordWrap(True)
+        self.lbl_wallpaper_status.setStyleSheet("color: #D5D8DF; font-size: 9pt;")
+        r_layout.addWidget(self.lbl_wallpaper_status)
+        self.set_wallpaper_busy(self._wallpaper_busy, self._wallpaper_message)
         self.games_layout.addWidget(room_card)
 
         # 2. Seifenblasen-Minispiel
@@ -584,6 +601,8 @@ class CharacterTreeDialog(QDialog):
         sc_layout.addWidget(btn_open_scripts)
         self.games_layout.addWidget(scripts_card)
 
+        for button in self.findChildren(QPushButton):
+            button.setMinimumHeight(40)
         self.games_layout.addStretch()
 
     def _select_char(self, cid: str) -> None:
@@ -614,18 +633,26 @@ class CharacterTreeDialog(QDialog):
 
     def _on_home_mode_clicked(self) -> None:
         new_state = not bool(self.cfg.get("pet.is_at_home", False))
-        self.cfg.set("pet.is_at_home", new_state)
-        self.cfg.save()
         self.home_mode_toggled.emit(new_state)
-        self.refresh_all()
 
     def _on_auto_lively_toggled(self, checked: bool) -> None:
         self.cfg.set("lively.auto_sync", checked)
         self.cfg.save()
 
+    def set_wallpaper_busy(self, busy: bool, message: str = "") -> None:
+        self._wallpaper_busy = busy
+        self._wallpaper_message = message
+        for button in (self.btn_home_mode, self.btn_act_lively, self.btn_restore_wallpaper):
+            button.setEnabled(not busy)
+        self.lbl_wallpaper_status.setText(message)
+        self.lbl_wallpaper_status.setVisible(bool(message))
+
     def _on_activate_lively(self) -> None:
-        lively_wallpaper.apply_lively_wallpaper(self.cfg, self.store)
         self.wallpaper_requested.emit()
+
+    def _on_preview_room(self) -> None:
+        room_index = lively_wallpaper.get_room_package_dir() / "index.html"
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(room_index.resolve())))
 
     def _on_bed_toggled(self, checked: bool) -> None:
         self.cfg.set("furniture.bed_visible", checked)

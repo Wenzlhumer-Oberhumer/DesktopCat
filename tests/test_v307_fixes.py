@@ -191,7 +191,7 @@ def _update_buddy():
     return SimpleNamespace(_pending_update={'version': '9.0.0'}, _awaiting_update_reply=True,
         _download_worker=None, _quiz_session=None, _mochi_asked_question=False,
         input=MagicMock(), brain=SimpleNamespace(pending_action=None, submit=MagicMock(return_value=True)),
-        _start_update_download=MagicMock(), _say=MagicMock(), cfg=Settings(),
+        _start_update_download=MagicMock(), _defer_update=MagicMock(), _say=MagicMock(), cfg=Settings(),
         _update_tray_menu=MagicMock(), char_info=lambda: {'name': 'Kylie'},
         user_name=lambda: 'Boss', pet=MagicMock(), create_sticky_note=MagicMock())
 
@@ -210,23 +210,10 @@ def test_later_does_not_install_and_defers_reminder():
     buddy._start_update_download.assert_not_called()
     buddy.brain.submit.assert_not_called()
     assert not buddy._awaiting_update_reply
-    assert buddy.cfg.get('update.remind_after', 0) > 0
+    buddy._defer_update.assert_called_once()
 
 
 def test_unrelated_message_cannot_leave_stale_update_consent():
     buddy = _update_buddy()
     Buddy._on_submit(buddy, 'notiz: Milch')
     assert not buddy._awaiting_update_reply
-
-
-def test_browser_handoff_copies_only_requested_text_and_opens_fixed_url():
-    from gemini_browser import open_gemini_browser
-    app = QApplication.instance() or QApplication([])
-    app.clipboard().setText('existing clipboard')
-    with patch('gemini_browser.webbrowser.open', return_value=True) as browser:
-        assert open_gemini_browser('Meine Frage')
-    assert app.clipboard().text() == 'Meine Frage'
-    browser.assert_called_once_with('https://gemini.google.com/app')
-    with patch('gemini_browser.webbrowser.open', return_value=True):
-        assert open_gemini_browser()
-    assert app.clipboard().text() == 'Meine Frage'

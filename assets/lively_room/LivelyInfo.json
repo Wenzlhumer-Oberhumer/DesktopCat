@@ -1,9 +1,7 @@
 {
   "AppVersion": "1.0",
-  "Title": "Desktop Cat Cozy Room",
-  "Thumbnail": "preview.png",
-  "Preview": "preview.png",
-  "Desc": "A cozy Kawaii room with real-time day/night lighting, glowing fairy lights, and live ambient particles.",
+  "Title": "Desktop Cat · Woodland Room",
+  "Desc": "A quiet plaster-and-oak room with a woodland window, room for desktop icons, and gentle lighting matched to local time. Works entirely offline.",
   "Author": "Desktop Cat",
   "License": "GPL-3.0",
   "Contact": "https://github.com/Wenzlhumer-Oberhumer/DesktopCat",

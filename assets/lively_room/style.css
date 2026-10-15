@@ -1,259 +1,78 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+:root {
+  --wall: #d9cfbb;
+  --wall-shade: #b9ad94;
+  --sky-top: #83aeb7;
+  --sky-bottom: #e4d6af;
+  --hill-far: #93a99c;
+  --hill-near: #6f8c7e;
+  --forest-far: #58786b;
+  --forest-near: #3e6055;
+  --wood: #9b7651;
+  --wood-edge: #755539;
+  --night: 0;
+  --lamp: .12;
 }
-
-body {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #201C2B;
-  transition: background-color 4s ease;
-  user-select: none;
-}
-
-/* 1. Himmel & Außenaussicht */
-.sky-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  transition: background 4s ease;
-}
-
-/* Tageszeiten für den Himmel */
-.sky-day {
-  background: linear-gradient(180deg, #6EC5E9 0%, #A3DCFF 60%, #E2F3FF 100%);
-}
-.sky-dusk {
-  background: linear-gradient(180deg, #4A2E5B 0%, #B85042 50%, #F5B041 100%);
-}
-.sky-night {
-  background: linear-gradient(180deg, #0B0E14 0%, #171A2E 60%, #202444 100%);
-}
-
-.sun {
-  position: absolute;
-  width: 90px;
-  height: 90px;
-  background: radial-gradient(circle, #FFF4D0 40%, #FFD269 80%, rgba(255, 210, 105, 0) 100%);
-  border-radius: 50%;
-  top: 15%;
-  left: 30%;
-  box-shadow: 0 0 50px rgba(255, 220, 120, 0.6);
-  transition: transform 3s ease, opacity 3s ease;
-}
-
-.moon {
-  position: absolute;
-  width: 75px;
-  height: 75px;
-  background: #FFFDF0;
-  border-radius: 50%;
-  top: 14%;
-  left: 65%;
-  box-shadow: 0 0 35px rgba(255, 255, 240, 0.5);
-  opacity: 0;
-  transition: transform 3s ease, opacity 3s ease;
-}
-
-.moon-crater {
-  position: absolute;
-  background: #E8E5CE;
-  border-radius: 50%;
-}
-.c1 { width: 14px; height: 14px; top: 22px; left: 18px; }
-.c2 { width: 9px; height: 9px; top: 40px; left: 42px; }
-
-.stars {
-  position: absolute;
-  width: 100%;
-  height: 70%;
-  opacity: 0;
-  transition: opacity 3s ease;
-}
-
-.star {
-  position: absolute;
-  background: white;
-  border-radius: 50%;
-  animation: twinkle 3s infinite ease-in-out;
-}
-
-@keyframes twinkle {
-  0%, 100% { opacity: 0.3; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.3); }
-}
-
-/* 2. Raum & Wand */
+* { box-sizing: border-box; }
+html, body, .room { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { background: var(--wall); user-select: none; }
 .room {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 2;
-  pointer-events: none;
+  position: relative; isolation: isolate; pointer-events: none;
+  background: radial-gradient(ellipse at 82% 30%, #fff5da66, transparent 58%),
+    linear-gradient(115deg, var(--wall), var(--wall) 35%, var(--wall-shade));
 }
-
-/* Fenster */
+/* All perch coordinates use the full wallpaper viewport, including its floor. */
 .window-frame {
-  position: absolute;
-  top: 10%;
-  left: 20%;
-  width: 320px;
-  height: 380px;
-  border: 14px solid #4A3528;
-  border-radius: 8px;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.5);
+  position: absolute; left: 65%; top: 17%; width: 28%; height: 48%;
+  border: clamp(8px, 1vw, 24px) solid var(--wood); border-radius: 3px;
+  background: var(--wood); box-shadow: 0 0 0 2px #6d533b, 7px 10px 0 #5e4a3022, 14px 18px 32px #463b292b;
 }
-
-.window-pane {
-  position: absolute;
-  width: 48%;
-  height: 48%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 4px solid #4A3528;
-}
-.top-left { top: 0; left: 0; }
-.top-right { top: 0; right: 0; }
-.bot-left { bottom: 0; left: 0; }
-.bot-right { bottom: 0; right: 0; }
-
-.curtain {
-  position: absolute;
-  top: -10px;
-  width: 60px;
-  height: 105%;
-  background: #E88B9E;
-  border-radius: 4px;
-  box-shadow: 2px 4px 10px rgba(0,0,0,0.3);
-}
-.curtain-l { left: -30px; }
-.curtain-r { right: -30px; }
-
-/* Lichterkette */
-.fairy-lights {
-  position: absolute;
-  top: 25px;
-  left: 10%;
-  width: 80%;
-  display: flex;
-  justify-content: space-around;
-}
-
-.bulb {
-  width: 16px;
-  height: 22px;
-  border-radius: 50% 50% 40% 40%;
-  animation: glow 2.5s infinite alternate ease-in-out;
-}
-.b1 { background: #FF9AA2; animation-delay: 0.1s; }
-.b2 { background: #FFB7B2; animation-delay: 0.4s; }
-.b3 { background: #FFDAC1; animation-delay: 0.7s; }
-.b4 { background: #E2F0CB; animation-delay: 1.0s; }
-.b5 { background: #B5EAD7; animation-delay: 0.3s; }
-.b6 { background: #C7CEEA; animation-delay: 0.8s; }
-.b7 { background: #FF9AA2; animation-delay: 0.5s; }
-
-@keyframes glow {
-  0% { box-shadow: 0 0 5px rgba(255, 220, 150, 0.4); opacity: 0.7; }
-  100% { box-shadow: 0 0 18px rgba(255, 240, 180, 0.95); opacity: 1; }
-}
-
-/* Regal */
-.shelf {
-  position: absolute;
-  top: 18%;
-  right: 18%;
-  width: 260px;
-  height: 16px;
-  background: #5A4033;
-  border-radius: 4px;
-  box-shadow: 0 8px 15px rgba(0,0,0,0.3);
-}
-
-.plant {
-  position: absolute;
-  bottom: 16px;
-  left: 20px;
-}
-.pot {
-  width: 32px;
-  height: 36px;
-  background: #E07A5F;
-  border-radius: 0 0 6px 6px;
-}
-.leaf {
-  position: absolute;
-  background: #81B29A;
-  border-radius: 50% 50% 0 50%;
-}
-.l1 { width: 18px; height: 26px; top: -18px; left: 2px; transform: rotate(-25deg); }
-.l2 { width: 16px; height: 24px; top: -22px; left: 12px; }
-.l3 { width: 18px; height: 26px; top: -16px; left: 18px; transform: rotate(35deg); }
-
-.books {
-  position: absolute;
-  bottom: 16px;
-  left: 80px;
-  display: flex;
-  gap: 4px;
-}
-.book {
-  width: 14px;
-  border-radius: 3px 3px 0 0;
-}
-.bk1 { height: 48px; background: #3D5A80; }
-.bk2 { height: 56px; background: #EE6C4D; }
-.bk3 { height: 42px; background: #98C1D9; }
-
-.cat-clock {
-  position: absolute;
-  bottom: 16px;
-  right: 25px;
-  background: #2B2D42;
-  border: 3px solid #8D99AE;
-  border-radius: 8px;
-  padding: 4px 8px;
-  color: #EDF2F4;
-  font-weight: bold;
-  font-size: 11pt;
-  letter-spacing: 1px;
-}
-
-/* 3. Boden & Teppich */
-.floor {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 160px;
-  background: linear-gradient(180deg, #4A3528 0%, #302118 100%);
-  border-top: 6px solid #2B1D15;
-  box-shadow: inset 0 10px 25px rgba(0,0,0,0.5);
-}
-
-.rug {
-  position: absolute;
-  bottom: 15px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 420px;
-  height: 110px;
-  background: radial-gradient(ellipse at center, #F8EDEB 0%, #E8D5D0 70%, #D8C3BD 100%);
-  border-radius: 50%;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.rug-paw {
-  font-size: 38pt;
-  opacity: 0.35;
-}
+.outside { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(var(--sky-top), var(--sky-bottom)); }
+.landscape { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hill-far { fill: var(--hill-far); } .hill-near { fill: var(--hill-near); }
+.forest-far { fill: var(--forest-far); } .forest-near { fill: var(--forest-near); }
+.sun, .moon { position: absolute; left: 64%; top: 14%; width: 14%; aspect-ratio: 1; border-radius: 50%; }
+.sun { background: #fff0c0; box-shadow: 0 0 35px #ffefb044; }
+.moon { background: #e8e3cb; opacity: 0; box-shadow: 0 0 24px #e8e3cb22; }
+.stars { position: absolute; inset: 0 0 40%; opacity: 0; background: radial-gradient(circle at 12% 18%, #e9ead7 0 1px, transparent 2px), radial-gradient(circle at 35% 35%, #e9ead7 0 1px, transparent 2px), radial-gradient(circle at 84% 30%, #e9ead7 0 1px, transparent 2px), radial-gradient(circle at 48% 12%, #e9ead7 0 1px, transparent 2px), radial-gradient(circle at 25% 64%, #e9ead7 0 1px, transparent 2px), radial-gradient(circle at 91% 66%, #e9ead7 0 1px, transparent 2px); }
+.cloud { position: absolute; width: 44%; height: 7%; border-radius: 50%; background: #f7efdb66; filter: blur(5px); }
+.cloud-one { top: 21%; left: -8%; } .cloud-two { top: 37%; right: -13%; width: 49%; opacity: .6; }
+.glass { position: absolute; inset: 0; background: linear-gradient(120deg, transparent 35%, #fff7df12 36%, #fff7df09 45%, transparent 46%); box-shadow: inset 0 0 15px #253b3b33; }
+.mullion { position: absolute; background: var(--wood); box-shadow: 2px 2px 2px #392e2529; }
+.vertical { left: 49%; top: 0; height: 100%; width: clamp(5px, .55vw, 12px); }
+.horizontal { top: 45%; left: 0; width: 100%; height: clamp(5px, .55vw, 12px); }
+.window-sill { position: absolute; left: 63.5%; top: 65%; width: 31%; height: 1.6%; background: linear-gradient(#bd9b70 0 30%, #95704d 31%); border-radius: 2px; box-shadow: 0 9px 14px #48351f2b; }
+.curtain-rod { position: absolute; left: 63.7%; top: 14.7%; width: 31.6%; height: .5%; background: #625a48; border-radius: 10px; }
+.curtain { position: absolute; left: 90.8%; top: 15.2%; width: 4.3%; height: 52%; background: repeating-linear-gradient(90deg, #ada98e, #d1ceb0 22%, #b9b699 44%, #d7d2b7 61%); clip-path: polygon(0 0, 100% 0, 94% 100%, 10% 99%, 30% 63%); box-shadow: 6px 3px 8px #342c2333; }
+.window-light { position: absolute; left: 28%; top: 52%; width: 60%; height: 36%; background: linear-gradient(140deg, transparent, #fff0ba33); clip-path: polygon(75% 0, 100% 0, 60% 100%, 0 100%); }
+.shelf { position: absolute; left: 40%; top: 35%; width: 20%; height: 1.4%; border-radius: 2px; background: linear-gradient(#c39c70 0 30%, var(--wood) 31%); box-shadow: 0 7px 12px #5f49372b; }
+.shelf-bracket { position: absolute; top: 100%; width: 4%; height: 2.5vh; background: #846a4f; clip-path: polygon(0 0, 100% 0, 0 100%); }
+.shelf-bracket.left { left: 12%; } .shelf-bracket.right { right: 12%; }
+.books { position: absolute; bottom: 100%; left: 8%; display: flex; align-items: flex-end; gap: .15vw; height: 6.4vh; }
+.books i { display: block; width: .8vw; min-width: 4px; height: 85%; background: #858d74; border: 1px solid #514a3322; border-radius: 2px 2px 0 0; box-shadow: inset 0 -7px #ffffff12; }
+.books i:nth-child(2) { background: #ac795d; height: 100%; width: 1vw; }
+.books i:nth-child(3) { background: #d0bb94; height: 78%; }
+.books i:nth-child(4) { background: #6f8586; height: 91%; transform: rotate(-9deg); transform-origin: bottom; margin-left: .4vw; }
+.vase { position: absolute; bottom: 100%; right: 13%; width: 1.8vw; height: 3.7vh; background: #ccad85; border-radius: 35% 35% 42% 42%; }
+.vase span { position: absolute; bottom: 90%; left: 50%; width: 2px; height: 4.8vh; background: #798268; transform: rotate(-24deg); transform-origin: bottom; }
+.vase span:nth-child(2) { transform: rotate(12deg); height: 6vh; } .vase span:nth-child(3) { transform: rotate(38deg); height: 4vh; }
+.vase span::before { content: ''; position: absolute; top: 0; width: .7vw; height: 1.5vh; border-radius: 90% 0; background: #798268; }
+.floor { position: absolute; inset: 83% 0 0; background: repeating-linear-gradient(97deg, transparent 0 13.9%, #6c543229 14% 14.1%, transparent 14.2% 28%), linear-gradient(#ad8c65, #99764f); border-top: 1.2vh solid #998367; box-shadow: 0 -4px 0 #c5b599, inset 0 12px 18px #46382226; }
+.rug { position: absolute; left: 41%; top: 18%; width: 49%; height: 76%; border-radius: 50%; background: repeating-radial-gradient(ellipse at center, #b6b49a 0 2px, #a7aa901f 3px 5px); box-shadow: inset 0 0 0 6px #888e7666, inset 0 0 0 10px #cec7ad, 0 3px 4px #4c402822; }
+.floor-plant { position: absolute; left: 91%; bottom: 9%; width: 8%; height: 28%; } .floor-plant svg { width: 100%; height: 100%; }
+.lamp { position: absolute; left: 49%; bottom: 13%; width: 9%; height: 30%; }
+.lamp-stem { position: absolute; left: 49%; top: 19%; bottom: 0; width: 2.5%; background: #686150; }
+.lamp-base { position: absolute; bottom: 0; left: 28%; width: 44%; height: 2%; border-radius: 50%; background: #686150; }
+.lamp-shade { position: absolute; top: 0; width: 100%; height: 27%; background: linear-gradient(90deg, #b7a77e, #e7d6ab 50%, #bdac84); clip-path: polygon(23% 0, 77% 0, 100% 100%, 0 100%); z-index: 1; }
+.lamp-halo { position: absolute; left: -130%; top: -70%; width: 360%; height: 230%; background: radial-gradient(ellipse, #ffd49055, transparent 65%); opacity: var(--lamp); }
+.clock { position: absolute; left: 41%; top: 45%; color: #746f5d; font: 300 clamp(11px, 1.1vw, 24px)/1.5 'Segoe UI', sans-serif; letter-spacing: .18em; font-variant-numeric: tabular-nums; }
+.ambient { position: absolute; inset: 0; z-index: 3; background: #1f293e; opacity: var(--night); mix-blend-mode: multiply; }
+body[data-phase="dawn"], body[data-phase="dusk"] { --wall: #cbbb9f; --wall-shade: #9f8e77; --sky-top: #999aa9; --sky-bottom: #efd1a6; --hill-far: #929b91; --hill-near: #6b8277; --forest-far: #586f65; --forest-near: #3d5b52; --night: .12; --lamp: .65; }
+body[data-phase="dusk"] .sun { top: 45%; background: #ffdfaa; }
+body[data-phase="night"] { --wall: #a19a8a; --wall-shade: #7e796e; --sky-top: #243449; --sky-bottom: #697c89; --hill-far: #576b70; --hill-near: #425d61; --forest-far: #344e53; --forest-near: #263e44; --night: .3; --lamp: 1; }
+body[data-phase="night"] .sun { opacity: 0; } body[data-phase="night"] .moon, body[data-phase="night"] .stars { opacity: 1; }
+body[data-phase="night"] .cloud { opacity: .15; } body[data-phase="night"] .window-light { opacity: .15; }
+body[data-phase="night"] .lamp-shade { background: linear-gradient(90deg, #ad8f61, #f5d399 50%, #b99a67); }
+body[data-phase="night"] .clock { color: #c9c2ab; }
+/* Only time-of-day changes animate; there is no continuous render loop. */
+@media (prefers-reduced-motion: no-preference) { .ambient, .sun, .moon, .stars, .lamp-halo { transition: opacity 3s ease; } }
+@media (max-aspect-ratio: 1/1) { .clock { font-size: 11px; letter-spacing: .08em; } }

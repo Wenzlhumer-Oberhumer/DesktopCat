@@ -12,6 +12,7 @@ ACCESSORY_NAMES: tuple[str, ...] = (
     "cloud",
     "party_hat",
     "nightcap",
+    "earmuffs",
     "pumpkin_hat",
     "santa_hat",
     "new_year",
@@ -23,6 +24,9 @@ ACCESSORY_NAMES: tuple[str, ...] = (
     "bow",
     "bandana",
     "fan",
+    "knitted_cardigan",
+    "earmuffs",
+    "cozy_scarf",
 )
 
 HEAD_SLOT_PRIORITY: tuple[str, ...] = (

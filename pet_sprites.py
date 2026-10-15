@@ -5,6 +5,8 @@ eine niedliche Kawaii-Katze per QPainter (komplett prozedural animiert, keine Bi
 from __future__ import annotations
 
 import math
+from copy import deepcopy
+from functools import partial
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -2446,7 +2448,7 @@ def draw_animal_penguin(p: QPainter, pose: Pose):
 #  6 neue Tierchen: Haeschen, Fuchs, Roter Panda, Hamster, Waschbaer, Laubfrosch
 # ======================================================================================
 
-def draw_animal_bunny(p: QPainter, pose: Pose):
+def draw_animal_bunny(p: QPainter, pose: Pose, *, palette: tuple[str, str, str] = ("#403028", "#FCFAF7", "#FFA8BA")):
     """Mimi das Schlappohr-Haeschen: weiss, flauschig, Schlappohren, Moehrchen."""
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     _draw_shadow(p, pose, width=76.0)
@@ -2458,9 +2460,7 @@ def draw_animal_bunny(p: QPainter, pose: Pose):
     p.scale(pose.sx, pose.sy)
     p.translate(-px, -py)
 
-    OUTLINE_BUN = QColor("#403028")
-    WHITE_BUN = QColor("#FCFAF7")
-    PINK_BUN = QColor("#FFA8BA")
+    OUTLINE_BUN, WHITE_BUN, PINK_BUN = map(QColor, palette)
 
     # Stummelschwaenzchen
     p.setPen(_pen(OUTLINE_BUN, 2.0))
@@ -2520,7 +2520,11 @@ def draw_animal_bunny(p: QPainter, pose: Pose):
     # Gesicht: Augen
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(QColor("#2B1B17"))
-    if pose.eyes == "happy":
+    if pose.eyes in ("blink", "sleep", "closed"):
+        p.setPen(_pen(OUTLINE_BUN, 2.2))
+        p.drawLine(QPointF(65, 74), QPointF(73, 74))
+        p.drawLine(QPointF(87, 74), QPointF(95, 74))
+    elif pose.eyes == "happy":
         p.setPen(_pen(QColor("#2B1B17"), 2.2))
         p.drawArc(QRectF(64, 70, 10, 8), 0, 180 * 16)
         p.drawArc(QRectF(86, 70, 10, 8), 0, 180 * 16)
@@ -2551,7 +2555,7 @@ def draw_animal_bunny(p: QPainter, pose: Pose):
     _draw_effects(p, pose)
 
 
-def draw_animal_fox(p: QPainter, pose: Pose):
+def draw_animal_fox(p: QPainter, pose: Pose, *, palette: tuple[str, str, str, str, str] = ("#2D1808", "#E65100", "#FFFDF8", "#21140E", "#D97706")):
     """Kitsune der Rotfuchs: orange, buschiger Schwanz mit weisser Spitze, Fuchsohren."""
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     _draw_shadow(p, pose, width=80.0)
@@ -2563,10 +2567,7 @@ def draw_animal_fox(p: QPainter, pose: Pose):
     p.scale(pose.sx, pose.sy)
     p.translate(-px, -py)
 
-    OUTLINE_FOX = QColor("#2D1808")
-    FUR_ORANGE = QColor("#E65100")
-    WHITE_FOX = QColor("#FFFDF8")
-    DARK_FOX = QColor("#21140E")
+    OUTLINE_FOX, FUR_ORANGE, WHITE_FOX, DARK_FOX, EYE_FOX = map(QColor, palette)
 
     # Buschiger Fuchsschwanz (links hochgeschwungen)
     tail_wave = math.sin(pose.t * 3.0) * 6.0
@@ -2623,8 +2624,12 @@ def draw_animal_fox(p: QPainter, pose: Pose):
     p.drawEllipse(QRectF(68, 76, 24, 20))
 
     # Bernsteinaugen
-    p.setBrush(QColor("#D97706"))
-    if pose.eyes == "happy":
+    p.setBrush(EYE_FOX)
+    if pose.eyes in ("blink", "sleep", "closed"):
+        p.setPen(_pen(OUTLINE_FOX, 2.2))
+        p.drawLine(QPointF(63, 73), QPointF(71, 73))
+        p.drawLine(QPointF(89, 73), QPointF(97, 73))
+    elif pose.eyes == "happy":
         p.setPen(_pen(OUTLINE_FOX, 2.2))
         p.drawArc(QRectF(62, 70, 10, 7), 0, 180 * 16)
         p.drawArc(QRectF(88, 70, 10, 7), 0, 180 * 16)
@@ -3633,6 +3638,52 @@ CHARACTERS: dict[str, dict] = {
 
 
 
+# Palette siblings share animation, anchors and the complete localized vocabulary.
+for _source, _id, _name, _palette, _de_species, _en_species, _de_desc, _en_desc in (
+    ("animal_fox", "animal_arctic_fox", "Flocke",
+     ("#48546B", "#DCE8F2", "#FFFEFB", "#63748D", "#70B6D5"),
+     "Polarfuchs", "Arctic Fox",
+     "Silberblauer Polarfuchs mit schneeweißem Schweif und eisblauen Augen",
+     "Silver-blue arctic fox with a snowy tail and ice-blue eyes"),
+    ("animal_bunny", "animal_cocoa_bunny", "Kakao",
+     ("#4C302A", "#B88061", "#F2B1AF"),
+     "Kakao-Schlappohr", "Cocoa Lop Bunny",
+     "Kakaobraunes Schlappohr-Häschen mit rosigen Ohren und einem Knusper-Möhrchen",
+     "Cocoa-brown lop bunny with rosy ears and a crunchy carrot"),
+):
+    _info = deepcopy(CHARACTERS[_source])
+    _old_name = _info["name"]
+    _info.update(id=_id, name=_name, species=_de_species, desc=_de_desc,
+                 drawer=partial(_info["drawer"], palette=_palette))
+    _info["en"].update(species=_en_species, desc=_en_desc)
+    for _localized in (_info, _info["en"]):
+        for _key in ("pet_sounds", "ambient_lines"):
+            _localized[_key] = [_line.replace(_old_name, _name) for _line in _localized[_key]]
+    if _source == "animal_fox":
+        _info["ai_persona"] = (
+            "Du bist Flocke, ein sanfter silberblauer Polarfuchs mit eisblauen Augen. "
+            "Du sagst 'Yap! 🐾', liebst ruhige Schneetage und kuschelige Strickkleidung. "
+            "Du hilfst geduldig und machst keine Katzengeräusche."
+        )
+        _info["en"]["ai_persona"] = (
+            "You are Flocke, a gentle silver-blue arctic fox with ice-blue eyes. "
+            "You say 'Yap! 🐾', love quiet snow days and cozy knitwear. "
+            "You help patiently and never make cat sounds."
+        )
+    else:
+        _info["ai_persona"] = (
+            "Du bist Kakao, ein warmherziges kakaobraunes Schlappohr-Häschen. "
+            "Du sagst 'Mümmel~ 🥕', liebst Möhrchen, weiche Schals und gemütliche Pausen. "
+            "Du ermutigst sanft und machst keine Hunde- oder Katzengeräusche."
+        )
+        _info["en"]["ai_persona"] = (
+            "You are Kakao, a kind cocoa-brown lop-eared bunny. "
+            "You say 'Nibble~ 🥕', love carrots, soft scarves and cozy breaks. "
+            "You encourage gently and never make dog or cat sounds."
+        )
+    CHARACTERS[_id] = _info
+
+
 # ======================================================================================
 #  Zubehör-System (Accessoires)
 # ======================================================================================
@@ -3647,6 +3698,7 @@ DEFAULT_ANCHORS = {
 HEAD_SLOT_PRIORITY = (
     "hacker_glasses",
     "nightcap",
+    "earmuffs",
     "party_hat",
     "sunglasses",
     "beanie",
@@ -3656,7 +3708,10 @@ HEAD_SLOT_PRIORITY = (
     "crown",
 )
 
+BODY_SLOT_PRIORITY = ("knitted_cardigan",)
+
 NECK_SLOT_PRIORITY = (
+    "cozy_scarf",
     "scarf",
     "bandana",
     "bow",
@@ -4219,6 +4274,78 @@ def _draw_acc_fan(p: QPainter, pose: Pose, anchors: dict):
     p.restore()
 
 
+def _draw_acc_knitted_cardigan(p: QPainter, pose: Pose, anchors: dict):
+    """Sage knit with cream ribbing, a V-neck and wooden buttons."""
+    x, y = anchors.get("neck", DEFAULT_ANCHORS["neck"])
+    hem = min(y + 33.0, FLOOR - 4.0)
+    p.setPen(_pen(QColor("#4E6658"), 1.8))
+    p.setBrush(QColor("#91AA8F"))
+    coat = QPainterPath(QPointF(x - 21, y - 2))
+    coat.lineTo(x - 27, y + 12)
+    coat.lineTo(x - 19, y + 17)
+    coat.lineTo(x - 19, hem)
+    coat.quadTo(x, hem + 4, x + 19, hem)
+    coat.lineTo(x + 19, y + 17)
+    coat.lineTo(x + 27, y + 12)
+    coat.lineTo(x + 21, y - 2)
+    coat.lineTo(x + 10, y - 5)
+    coat.lineTo(x, y + 8)
+    coat.lineTo(x - 10, y - 5)
+    coat.closeSubpath()
+    p.drawPath(coat)
+    p.setPen(_pen(QColor("#E8E2C8"), 2.8))
+    p.drawLine(QPointF(x - 10, y - 5), QPointF(x, y + 8))
+    p.drawLine(QPointF(x + 10, y - 5), QPointF(x, y + 8))
+    p.drawLine(QPointF(x, y + 8), QPointF(x, hem))
+    p.drawLine(QPointF(x - 17, hem - 2), QPointF(x + 17, hem - 2))
+    p.setPen(_pen(QColor("#B6C7AA"), 1.0))
+    for column in (-13, -7, 7, 13):
+        for row in range(int(y + 13), int(hem - 4), 6):
+            p.drawLine(QPointF(x + column - 2, row - 2), QPointF(x + column, row))
+            p.drawLine(QPointF(x + column, row), QPointF(x + column + 2, row - 2))
+    p.setPen(_pen(QColor("#79583B"), 0.8))
+    p.setBrush(QColor("#C49B65"))
+    for button_y in (y + 14, y + 23):
+        if button_y < hem - 3:
+            p.drawEllipse(QPointF(x, button_y), 1.8, 1.8)
+
+
+def _draw_acc_earmuffs(p: QPainter, pose: Pose, anchors: dict):
+    """Plush rose ear pads connected above the forehead."""
+    x, y = anchors.get("eyes", DEFAULT_ANCHORS["eyes"])
+    top = anchors.get("head_top", DEFAULT_ANCHORS["head_top"])[1]
+    spread = anchors.get("eye_dx", 19.0) + 9.0
+    p.setPen(_pen(QColor("#9A647E"), 4.5))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    band = QPainterPath(QPointF(x - spread, y - 2))
+    band.cubicTo(x - spread - 3, top - 9, x + spread + 3, top - 9, x + spread, y - 2)
+    p.drawPath(band)
+    for side in (-1, 1):
+        p.setPen(_pen(QColor("#9A647E"), 1.6))
+        p.setBrush(QColor("#E6B7C9"))
+        p.drawEllipse(QPointF(x + side * spread, y - 1), 7.0, 10.0)
+        p.setPen(_pen(QColor("#FBE3EB"), 1.3))
+        p.drawArc(QRectF(x + side * spread - 4, y - 7, 8, 12), 70 * 16, 160 * 16)
+
+
+def _draw_acc_cozy_scarf(p: QPainter, pose: Pose, anchors: dict):
+    """Lavender woven scarf, cream stripes and a fringed hanging end."""
+    x, y = anchors.get("neck", DEFAULT_ANCHORS["neck"])
+    p.setPen(_pen(QColor("#77678F"), 1.6))
+    p.setBrush(QColor("#BCA9D4"))
+    p.drawRoundedRect(QRectF(x + 6, y + 2, 13, 28), 3, 3)
+    p.setPen(_pen(QColor("#F8EAD9"), 2.8))
+    for stripe_y in (y + 12, y + 23):
+        p.drawLine(QPointF(x + 8, stripe_y), QPointF(x + 17, stripe_y))
+    p.setPen(_pen(QColor("#77678F"), 1.6))
+    for fringe_x in (x + 8, x + 12, x + 16):
+        p.drawLine(QPointF(fringe_x, y + 29), QPointF(fringe_x, y + 34))
+    p.setBrush(QColor("#BCA9D4"))
+    p.drawRoundedRect(QRectF(x - 23, y - 5, 46, 12), 5, 5)
+    p.setPen(_pen(QColor("#E4D4ED"), 1.3))
+    p.drawLine(QPointF(x - 17, y - 1), QPointF(x + 17, y - 1))
+
+
 def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer: str = "over"):
     """Zeichnet Zubehör für die Figur."""
     accs = set(getattr(pose, "accessories", ()))
@@ -4256,6 +4383,8 @@ def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer:
                 active_hand = item
                 break
 
+        active_body = next((item for item in BODY_SLOT_PRIORITY if item in accs), None)
+
         # A) Kopf-Accessoires zeichnen mit Kopf-Transformation
         if active_head:
             p.save()
@@ -4275,6 +4404,8 @@ def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer:
 
             if active_head == "hacker_glasses":
                 _draw_acc_hacker_glasses(p, pose, anchors)
+            elif active_head == "earmuffs":
+                _draw_acc_earmuffs(p, pose, anchors)
             elif active_head == "sunglasses":
                 _draw_acc_sunglasses(p, pose, anchors)
             elif active_head == "new_year":
@@ -4295,7 +4426,7 @@ def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer:
             p.restore()
 
         # B) Körper-/Hals-/Pfoten-Accessoires mit Körper-Transformation
-        if active_neck or active_hand:
+        if active_body or active_neck or active_hand:
             p.save()
             p.translate(pose.dx, pose.dy)
             px, py = pose.pivot
@@ -4304,7 +4435,12 @@ def draw_accessories(p: QPainter, pose: Pose, char_id: str = "cat_mochi", layer:
             p.scale(pose.sx, pose.sy)
             p.translate(-px, -py)
 
-            if active_neck == "scarf":
+            if active_body == "knitted_cardigan":
+                _draw_acc_knitted_cardigan(p, pose, anchors)
+
+            if active_neck == "cozy_scarf":
+                _draw_acc_cozy_scarf(p, pose, anchors)
+            elif active_neck == "scarf":
                 _draw_acc_scarf(p, pose, anchors)
             elif active_neck == "bandana":
                 _draw_acc_bandana(p, pose, anchors)

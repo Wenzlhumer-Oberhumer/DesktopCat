@@ -15,9 +15,9 @@ from typing import Any, Optional
 
 from fun import LEVEL_THRESHOLDS, add_friendship_points, level_for
 
-# Stufenweise Freischaltung der 15 Charaktere nach Freundschafts-Level (1-8)
+# Stufenweise Freischaltung der 17 Charaktere nach Freundschafts-Level (1-8)
 UNLOCK_TIERS: dict[int, list[str]] = {
-    1: ["cat_mochi"],                              # Start: Kylie (Calico-Katze)
+    1: ["cat_mochi", "animal_arctic_fox", "animal_cocoa_bunny"],                              # Start: Kylie, Flocke & Kakao
     2: ["dog_shiba", "animal_bunny"],              # Level 2 (25 FP): Hachi & Mimi (Häschen)
     3: ["cat_luna", "animal_hamster"],             # Level 3 (75 FP): Luna & Hamsti (Goldhamster)
     4: ["dog_balu", "animal_fox"],                 # Level 4 (150 FP): Balu & Kitsune (Rotfuchs)

@@ -4,6 +4,7 @@
 import importlib.util
 import sys
 import traceback
+import unittest
 from pathlib import Path
 
 # Projektwurzel zu sys.path hinzufuegen
@@ -55,6 +56,11 @@ def main():
         "test_v302_fixes",
         "test_v307_fixes",
         "test_bed_visibility",
+        "test_update_ui",
+        "test_room_perches",
+        "test_cozy_cosmetics",
+        "test_room_visuals",
+        "test_wallpaper_ui",
     ]
 
     total = 0
@@ -88,6 +94,15 @@ def main():
                 print(f"  [FEHLER] {fn.__name__}: {exc}")
                 traceback.print_exc()
                 failed += 1
+
+        # Some focused suites use unittest fixtures; execute them as well.
+        suite = unittest.defaultTestLoader.loadTestsFromModule(mod)
+        if suite.countTestCases():
+            result = unittest.TextTestRunner(verbosity=1).run(suite)
+            total += result.testsRun
+            errors = len(result.errors) + len(result.failures)
+            failed += errors
+            passed += result.testsRun - errors - len(result.skipped)
 
     print("\n===============================")
     print(f"Ergebnis: {passed}/{total} bestanden, {failed} fehlgeschlagen.")

@@ -452,9 +452,20 @@ class PetWindow(QWidget):
         """y des Fensters, wenn das Pet direkt auf der Oberkante der Taskleiste steht."""
         return self._avail().bottom() + 1 - FLOOR * self.scale
 
+    def _room_surfaces(self) -> list[tuple[float, float, float]]:
+        if not (self.cfg.get('pet.room_mode', False) and self.cfg.get('lively.active', False)):
+            return []
+        screen = self._screen_for_x(self._px + self.width() / 2)
+        if screen != QGuiApplication.primaryScreen():
+            return []
+        # Lively fills the full primary display, including the area behind the taskbar.
+        geo = screen.geometry()
+        return [(geo.left() + geo.width()*left, geo.left() + geo.width()*right,
+                 geo.top() + geo.height()*height - FLOOR*self.scale)
+                for left, right, height in ((.40, .60, .35), (.635, .945, .65))]
+
     def _perch_levels(self, x: Optional[float] = None) -> list[float]:
         """Gibt die verfuegbaren Hoehenebenen zurueck (Boden, Bett, und im Raum-Modus Wandregal / Fensterbrett)."""
-        avail = self._avail()
         ground = self._ground_y()
         levels = [ground]
         if getattr(self, "pet_bed", None) and self.pet_bed.isVisible():
@@ -462,11 +473,9 @@ class PetWindow(QWidget):
             # Bettchen ist nur eine gueltige Ebene, wenn sich die Katze horizontal darauf befindet
             if x is None or abs(x - bed_x) < 70.0:
                 levels.append(bed_y)
-        if bool(self.cfg.get("pet.room_mode", False)):
-            h = float(avail.height())
-            shelf = float(avail.top() + h * 0.22)
-            window_sill = float(avail.top() + h * 0.48)
-            levels.extend([window_sill, shelf])
+        for left, right, height in self._room_surfaces():
+            if x is None or left <= x + self.width()/2 <= right:
+                levels.append(height)
         return sorted(set(levels))
 
     def _closest_perch_y(self, y: float, x: Optional[float] = None) -> float:
@@ -504,10 +513,16 @@ class PetWindow(QWidget):
         dx = random.choice([-140.0, 140.0])
         lo, hi = self._x_bounds()
         target_x = max(lo + 60, min(hi - 60, self._px + dx))
+        for left, right, height in self._room_surfaces():
+            if abs(height - target_y) < 1:
+                target_x = (left + right - self.width()) / 2
+                break
         self.facing = 1 if target_x > self._px else -1
-        self._vx = (target_x - self._px) * 1.5
         dy = target_y - self._py
-        self._vy = min(-500.0, dy * 2.2 - 250.0) if dy < 0 else -180.0
+        self._vy = -math.sqrt(2*self.GRAVITY*max(0, -dy)) - 200.0
+        flight = (-self._vy + math.sqrt(self._vy**2 + 2*self.GRAVITY*dy)) / self.GRAVITY
+        travel = (1 - math.exp(-AIR_DRAG * flight)) / AIR_DRAG
+        self._vx = (target_x - self._px) / max(.1, travel)
         self.set_state(PetState.FALLING)
 
     def _x_bounds(self) -> tuple[float, float]:
@@ -984,6 +999,8 @@ class PetWindow(QWidget):
         if worn:
             if worn == "gold_sparkle":
                 pose.sparkles = now - self._t0
+            elif worn == "cozy_set":
+                active_accs.update(("knitted_cardigan", "cozy_scarf", "earmuffs"))
             else:
                 active_accs.add(worn)
         pose.accessories = tuple(sorted(active_accs))

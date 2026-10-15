@@ -56,7 +56,7 @@ def test_character_info_en():
     try:
         i18n.set_language("en")
         char_ids = list(pet_sprites.CHARACTERS.keys())
-        assert len(char_ids) == 15
+        assert len(char_ids) == 17
 
         for cid in char_ids:
             info = pet_sprites.get_character_info(cid)

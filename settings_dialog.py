@@ -7,6 +7,7 @@ import os
 import webbrowser
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
     QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
@@ -20,7 +21,7 @@ from paths import set_autostart
 
 
 try:
-    from pet_sprites import CHARACTERS, get_character_info
+    from pet_sprites import CHARACTERS, Pose, draw_character, get_character_info
 except ImportError:
     CHARACTERS = {}
     def get_character_info(cid):
@@ -342,6 +343,8 @@ class SettingsDialog(QDialog):
         form.setSpacing(10)
 
         self.char_combo = QComboBox()
+        self.char_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.char_combo.setMinimumContentsLength(14)
         cur_char = str(self.cfg.get("pet.character", "cat_mochi"))
         try:
             import pet_care
@@ -363,8 +366,14 @@ class SettingsDialog(QDialog):
 
         # Outfit / Zubehör
         self.worn_combo = QComboBox()
+        self.worn_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.worn_combo.setMinimumContentsLength(14)
         outfit_options = [
             ("", "Keines (Standard)"),
+            ("cozy_set", "🧶  Gemütliches Set: Strickjacke, Schal & Ohrwärmer"),
+            ("knitted_cardigan", "🧶  Salbeigrüne Strickjacke"),
+            ("cozy_scarf", "🧣  Kuschelschal in Lavendel"),
+            ("earmuffs", "🎧  Flauschige Ohrwärmer"),
             ("bow", "🎀  Schleife"),
             ("bandana", "🧣  Halstuch"),
             ("scarf", "🧣  Winterschal"),
@@ -382,6 +391,7 @@ class SettingsDialog(QDialog):
             self.worn_combo.addItem(wlabel, wid)
         idx = self.worn_combo.findData(cur_worn)
         self.worn_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.worn_combo.currentIndexChanged.connect(self._update_character_preview)
         form.addRow(i18n.tr("settings.worn_accessory"), self.worn_combo)
 
         card_char_lay.addLayout(form)
@@ -391,13 +401,19 @@ class SettingsDialog(QDialog):
         self.preview_box.setStyleSheet("background-color: #212328; border: 1px dashed #4F525C; border-radius: 8px; padding: 10px;")
         prev_lay = QVBoxLayout(self.preview_box)
         prev_lay.setSpacing(4)
+        self.prev_image = QLabel()
+        self.prev_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.prev_image.setMinimumHeight(180)
+        self.prev_image.setStyleSheet("border: none; background: transparent; padding: 0;")
         self.prev_title = QLabel()
         self.prev_title.setStyleSheet("font-weight: bold; color: #FF8FB1; font-size: 11pt;")
         self.prev_desc = QLabel()
         self.prev_desc.setWordWrap(True)
         self.prev_desc.setStyleSheet("color: #CCD0D9; font-size: 9pt;")
         self.prev_sound = QLabel()
+        self.prev_sound.setWordWrap(True)
         self.prev_sound.setStyleSheet("color: #FFB3C6; font-style: italic; font-size: 9pt;")
+        prev_lay.addWidget(self.prev_image)
         prev_lay.addWidget(self.prev_title)
         prev_lay.addWidget(self.prev_desc)
         prev_lay.addWidget(self.prev_sound)
@@ -435,7 +451,8 @@ class SettingsDialog(QDialog):
 
         # Wetter-Outfits
         fun = self.cfg.get("fun", {}) if isinstance(self.cfg.get("fun"), dict) else {}
-        self.weather_outfits_chk = QCheckBox("Wetter-Outfits automatisch anziehen (Regenschirm, Sonnenbrille etc.)")
+        self.weather_outfits_chk = QCheckBox("Wetter-Outfits automatisch anziehen")
+        self.weather_outfits_chk.setToolTip('Zum Wetter passende Accessoires wie Regenschirm oder Sonnenbrille ergänzen.')
         self.weather_outfits_chk.setChecked(bool(fun.get("weather_outfits", True)))
         form_vis.addRow("", self.weather_outfits_chk)
 
@@ -456,6 +473,20 @@ class SettingsDialog(QDialog):
         self.prev_title.setText(f"{emoji}  {name} – {species}")
         self.prev_desc.setText(desc)
         self.prev_sound.setText(f"Typischer Spruch: „{sound}“")
+        worn = str(self.worn_combo.currentData() or "")
+        accessories = ("knitted_cardigan", "cozy_scarf", "earmuffs") if worn == "cozy_set" else (
+            (worn,) if worn and worn != "gold_sparkle" else ()
+        )
+        pose = Pose(accessories=accessories, sparkles=0.5 if worn == "gold_sparkle" else None)
+        pixmap = QPixmap(180, 180)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        try:
+            painter.scale(180.0 / 160.0, 180.0 / 160.0)
+            draw_character(painter, pose, str(cid))
+        finally:
+            painter.end()
+        self.prev_image.setPixmap(pixmap)
 
     # ==================================================================================
     #  Tab 2: 🐾 Verhalten & Katze
@@ -526,7 +557,7 @@ class SettingsDialog(QDialog):
         ai_lay = QVBoxLayout(card_ai)
         ai_lay.setSpacing(12)
 
-        sec_lbl = QLabel("🧠  Google Gemini-KI (Gratis- oder Paid-Key)")
+        sec_lbl = QLabel("🧠  Google Gemini-KI – eigener API-Key")
         sec_lbl.setObjectName("section")
         ai_lay.addWidget(sec_lbl)
 
@@ -538,7 +569,7 @@ class SettingsDialog(QDialog):
         opt_c_lbl.setStyleSheet("font-weight: 600; color: #FF85A2;")
         ai_lay.addWidget(opt_c_lbl)
 
-        steps = QLabel("1. „Gratis-Key holen“ klicken & mit Google-Konto anmelden\n"
+        steps = QLabel("1. „API-Key holen“ klicken & mit Google-Konto anmelden\n"
                        "2. „Create API key“ wählen & Key kopieren (sowohl Gratis- als auch Bezahl-Keys funktionieren!)\n"
                        "3. Hier einfügen → „Prüfen & speichern“")
         steps.setObjectName("hint")
@@ -552,7 +583,7 @@ class SettingsDialog(QDialog):
 
         btn_box = QHBoxLayout()
         btn_box.setSpacing(10)
-        get_key_btn = QPushButton("Gratis-Key holen")
+        get_key_btn = QPushButton("API-Key holen")
         get_key_btn.setObjectName("google")
         get_key_btn.clicked.connect(lambda: webbrowser.open(gemini.KEY_URL))
         btn_box.addWidget(get_key_btn, 1)
@@ -571,6 +602,7 @@ class SettingsDialog(QDialog):
 
         self.ai_enabled = QCheckBox("KI verwenden (Gemini für smarte Befehle, Chat & Sprachinteraktion)")
         self.ai_enabled.setChecked(bool(self.cfg.get("ai.enabled", True)))
+        self.ai_enabled.toggled.connect(self._refresh_auth_ui)
         ai_lay.addWidget(self.ai_enabled)
 
         self.auto_vision_chk = QCheckBox('Automatische Bildschirm-Tipps über Gemini erlauben')
@@ -578,14 +610,12 @@ class SettingsDialog(QDialog):
         self.auto_vision_chk.setChecked(bool(self.cfg.get('privacy.auto_vision', False)))
         ai_lay.addWidget(self.auto_vision_chk)
 
-        browser_hint = QLabel('Eigenes Gemini-Abo? Öffne Gemini im Browser und melde dich dort mit Google an.\n'
-                             'Optional eine Anfrage kopieren und dort einfügen. Dein API-Key bleibt separat nutzbar.')
-        browser_hint.setWordWrap(True)
-        ai_lay.addWidget(browser_hint)
-        browser_btn = QPushButton('🌐 Gemini im Browser öffnen …')
-        from gemini_browser import show_browser_dialog
-        browser_btn.clicked.connect(lambda: show_browser_dialog(self))
-        ai_lay.addWidget(browser_btn)
+        access_hint = QLabel('Kylie nutzt deinen eigenen Gemini-API-Key. Ein Google-AI-Pro-/Ultra-Abo '
+                             'verbindet Kylies KI nicht automatisch. Der bisherige Browser-Link wurde entfernt, '
+                             'weil er keine Verbindung zur App herstellt. Ohne Key bleiben die lokalen Funktionen nutzbar.')
+        access_hint.setWordWrap(True)
+        access_hint.setObjectName('hint')
+        ai_lay.addWidget(access_hint)
 
         lay.addWidget(card_ai)
 
@@ -833,8 +863,11 @@ class SettingsDialog(QDialog):
 
     def _refresh_auth_ui(self) -> None:
         mode = auth_manager.get_auth_manager().get_auth_mode()
-        if mode == "apikey":
-            self._set_status("🟢  Verbunden mit Gemini-KI (Google AI Studio / API-Key)", "#79D279")
+        if not self.ai_enabled.isChecked():
+            self._set_status('⚪  KI ausgeschaltet – lokale Funktionen bleiben verfügbar', '#A0A5B5')
+            self.logout_btn.setVisible(mode == 'apikey')
+        elif mode == "apikey":
+            self._set_status("🟢  API-Key gespeichert – KI nutzt dein eigenes API-Konto", "#79D279")
             self.logout_btn.setVisible(True)
         else:
             self._set_status("⚪  Offline-Modus (Kein API-Key hinterlegt)", "#A0A5B5")

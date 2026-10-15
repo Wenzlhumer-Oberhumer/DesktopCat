@@ -4,6 +4,14 @@
 
 ---
 
+## Neu in v3.1.0
+
+- **Update-Buttons:** „Ja, installieren“ startet den geprüften Download; „Später…“ bietet 15 Minuten, eine oder vier Stunden, morgen 09:00 oder einen eigenen Zeitpunkt. Erinnerungen bleiben nach Neustart gespeichert.
+- **Gemütliche Figuren & Outfits:** Flocke (Polarfuchs) und Kakao (Schlappohrhase) sind sofort verfügbar. Strickjacke, Kuschelschal und Ohrwärmer lassen sich auch als komplettes Set auswählen; die Einstellungen zeigen eine Vorschau vor dem Speichern.
+- **Ruhiges Katzenzimmer:** Putzwand, Holzfußboden, Wald am Fenster und lokale Tageszeiten. Links bleibt Platz für Desktop-Symbole. Animationen respektieren reduzierte Bewegung und pausieren im Hintergrund.
+- **Zimmer bedienen:** Vorschau und Wiederherstellen direkt im Zimmer-Tab. Aktivierung läuft ohne blockierende Oberfläche; Regal und Fensterbank besitzen begrenzte Sprungflächen passend zum sichtbaren Raum auf dem Hauptbildschirm.
+- **KI-Zugang ehrlich erklärt:** Der bisherige Browser-Link war keine Verbindung zwischen Kylie und einem Google-Abo und wurde entfernt. Kylie nutzt weiterhin deinen eigenen API-Key, ohne Entwickler-Key oder eigenen KI-Server. API-Nutzung richtet sich nach deinem Google-Projekt; Google-AI-Abos ersetzen diese API-Abrechnung nicht.
+
 ## Neu in v3.0.8
 
 - **Bett ein-/ausblenden:** Rechtsklick direkt auf das Bett → „Bett ausblenden“. Über Rechtsklick auf die Katze oder das Tray-Menü → „Bett einblenden“ kommt es wieder zurück. Die Auswahl bleibt nach dem Neustart erhalten.
@@ -11,8 +19,8 @@
 
 ## Neu in v3.0.7
 
-- **Gemini im Browser:** Über Tray-Menü oder Einstellungen „Gemini im Browser öffnen“ wählen. Optional eine Anfrage eingeben, kopieren und bei Gemini mit Strg+V einfügen. Dort nutzt du dein eigenes Google-Konto und dessen Abo. Im Chat funktioniert auch `gemini: deine Frage`. Antworten werden manuell gelesen; Desktop-Aktionen werden nicht automatisch aus Browser-Antworten ausgeführt. BYOK bleibt separat erhalten, ohne Entwickler-Key oder eigenen KI-Server.
-- **Updates per Antwort:** Kylie bietet neue GitHub-Releases an. `ja` startet Download, SHA256-Prüfung und Installation; `später` verschiebt die Erinnerung um sechs Stunden. Der normale Klick auf eine Sprechblase öffnet die Eingabe. Neue Releases werden auch während längerer Laufzeiten geprüft.
+- **Bis v3.0.8, ersetzt in v3.1.0 – Gemini im Browser:** Über Tray-Menü oder Einstellungen „Gemini im Browser öffnen“ wählen. Optional eine Anfrage eingeben, kopieren und bei Gemini mit Strg+V einfügen. Dort nutzt du dein eigenes Google-Konto und dessen Abo. Im Chat funktioniert auch `gemini: deine Frage`. Antworten werden manuell gelesen; Desktop-Aktionen werden nicht automatisch aus Browser-Antworten ausgeführt. BYOK bleibt separat erhalten, ohne Entwickler-Key oder eigenen KI-Server.
+- **Bis v3.0.8, ersetzt in v3.1.0 – Updates per Antwort:** Kylie bietet neue GitHub-Releases an. `ja` startet Download, SHA256-Prüfung und Installation; `später` verschiebt die Erinnerung um sechs Stunden. Der normale Klick auf eine Sprechblase öffnet die Eingabe. Neue Releases werden auch während längerer Laufzeiten geprüft.
 - **Hintergrund:** Aktivierung wird anhand des Lively-Status geprüft. Desktop Cat schließt nur das eigene Katzenzimmer auf dessen Bildschirm und respektiert manuelle Hintergrundwechsel. Lively muss laufen und auf „Pro Bildschirm“ eingestellt sein.
 - **Datenschutz:** Automatische Bildschirm-Tipps sind standardmäßig aus und benötigen eine eigene Freigabe unter Einstellungen → KI. Der KI-Schalter sperrt auch die übrigen KI-Einstiegspunkte.
 - **Zuverlässigkeit:** Kein erneutes Ausführen erledigter Aktionen nach einem KI-Timeout. Lokale Builds brechen bei fehlgeschlagenen Schritten ab.

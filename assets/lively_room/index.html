@@ -1,83 +1,45 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Desktop Cat Cozy Room</title>
+  <meta name="color-scheme" content="light dark">
+  <title>Desktop Cat · Woodland Room</title>
   <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
 </head>
-<body id="roomBody">
-  <!-- Himmel & Fenster Hintergrund -->
-  <div class="sky-container" id="sky">
-    <div class="sun" id="sun"></div>
-    <div class="moon" id="moon">
-      <div class="moon-crater c1"></div>
-      <div class="moon-crater c2"></div>
+<body data-phase="day">
+  <main class="room" aria-label="A quiet woodland room, lit by the local time of day">
+    <div class="window-light" aria-hidden="true"></div>
+    <div class="shelf" aria-hidden="true">
+      <div class="books"><i></i><i></i><i></i><i></i></div>
+      <div class="vase"><span></span><span></span><span></span></div>
+      <div class="shelf-bracket left"></div><div class="shelf-bracket right"></div>
     </div>
-    <div class="stars" id="stars"></div>
-    <div class="clouds" id="clouds">
-      <div class="cloud cl1"></div>
-      <div class="cloud cl2"></div>
-      <div class="cloud cl3"></div>
-    </div>
-  </div>
-
-  <!-- Raum-Architektur -->
-  <div class="room">
-    <!-- Fenster-Rahmen -->
-    <div class="window-frame">
-      <div class="window-pane top-left"></div>
-      <div class="window-pane top-right"></div>
-      <div class="window-pane bot-left"></div>
-      <div class="window-pane bot-right"></div>
-      <div class="curtain curtain-l"></div>
-      <div class="curtain curtain-r"></div>
-    </div>
-
-    <!-- Lichterkette an der Wand -->
-    <div class="fairy-lights">
-      <div class="bulb b1"></div>
-      <div class="bulb b2"></div>
-      <div class="bulb b3"></div>
-      <div class="bulb b4"></div>
-      <div class="bulb b5"></div>
-      <div class="bulb b6"></div>
-      <div class="bulb b7"></div>
-    </div>
-
-    <!-- Wand-Deko & Regal -->
-    <div class="shelf">
-      <div class="plant">
-        <div class="pot"></div>
-        <div class="leaf l1"></div>
-        <div class="leaf l2"></div>
-        <div class="leaf l3"></div>
+    <div class="window-frame" aria-hidden="true">
+      <div class="outside">
+        <div class="sun"></div><div class="moon"></div><div class="stars"></div>
+        <div class="cloud cloud-one"></div><div class="cloud cloud-two"></div>
+        <svg class="landscape" viewBox="0 0 600 500" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+          <path class="hill-far" d="M0 305 Q90 190 190 260 T370 245 T600 230 V500 H0Z"/>
+          <path class="hill-near" d="M0 350 Q140 240 310 330 T600 285 V500 H0Z"/>
+          <g class="forest-far"><path d="M0 410 V330 L22 265 L44 330 H34 L51 360 H38 L60 402 H0 M85 430 V354 L104 284 L125 354 H114 L136 400 H85 M345 420 V320 L368 244 L391 320 H380 L405 376 H345 M480 440 V305 L505 215 L530 305 H516 L550 388 H480 M545 430 V348 L565 280 L586 348 H576 L600 405 H545"/></g>
+          <path class="forest-near" d="M0 500 V395 L25 318 L50 395 H37 L65 448 H50 L80 500 M120 500 V443 L145 360 L170 443 H155 L186 500 M400 500 V410 L425 328 L451 410 H437 L472 480 H458 L475 500 M520 500 V403 L548 309 L575 403 H563 L600 483 V500Z"/>
+        </svg>
+        <div class="glass"></div>
       </div>
-      <div class="books">
-        <div class="book bk1"></div>
-        <div class="book bk2"></div>
-        <div class="book bk3"></div>
-      </div>
-      <div class="cat-clock">
-        <div class="clock-face" id="clockText">12:00</div>
-      </div>
+      <div class="mullion vertical"></div><div class="mullion horizontal"></div>
     </div>
-
-    <!-- Kamin / Lampe Glühen -->
-    <div class="fireplace-glow"></div>
-
-    <!-- Holzboden -->
-    <div class="floor">
-      <!-- Gemütlicher Teppich -->
-      <div class="rug">
-        <div class="rug-paw">🐾</div>
-      </div>
+    <div class="window-sill" aria-hidden="true"></div>
+    <div class="curtain-rod" aria-hidden="true"></div>
+    <div class="curtain" aria-hidden="true"></div>
+    <div class="floor" aria-hidden="true"><div class="rug"></div></div>
+    <div class="floor-plant" aria-hidden="true">
+      <svg viewBox="0 0 150 260" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="#53684f" stroke-width="3"><path d="M75 226 Q75 105 42 33 M75 210 Q75 120 112 59 M75 184 Q65 120 18 100"/></g><g fill="#667c5c"><ellipse cx="38" cy="45" rx="13" ry="30" transform="rotate(-30 38 45)"/><ellipse cx="60" cy="85" rx="13" ry="28" transform="rotate(24 60 85)"/><ellipse cx="111" cy="71" rx="14" ry="31" transform="rotate(33 111 71)"/><ellipse cx="93" cy="120" rx="13" ry="29" transform="rotate(-30 93 120)"/><ellipse cx="29" cy="111" rx="13" ry="28" transform="rotate(-50 29 111)"/><ellipse cx="65" cy="152" rx="12" ry="26" transform="rotate(22 65 152)"/></g><path fill="#b7775c" d="M41 205 H109 L101 257 H49Z"/><path fill="#ca9273" d="M38 201 H112 V212 H38Z"/></svg>
     </div>
-
-    <!-- Schwebende Partikel / Staubmotes -->
-    <div class="particles" id="particles"></div>
-  </div>
-
-  <script src="script.js"></script>
+    <div class="lamp" aria-hidden="true"><div class="lamp-halo"></div><div class="lamp-shade"></div><div class="lamp-stem"></div><div class="lamp-base"></div></div>
+    <time id="clockText" class="clock" aria-label="Local time"></time>
+    <div class="ambient" aria-hidden="true"></div>
+  </main>
 </body>
 </html>

@@ -11,7 +11,7 @@ EXPECTED_IDS = {
     "cat_mochi", "cat_luna", "dog_shiba", "dog_balu", "fantasy_drago",
     "fantasy_byte", "fantasy_spooky", "fantasy_axolotl", "animal_penguin",
     "animal_bunny", "animal_fox", "animal_panda", "animal_hamster",
-    "animal_raccoon", "animal_frog",
+    "animal_raccoon", "animal_frog", "animal_arctic_fox", "animal_cocoa_bunny",
 }
 REQUIRED_KEYS = {"id", "name", "species", "emoji", "desc", "drawer", "sound", "pet_sounds", "ambient_lines", "ai_persona"}
 
@@ -20,9 +20,9 @@ def _default_pose():
     return compute_pose(PoseContext(key="idle", t=1.0, age=1.0))
 
 
-def test_registry_has_exactly_the_fifteen_ids():
+def test_registry_has_all_original_and_cozy_character_ids():
     assert set(CHARACTERS) == EXPECTED_IDS
-    assert len(CHARACTERS) == 15
+    assert len(CHARACTERS) == 17
 
 
 def test_every_character_has_required_keys():

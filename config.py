@@ -174,11 +174,11 @@ class Config:
         tmp = self.path.with_suffix(".json.tmp")
         with self._lock:
             payload = json.dumps(self.data, indent=2, ensure_ascii=False)
-        try:
-            tmp.write_text(payload, encoding="utf-8")
-            os.replace(tmp, self.path)
-        except OSError as exc:
-            print(f"[config] Speichern fehlgeschlagen: {exc}")
+            try:
+                tmp.write_text(payload, encoding="utf-8")
+                os.replace(tmp, self.path)
+            except OSError as exc:
+                print(f"[config] Speichern fehlgeschlagen: {exc}")
 
     # -- Zugriff ----------------------------------------------------------
     def get(self, dotted: str, default: Any = None) -> Any:
