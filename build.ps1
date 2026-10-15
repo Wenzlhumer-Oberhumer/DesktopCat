@@ -47,8 +47,15 @@ if ($LASTEXITCODE -ne 0) { throw "Icon-Erstellung fehlgeschlagen!" }
 
 # 4. PyInstaller-Build
 Write-Host "Fuehre PyInstaller aus (onedir)..." -ForegroundColor Yellow
-& $py -m PyInstaller "$ScriptDir\mochi.spec" --noconfirm --clean --distpath "$ScriptDir\dist" --workpath "$ScriptDir\build"
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller-Build fehlgeschlagen (Exit $LASTEXITCODE)!" }
+$buildOriginalPath = $env:PATH
+try {
+    # Foreign ICU/OpenSSL DLLs on PATH (e.g. Poppler) break the frozen Qt application.
+    $env:PATH = "$venvDir\Scripts;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem"
+    & $py -m PyInstaller "$ScriptDir\mochi.spec" --noconfirm --clean --distpath "$ScriptDir\dist" --workpath "$ScriptDir\build"
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller-Build fehlgeschlagen (Exit $LASTEXITCODE)!" }
+} finally {
+    $env:PATH = $buildOriginalPath
+}
 
 $distApp = "$ScriptDir\dist\DesktopCat\DesktopCat.exe"
 if (-not (Test-Path $distApp)) {
