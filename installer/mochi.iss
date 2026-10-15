@@ -1,4 +1,4 @@
-﻿; Inno Setup 6 Script fuer Desktop Cat
+; Inno Setup 6 Script fuer Desktop Cat
 #ifndef AppVersion
 #define AppVersion "2.2.0"
 #endif
@@ -39,6 +39,8 @@ Type: files; Name: "{userdesktop}\Mochi.lnk"
 Source: "..\dist\DesktopCat\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 Source: "..\THIRD_PARTY_LICENSES.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+; Desktop Background (Lively Wallpaper) Paket synchronisieren:
+Source: "..\assets\lively_room\*"; DestDir: "{localappdata}\Lively Wallpaper\Library\wallpapers\mochi_cozy_room"; Flags: recursesubdirs ignoreversion uninsneveruninstall
 
 [Icons]
 Name: "{userprograms}\Desktop Cat"; Filename: "{app}\DesktopCat.exe"
@@ -51,6 +53,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
   ValueName: "Desktop Cat"; ValueData: """{app}\DesktopCat.exe"""; Tasks: autostart; Flags: uninsdeletevalue
 
 [Run]
+; Desktop-Hintergrund Paket synchronisieren/upgraden bei Installation & Update:
+Filename: "{app}\DesktopCat.exe"; Parameters: "--sync-wallpaper"; Flags: runhidden; StatusMsg: "Aktualisiere Desktop-Hintergrund..."
 Filename: "{app}\DesktopCat.exe"; Description: "Desktop Cat jetzt starten"; Flags: nowait postinstall skipifsilent
 ; nach Silent-Update trotzdem neu starten:
 Filename: "{app}\DesktopCat.exe"; Flags: nowait; Check: WizardSilent

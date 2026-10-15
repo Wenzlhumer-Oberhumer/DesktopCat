@@ -519,8 +519,10 @@ class Buddy(QObject):
         self.pet_bed = PetBedWidget(cfg)
         self.pet.pet_bed = self.pet_bed
         self.pet_bed.bed_moved.connect(self.pet.on_bed_moved)
+        self.pet_bed.bed_moved.connect(lambda *_: self.pet.raise_())
         if bool(cfg.get("furniture.bed_visible", True)):
             self.pet_bed.show()
+            self.pet.raise_()
         else:
             self.pet_bed.hide()
 
@@ -1678,6 +1680,7 @@ class Buddy(QObject):
         self.cfg.save()
         if new_vis:
             self.pet_bed.show()
+            self.pet.raise_()
             self._say("🛋️ Dein kuscheliges Katzenbett steht bereit! Du kannst es mit der Maus frei verschieben.", 4000)
         else:
             self.pet_bed.hide()
@@ -2520,6 +2523,15 @@ def main() -> int:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
     except Exception:
         pass
+
+    if any(arg in sys.argv for arg in ("--sync-wallpaper", "--setup-wallpaper")):
+        import lively_wallpaper
+        target = lively_wallpaper.deploy_room_to_lively_library()
+        cfg = Config()
+        if cfg.get("pet.is_at_home") or cfg.get("lively.auto_sync"):
+            lively_wallpaper.apply_lively_wallpaper(cfg)
+        print(f"Desktop background setup complete: {target}")
+        return 0
 
     lock = _single_instance()
     if lock is None:

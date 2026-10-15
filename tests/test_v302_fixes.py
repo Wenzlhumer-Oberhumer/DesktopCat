@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtCore import QPoint
+from PyQt6.QtCore import QPoint, Qt
 from PyQt6.QtWidgets import QApplication
 
 from config import Config
@@ -279,5 +279,18 @@ def test_offline_parser_wallpaper_fix_phrases():
         plan = parse_offline(query)
         assert plan is not None, f"Query '{query}' not matched"
         assert plan.tool == "restore_wallpaper", f"Expected restore_wallpaper for '{query}', got {plan.tool}"
+
+
+def test_pet_bed_not_always_on_top_by_default():
+    """Testet, dass das Katzenbett standardmäßig kein WindowStaysOnTopHint hat, um nicht über Nutzerfenstern zu schweben."""
+    _ensure_qapp()
+    from furniture import PetBedWidget
+    cfg = Config()
+    cfg.set("pet.always_on_top", True)       # Katze selbst ist on top
+    cfg.set("furniture.always_on_top", False) # Bett soll standardmäßig NICHT on top sein
+    bed = PetBedWidget(cfg)
+    flags = bed.windowFlags()
+    assert not bool(flags & Qt.WindowType.WindowStaysOnTopHint)
+    bed.close()
 
 

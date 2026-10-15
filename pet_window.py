@@ -483,6 +483,7 @@ class PetWindow(QWidget):
                 self._px = dock_x
                 self._py = dock_y
                 self._apply_pos()
+                self.raise_()
             elif self._going_to_bed:
                 self._walk_target = dock_x
                 direction = 1 if dock_x > self._px else -1
@@ -862,6 +863,7 @@ class PetWindow(QWidget):
                 self._py = bed_y
                 self._going_to_bed = False
                 self._apply_pos()
+                self.raise_()
                 self.set_state(PetState.SLEEP)
                 self._schedule_wander(random.uniform(14, 28))
                 return

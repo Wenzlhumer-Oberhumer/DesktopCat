@@ -87,6 +87,13 @@ if (-not $SkipInstaller) {
         [IO.File]::WriteAllText($shaFile, "$setupHash  DesktopCat-Setup-$Version.exe`n", (New-Object Text.UTF8Encoding $false))
         Write-Host "SHA256 fuer Setup geschrieben: $shaFile ($setupHash)" -ForegroundColor Green
 
+        # 8b. Portable Zip erzeugen
+        $zipFile = "$ScriptDir\dist\DesktopCat-Windows-Portable.zip"
+        if (Test-Path $zipFile) { Remove-Item -Force $zipFile }
+        Write-Host "Erstelle Portable Zip: $zipFile..." -ForegroundColor Yellow
+        Compress-Archive -Path "$ScriptDir\dist\DesktopCat\*" -DestinationPath $zipFile
+        Write-Host "Portable Zip erfolgreich erstellt: $zipFile" -ForegroundColor Green
+
         # 9. Optionales Code-Signing
         if ($Sign) {
             $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue

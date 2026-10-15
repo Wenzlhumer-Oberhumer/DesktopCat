@@ -26,7 +26,8 @@ class PetBedWidget(QWidget):
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.Tool
         )
-        if bool(cfg.get("pet.always_on_top", True)):
+        # Möbelstück bleibt standardmäßig auf dem Desktop, anstatt Arbeitsfenster zu verdecken
+        if bool(cfg.get("furniture.always_on_top", False)):
             flags |= Qt.WindowType.WindowStaysOnTopHint
         super().__init__(parent, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
