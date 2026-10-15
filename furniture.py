@@ -13,13 +13,14 @@ from PyQt6.QtCore import QPoint, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen,
 )
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 
 class PetBedWidget(QWidget):
     """Transparentes, verschiebbares Katzenbettchen."""
 
     bed_moved = pyqtSignal(int, int)
+    hide_requested = pyqtSignal()
 
     def __init__(self, cfg, parent: Optional[QWidget] = None):
         flags = (
@@ -88,6 +89,14 @@ class PetBedWidget(QWidget):
         if e.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
             self.save_position()
+
+    def contextMenuEvent(self, event) -> None:
+        from i18n import tr
+        from pet_window import style_menu
+        menu = style_menu(QMenu(self))
+        menu.addAction(tr('menu.hide_bed')).triggered.connect(self.hide_requested.emit)
+        menu.exec(event.globalPos())
+        event.accept()
 
     def paintEvent(self, _event) -> None:
         p = QPainter(self)

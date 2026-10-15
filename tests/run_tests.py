@@ -54,6 +54,7 @@ def main():
         "test_v300_features",
         "test_v302_fixes",
         "test_v307_fixes",
+        "test_bed_visibility",
     ]
 
     total = 0

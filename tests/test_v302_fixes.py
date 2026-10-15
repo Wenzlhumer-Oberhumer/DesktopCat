@@ -210,13 +210,13 @@ def test_on_bed_moved_moves_sleeping_cat():
     mock_bed.get_dock_position.return_value = (650.0, 420.0)
     win.pet_bed = mock_bed
 
-    win.state = PetState.SLEEP
-    win._px = 200.0
-    win._py = 200.0
+    win._px, win._py = 650.0, 420.0
+    win.go_to_sleep()
+    mock_bed.get_dock_position.return_value = (700.0, 450.0)
 
     win.on_bed_moved(650, 420)
-    assert win._px == 650.0
-    assert win._py == 420.0
+    assert win._px == 700.0
+    assert win._py == 450.0
 
 
 def test_on_bed_hidden_drops_cat():

@@ -176,6 +176,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "🧶  Wollknäuel werfen",
         "en": "🧶  Throw Yarn Ball",
     },
+    "menu.hide_bed": {
+        "de": "🛏️ Bett ausblenden",
+        "en": "🛏️ Hide bed",
+    },
+    "menu.show_bed": {
+        "de": "🛏️ Bett einblenden",
+        "en": "🛏️ Show bed",
+    },
     "menu.pet_bed": {
         "de": "🛋️  Katzenbett anzeigen / verbergen",
         "en": "🛋️  Toggle Pet Bed",

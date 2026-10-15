@@ -521,6 +521,7 @@ class Buddy(QObject):
         self.pet_bed = PetBedWidget(cfg)
         self.pet.pet_bed = self.pet_bed
         self.pet_bed.bed_moved.connect(self.pet.on_bed_moved)
+        self.pet_bed.hide_requested.connect(lambda: self.toggle_pet_bed(False))
         self.pet_bed.bed_moved.connect(lambda *_: self.pet.raise_())
         if bool(cfg.get("furniture.bed_visible", True)):
             self.pet_bed.show()
@@ -661,6 +662,8 @@ class Buddy(QObject):
         is_home = bool(self.cfg.get("pet.is_at_home", False))
         home_text = tr("home.outside") if is_home else tr("home.at_home")
         self._act(self.tray_menu, home_text, lambda: self.set_home_mode(not is_home))
+        bed_visible = bool(getattr(self, 'pet_bed', None) and self.pet_bed.isVisible())
+        self._act(self.tray_menu, tr('menu.hide_bed' if bed_visible else 'menu.show_bed'), self.toggle_pet_bed)
         self.tray_menu.addSeparator()
 
         self._act(self.tray_menu, tr("menu.scripts"), self.open_scripts_dialog)
@@ -1733,6 +1736,7 @@ class Buddy(QObject):
             self.pet_bed = PetBedWidget(self.cfg)
             self.pet.pet_bed = self.pet_bed
             self.pet_bed.bed_moved.connect(self.pet.on_bed_moved)
+            self.pet_bed.hide_requested.connect(lambda: self.toggle_pet_bed(False))
         new_vis = (not self.pet_bed.isVisible()) if visible is None else visible
         self.cfg.set("furniture.bed_visible", new_vis)
         self.cfg.save()
@@ -1743,6 +1747,7 @@ class Buddy(QObject):
         else:
             self.pet_bed.hide()
             self.pet.on_bed_hidden()
+        self._update_tray_menu()
 
     def open_friendship_dialog(self) -> None:
         from fun_dialogs import FriendshipDialog

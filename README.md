@@ -4,6 +4,11 @@
 
 ---
 
+## Neu in v3.0.8
+
+- **Bett ein-/ausblenden:** Rechtsklick direkt auf das Bett → „Bett ausblenden“. Über Rechtsklick auf die Katze oder das Tray-Menü → „Bett einblenden“ kommt es wieder zurück. Die Auswahl bleibt nach dem Neustart erhalten.
+- **Ohne Bett überall schlafen:** Kylie schläft am Desktop-Boden an ihrer aktuellen horizontalen Position. Wird das Bett während des Schlafens oder auf dem Weg dorthin ausgeblendet, sinkt sie zum Boden und schläft dort weiter. Beim Wiedereinblenden oder Verschieben des Betts wird sie nicht dorthin teleportiert.
+
 ## Neu in v3.0.7
 
 - **Gemini im Browser:** Über Tray-Menü oder Einstellungen „Gemini im Browser öffnen“ wählen. Optional eine Anfrage eingeben, kopieren und bei Gemini mit Strg+V einfügen. Dort nutzt du dein eigenes Google-Konto und dessen Abo. Im Chat funktioniert auch `gemini: deine Frage`. Antworten werden manuell gelesen; Desktop-Aktionen werden nicht automatisch aus Browser-Antworten ausgeführt. BYOK bleibt separat erhalten, ohne Entwickler-Key oder eigenen KI-Server.
