@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QPointF, QRectF, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import (
     QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen,
 )
@@ -30,126 +30,119 @@ from settings_dialog import STYLE
 #  1. Freundschafts-Dialog
 # ======================================================================================
 class FriendshipDialog(QDialog):
-    """Zeigt Freundschafts-Level, Fortschritt und freigeschaltete Accessoires."""
+    """Live friendship progress without rebuilding controls or losing keyboard focus."""
 
     accessory_changed = pyqtSignal(str)
 
     def __init__(self, store, cfg, char_info: dict, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.store = store
-        self.cfg = cfg
-        self.char_info = char_info
-
-        name = char_info.get("name", "Kylie")
-        self.setWindowTitle(tr("friendship.title", name=name))
+        self.store, self.cfg, self.char_info = store, cfg, char_info
+        self.setWindowTitle(tr('friendship.title', name=char_info.get('name', 'Kylie')))
         self.setFixedSize(480, 560)
-        self.setStyleSheet(STYLE)
-
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
+        self.setStyleSheet(STYLE + 'QGroupBox{color:#DCE0E7;} '
+                          'QProgressBar{background:#25282f;border:1px solid #858a96;border-radius:5px;} '
+                          'QProgressBar::chunk{background:#ff8fb1;border-radius:4px;}')
+        self._last_progress = None
+        self.reward_buttons = {}
+        self._reward_labels = {}
+        self._reward_locks = {}
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setContentsMargins(20,20,20,20)
         layout.setSpacing(14)
-
-        # Header mit Avatar & Name
-        head_layout = QHBoxLayout()
-        emoji = self.char_info.get("emoji", "🐱")
-        name = self.char_info.get("name", "Kylie")
-
-        lbl_avatar = QLabel(emoji)
-        lbl_avatar.setStyleSheet("font-size: 40px;")
-        head_layout.addWidget(lbl_avatar)
-
-        pts = self.store.get_friendship_points() if self.store else 0
-        lvl, prog = level_for(pts)
-        lvl_name = get_level_name(lvl)
-
-        info_layout = QVBoxLayout()
-        lbl_title = QLabel(tr("friendship.header", name=name))
-        lbl_title.setObjectName("title")
-        lbl_level = QLabel(tr("friendship.level_header", lvl=lvl, title=lvl_name))
-        lbl_level.setStyleSheet("font-size: 13px; font-weight: 600; color: #F2F3F5;")
-        info_layout.addWidget(lbl_title)
-        info_layout.addWidget(lbl_level)
-        head_layout.addLayout(info_layout, 1)
-
-        layout.addLayout(head_layout)
-
-        # Fortschrittsbalken
-        prog_box = QGroupBox(tr("friendship.progress_title"))
-        prog_layout = QVBoxLayout(prog_box)
-        prog_layout.setSpacing(6)
-
-        next_thresh = LEVEL_THRESHOLDS[lvl] if lvl < len(LEVEL_THRESHOLDS) else LEVEL_THRESHOLDS[-1]
-
+        header = QHBoxLayout()
+        avatar = QLabel(char_info.get('emoji', '🐱'))
+        avatar.setStyleSheet('font-size:40px;')
+        header.addWidget(avatar)
+        labels = QVBoxLayout()
+        title = QLabel(tr('friendship.header', name=char_info.get('name', 'Kylie')))
+        title.setObjectName('title')
+        labels.addWidget(title)
+        self.level_label = QLabel()
+        labels.addWidget(self.level_label)
+        header.addLayout(labels, 1)
+        layout.addLayout(header)
+        progress_box = QGroupBox(tr('friendship.progress_title'))
+        progress_layout = QVBoxLayout(progress_box)
         self.bar = QProgressBar()
+        self.bar.setRange(0,100)
         self.bar.setFixedHeight(18)
-        self.bar.setRange(0, 100)
-        self.bar.setValue(int(prog * 100))
         self.bar.setTextVisible(False)
-        prog_layout.addWidget(self.bar)
-
-        if lvl < 8:
-            lbl_pts = QLabel(tr("friendship.points_info", pts=pts, next_pts=next_thresh, pct=int(prog * 100), remain=next_thresh - pts, next_lvl=lvl + 1))
-        else:
-            lbl_pts = QLabel(tr("friendship.max_level", pts=pts))
-        lbl_pts.setStyleSheet("font-size: 9pt; color: #8D919B;")
-        prog_layout.addWidget(lbl_pts)
-        layout.addWidget(prog_box)
-
-        # Accessoires & Belohnungen
-        rew_box = QGroupBox(tr("friendship.rewards_box").replace("&", "&&"))
-        rew_layout = QVBoxLayout(rew_box)
-        rew_layout.setSpacing(8)
-
-        current_worn = str(self.cfg.get("fun.worn", "")).strip()
-
-        for req_lvl in range(2, 9):
-            title, key = get_level_reward(req_lvl)
+        progress_layout.addWidget(self.bar)
+        self.points_label = QLabel()
+        self.points_label.setWordWrap(True)
+        self.points_label.setStyleSheet('color:#AEB3BE;font-size:9pt;')
+        progress_layout.addWidget(self.points_label)
+        layout.addWidget(progress_box)
+        rewards = QGroupBox(tr('friendship.rewards_box').replace('&','&&'))
+        rows = QVBoxLayout(rewards)
+        rows.setSpacing(8)
+        for level in range(2,9):
             row = QHBoxLayout()
+            label = QLabel()
+            row.addWidget(label,1)
+            lock = QLabel(tr('friendship.unlock_at', pts=LEVEL_THRESHOLDS[level-1]))
+            lock.setStyleSheet('color:#AEB3BE;font-size:9pt;')
+            row.addWidget(lock)
+            button = QPushButton()
+            button.setFixedWidth(90)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            _, key = get_level_reward(level)
+            button.clicked.connect(lambda checked=False, k=key: self._set_worn('' if self.cfg.get('fun.worn','') == k else k))
+            row.addWidget(button)
+            rows.addLayout(row)
+            self.reward_buttons[level] = button
+            self._reward_labels[level] = label
+            self._reward_locks[level] = lock
+        layout.addWidget(rewards,1)
+        close = QPushButton(tr('common.close'))
+        close.setObjectName('primary')
+        close.setFixedHeight(34)
+        close.clicked.connect(self.accept)
+        layout.addWidget(close)
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setInterval(500)
+        self.refresh_timer.timeout.connect(self.refresh_progress)
+        self.refresh_progress()
 
-            is_unlocked = lvl >= req_lvl
-            lock_text = "✨" if is_unlocked else "🔒"
-            lbl_item = QLabel(f"{lock_text} Level {req_lvl}: <b>{title}</b>")
+    def refresh_progress(self):
+        try:
+            points = self.store.get_friendship_points() if self.store else 0
+        except Exception:
+            return  # Retain the last good snapshot during a temporary database error.
+        worn = str(self.cfg.get('fun.worn','')).strip()
+        snapshot = (points, worn, i18n.lang())
+        if snapshot == self._last_progress:
+            return
+        level, progress = level_for(points)
+        self.level_label.setText(tr('friendship.level_header', lvl=level, title=get_level_name(level)))
+        self.bar.setValue(int(progress*100))
+        if level < len(LEVEL_THRESHOLDS):
+            next_points = LEVEL_THRESHOLDS[level]
+            self.points_label.setText(tr('friendship.points_info', pts=points, next_pts=next_points,
+                pct=int(progress*100), remain=next_points-points, next_lvl=level+1))
+        else:
+            self.points_label.setText(tr('friendship.max_level', pts=points))
+        for required, button in self.reward_buttons.items():
+            title, key = get_level_reward(required)
+            unlocked = level >= required
+            self._reward_labels[required].setText(f"{'✨' if unlocked else '🔒'} Level {required}: <b>{title}</b>")
+            self._reward_locks[required].setVisible(not unlocked)
+            button.setVisible(unlocked and bool(key))
+            button.setEnabled(unlocked)
+            button.setText(tr('friendship.unequip' if worn == key else 'friendship.equip'))
+        self._last_progress = snapshot
 
-            if not is_unlocked:
-                lbl_item.setStyleSheet("color: #8D919B; font-size: 10pt;")
-            else:
-                lbl_item.setStyleSheet("color: #F2F3F5; font-size: 10pt;")
-            row.addWidget(lbl_item, 1)
+    def showEvent(self, event):
+        self.refresh_progress()
+        self.refresh_timer.start()
+        super().showEvent(event)
 
-            if is_unlocked and key:
-                btn = QPushButton()
-                btn.setFixedWidth(90)
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                if current_worn == key:
-                    btn.setText(tr("friendship.unequip"))
-                    btn.setStyleSheet("background-color: #4A3338; color: #FF8FB1; font-weight: 600; border-radius: 6px; padding: 4px;")
-                    btn.clicked.connect(lambda _=False, k="": self._set_worn(k))
-                else:
-                    btn.setText(tr("friendship.equip"))
-                    btn.setStyleSheet("background-color: #3A3C43; color: #F2F3F5; font-weight: 600; border-radius: 6px; padding: 4px;")
-                    btn.clicked.connect(lambda _=False, k=key: self._set_worn(k))
-                row.addWidget(btn)
-            elif not is_unlocked:
-                lbl_lock = QLabel(tr("friendship.unlock_at", pts=LEVEL_THRESHOLDS[req_lvl-1]))
-                lbl_lock.setStyleSheet("font-size: 9pt; color: #8D919B;")
-                row.addWidget(lbl_lock)
-
-            rew_layout.addLayout(row)
-
-        layout.addWidget(rew_box, 1)
-
-        # Fusszeile
-        btn_close = QPushButton(tr("common.close"))
-        btn_close.setObjectName("primary")
-        btn_close.setFixedHeight(34)
-        btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
+    def hideEvent(self, event):
+        self.refresh_timer.stop()
+        super().hideEvent(event)
 
     def _set_worn(self, key: str) -> None:
-        self.cfg.set("fun.worn", key)
+        self.cfg.set('fun.worn', key)
         self.cfg.save()
         self.accessory_changed.emit(key)
         self.accept()

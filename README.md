@@ -4,6 +4,14 @@
 
 ---
 
+## Neu in v3.2.1
+
+- **Getrennte Spielpunkte:** Wollknäuel-Aktionen bringen zwei Punkte, bis zu zehnmal täglich, ohne das Leckerli-Kontingent zu verbrauchen.
+- **Manuell heißt freiwillig:** Selbst gestartete Pet-Runden verbrauchen keine automatischen Fragen mehr. Sie setzen den normalen Abstand zur nächsten automatischen Frage zurück.
+- **Eine Stunde Fragenpause:** Direkt auf der Antwortkarte oder im Tray pausieren; dort lässt sich die Pause vorzeitig beenden. Die Pause bleibt nach Neustart erhalten, manuelle Runden bleiben möglich.
+- **Fortschritt live:** Das Freundschaftsfenster aktualisiert Punkte, Level und freigeschaltete Belohnungen während es geöffnet ist. Grundpunkte und Trophäenbonus einer Aktion erzeugen eine gemeinsame Meldung zum erreichten Level; Meldungen warten während Eingaben und Fokusmodus.
+- **Updatefortschritt:** Download mit Prozentanzeige oder laufendem Balken bei unbekannter Größe, anschließende Prüfsummenprüfung, Fehler mit Wiederholen oder Verschieben. Der aktuelle Status lässt sich über das Tray wieder öffnen.
+
 ## Neu in v3.2.0
 
 - **Zeit miteinander:** 20 lokale Entweder-oder-Fragen, freiwillige Freitextfragen und kleine Mitmachaktionen. Das Pet tanzt, streckt sich, knabbert oder macht eine Kuschelpause. Rechtsklick auf das Pet oder Tray → „Zeit miteinander“ startet sofort eine Runde.

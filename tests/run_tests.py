@@ -63,6 +63,7 @@ def main():
         "test_wallpaper_ui",
         "test_pet_interactions",
         "test_friendship_progress",
+        "test_v321_usability",
     ]
 
     total = 0

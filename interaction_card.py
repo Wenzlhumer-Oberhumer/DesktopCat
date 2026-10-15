@@ -8,6 +8,7 @@ from speech_bubble import FloatingCard
 class InteractionCard(FloatingCard):
     answered = pyqtSignal(str, object)
     dismissed = pyqtSignal()
+    pause_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__(focusable=True)
@@ -61,6 +62,9 @@ class InteractionCard(FloatingCard):
         self.footer.addWidget(self.send_button)
         self.footer.addWidget(self.skip_button)
         self.layout.addLayout(self.footer)
+        self.pause_button = self._button('')
+        self.pause_button.clicked.connect(self._pause)
+        self.layout.addWidget(self.pause_button)
         self.expiry = QTimer(self)
         self.expiry.setSingleShot(True)
         self.expiry.timeout.connect(self._dismiss)
@@ -89,6 +93,7 @@ class InteractionCard(FloatingCard):
         self.tell_button.setText('Tell me' if self._english else 'Erzählen')
         self.send_button.setText('Send answer' if self._english else 'Antwort senden')
         self.skip_button.setText('Skip' if self._english else 'Überspringen')
+        self.pause_button.setText('Pause questions for 1 hour' if self._english else 'Fragen 1 Std. pausieren')
         self.tell_button.setVisible(not item.choices)
         while self.choices.count():
             old = self.choices.takeAt(0).widget()
@@ -152,6 +157,13 @@ class InteractionCard(FloatingCard):
         self._acted = True
         self.hide_now()
         self.dismissed.emit()
+
+    def _pause(self):
+        if self._acted:
+            return
+        self._acted = True
+        self.hide_now()
+        self.pause_requested.emit()
 
     def hide_now(self):
         self.expiry.stop()

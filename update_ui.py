@@ -5,7 +5,7 @@ import datetime
 import time
 from PyQt6.QtCore import QDateTime, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QComboBox, QDateTimeEdit, QDialog, QHBoxLayout, QLabel, QPushButton,
+    QComboBox, QDateTimeEdit, QDialog, QHBoxLayout, QLabel, QPushButton, QProgressBar,
     QVBoxLayout, QWidget,
 )
 from speech_bubble import FloatingCard
@@ -20,8 +20,9 @@ class UpdatePrompt(FloatingCard):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.version = ''
         self._acted = False
+        self.state = 'offer'
         content = QWidget(self)
-        content.setGeometry(self.M + 14, self.M + 12, 332, 166)
+        content.setGeometry(self.M + 14, self.M + 12, 332, 206)
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         self.title = QLabel('Ein neues Update ist da!')
@@ -29,8 +30,15 @@ class UpdatePrompt(FloatingCard):
         layout.addWidget(self.title)
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.setStyleSheet('color:#eef0f4;font-size:13px;')
         layout.addWidget(self.message)
+        self.progress = QProgressBar()
+        self.progress.setMinimumHeight(22)
+        self.progress.setStyleSheet('QProgressBar{background:#25282f;color:#fff;border:1px solid #858a96;border-radius:6px;text-align:center;}'
+                                   'QProgressBar::chunk{background:#a55779;border-radius:5px;}')
+        self.progress.hide()
+        layout.addWidget(self.progress)
         row = QHBoxLayout()
         self.install_button = QPushButton('Ja, installieren')
         self.later_button = QPushButton('Später…')
@@ -45,16 +53,69 @@ class UpdatePrompt(FloatingCard):
         self.install_button.clicked.connect(self._install)
         self.later_button.clicked.connect(self._later)
         layout.addLayout(row)
-        self.set_content_size(360, 190)
+        self.set_content_size(360, 230)
 
     def offer(self, version: str):
         self.version = version
+        self.state = 'offer'
         self._acted = False
+        self.title.setText('Ein neues Update ist da!')
+        self.install_button.setText('Ja, installieren')
+        self.progress.hide()
         self.install_button.setEnabled(True)
         self.later_button.setEnabled(True)
+        self.install_button.show()
+        self.later_button.show()
         self.message.setText(f'Hey, Version {version} ist bereit. Soll ich das Update jetzt herunterladen und installieren?')
         self.show()
         self.fade_in()
+
+    def begin_download(self, version: str):
+        self.version = version
+        self.state = 'download'
+        self._acted = True
+        self.title.setText(f'Update {version}')
+        self.install_button.setEnabled(False)
+        self.later_button.setEnabled(False)
+        self.install_button.hide()
+        self.later_button.hide()
+        self.progress.show()
+        self.set_progress(-1)
+        self.show()
+        self.fade_in()
+
+    def set_progress(self, percent: int):
+        if self.state != 'download':
+            return
+        if percent < 0:
+            self.progress.setRange(0, 0)
+            self.message.setText('Update wird geladen. Die Dateigröße ist noch nicht bekannt.')
+        else:
+            self.progress.setRange(0, 100)
+            self.progress.setValue(max(0, min(100, percent)))
+            self.message.setText(f'Update wird geladen: {self.progress.value()} %')
+
+    def set_verifying(self):
+        self.state = 'verify'
+        self.progress.setRange(0, 0)
+        self.message.setText('Download abgeschlossen. Prüfsumme wird geprüft…')
+
+    def set_installing(self):
+        self.state = 'install'
+        self.progress.setRange(0, 100)
+        self.progress.setValue(100)
+        self.message.setText('Prüfsumme stimmt. Installation wird gestartet…')
+
+    def show_error(self, error: str):
+        self.state = 'error'
+        self._acted = False
+        self.progress.hide()
+        self.message.setText(f'Update konnte nicht geladen werden: {error[:220]}')
+        self.install_button.setText('Erneut versuchen')
+        self.install_button.setEnabled(True)
+        self.later_button.setEnabled(True)
+        self.install_button.show()
+        self.later_button.show()
 
     def _install(self):
         if self._acted:

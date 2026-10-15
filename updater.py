@@ -147,6 +147,7 @@ class DownloadUpdateWorker(QThread):
     """Laedt das Update-Setup streamend herunter und validiert den SHA256-Hash."""
 
     progress = pyqtSignal(int)
+    verifying = pyqtSignal()
     download_completed = pyqtSignal(bool, str)
 
     def __init__(self, setup_url: str, sha_url: str, version: str):
@@ -196,6 +197,7 @@ class DownloadUpdateWorker(QThread):
             with urllib.request.urlopen(req_setup, timeout=30.0) as resp, open(temp_dest, "wb") as out:
                 total_len = resp.headers.get("Content-Length")
                 total_size = int(total_len) if total_len and total_len.isdigit() else 0
+                self.progress.emit(0 if total_size > 0 else -1)
                 downloaded = 0
 
                 while True:
@@ -209,6 +211,7 @@ class DownloadUpdateWorker(QThread):
                         pct = int(downloaded * 100 / total_size)
                         self.progress.emit(min(100, pct))
 
+            self.verifying.emit()
             actual_hash = hasher.hexdigest().lower()
             if not expected_hash or actual_hash != expected_hash:
                 try:

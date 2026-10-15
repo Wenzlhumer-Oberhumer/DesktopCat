@@ -91,6 +91,8 @@ def should_ask_curious(now: datetime.datetime, stats: dict, cfg: dict) -> bool:
     daily_cfg = cfg.get("daily", {}) if isinstance(cfg.get("daily"), dict) else {}
     if not daily_cfg.get("curious", True):
         return False
+    if now.timestamp() < float(daily_cfg.get('interaction_pause_until', 0)):
+        return False
 
     interval, daily_limit = {
         'calm': (5400, 4), 'normal': (2700, 12), 'often': (1200, 24),

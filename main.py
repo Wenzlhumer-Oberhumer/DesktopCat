@@ -490,6 +490,7 @@ class Buddy(QObject):
         self.input.closed.connect(self._on_input_closed)
         self.interaction_card.answered.connect(self._complete_interaction)
         self.interaction_card.dismissed.connect(self._dismiss_interaction)
+        self.interaction_card.pause_requested.connect(self.pause_pet_questions)
         self.pet.interaction_requested.connect(self.start_pet_interaction)
         self.brain.started.connect(self._on_task_started)
         self.brain.finished.connect(self._on_task_finished)
@@ -557,6 +558,11 @@ class Buddy(QObject):
 
         self._last_ambient_comment = ""
         self._mochi_asked_question = False
+        self._last_friendship_points = get_memory_store().get_friendship_points()
+        self._pending_friendship_level = None
+        self._friendship_timer = QTimer(self)
+        self._friendship_timer.timeout.connect(self._refresh_friendship_progress)
+        self._friendship_timer.start(500)
         self._vision_threads: set[QThread] = set()
         self._pending_update: dict | None = None
         from update_ui import UpdatePrompt
@@ -663,6 +669,12 @@ class Buddy(QObject):
             self.tray_menu.addSeparator()
         self._act(self.tray_menu, tr("menu.input"), self.open_input)
         self._act(self.tray_menu, '🐾  Time together' if i18n.lang() == 'en' else '🐾  Zeit miteinander', self.start_pet_interaction)
+        pause_until = float(self.cfg.get('daily.interaction_pause_until', 0))
+        if pause_until > time.time():
+            stamp = datetime.datetime.fromtimestamp(pause_until).strftime('%H:%M')
+            self._act(self.tray_menu, f'Fragen bis {stamp} pausiert – Pause beenden', self.resume_pet_questions)
+        else:
+            self._act(self.tray_menu, 'Fragen 1 Std. pausieren', self.pause_pet_questions)
         self._act(self.tray_menu, tr("menu.feed_pet", name=cname), self.pet.give_treat)
         if self.pet.isVisible():
             self._act(self.tray_menu, tr("menu.hide_pet", name=cname), self.hide_pet)
@@ -697,7 +709,11 @@ class Buddy(QObject):
         self.tray_menu.addSeparator()
         if getattr(self, "_pending_update", None):
             ver = self._pending_update.get("version", "")
-            self._act(self.tray_menu, tr("menu.install_update", version=ver), lambda: self._offer_update(force=True))
+            state = self.update_prompt.state
+            caption = (f'Update {ver}: Fehler ansehen' if state == 'error' else
+                       f'Update {ver}: Fortschritt anzeigen' if state in ('download', 'verify', 'install') else
+                       tr('menu.install_update', version=ver))
+            self._act(self.tray_menu, caption, self._show_update_status)
         self._act(self.tray_menu, tr("menu.check_updates"), lambda: self._check_update(manual=True))
         self._act(self.tray_menu, tr("menu.settings"), self.open_settings)
         self._act(self.tray_menu, tr("menu.about", version=__version__), self._about)
@@ -927,22 +943,40 @@ class Buddy(QObject):
         if self._download_worker is not None and self._download_worker.isRunning():
             return
         self._awaiting_update_reply = False
-        self.update_prompt.hide_now()
-        self._say(tr("say.update_downloading"), 8000)
+        self.bubble.hide_now()
+        self.update_prompt.anchor_to(self.pet.head_anchor())
+        self.update_prompt.begin_download(self._pending_update['version'])
         self._download_worker = DownloadUpdateWorker(
             self._pending_update["setup_url"],
             self._pending_update["sha_url"],
             self._pending_update["version"],
         )
-        self._download_worker.download_completed.connect(self._on_update_downloaded)
+        self._update_download_result = None
+        self._download_worker.download_completed.connect(
+            lambda ok, detail: setattr(self, '_update_download_result', (ok, detail)))
+        self._download_worker.finished.connect(self._finish_update_download)
+        self._download_worker.progress.connect(self.update_prompt.set_progress)
+        self._download_worker.verifying.connect(self.update_prompt.set_verifying)
         self._download_worker.start()
+
+    def _finish_update_download(self) -> None:
+        result = self._update_download_result or (False, 'Download wurde unerwartet beendet.')
+        self._on_update_downloaded(*result)
+
+    def _show_update_status(self) -> None:
+        if self.update_prompt.state in ('download', 'verify', 'install', 'error'):
+            self.update_prompt.anchor_to(self.pet.head_anchor())
+            self.update_prompt.show()
+            self.update_prompt.fade_in()
+        else:
+            self._offer_update(force=True)
 
     def _on_update_downloaded(self, ok: bool, path_or_err: str) -> None:
         if ok:
-            self._say(tr("say.update_installing"), 3000)
+            self.update_prompt.set_installing()
             QTimer.singleShot(1500, lambda: self._apply_update(path_or_err))
         else:
-            self._say(tr("say.update_error", err=path_or_err), 8000)
+            self.update_prompt.show_error(path_or_err)
 
     def _apply_update(self, setup_exe: str) -> None:
         launch_installer(setup_exe)
@@ -1336,8 +1370,9 @@ class Buddy(QObject):
                 count = int(stats['curious_count']) if stats['curious_date'] == now.date().isoformat() else 0
             except (ValueError, TypeError):
                 count = 0
-            store.set_stat('curious_date', now.date().isoformat())
-            store.set_stat('curious_count', str(count+1))
+            if not manual:
+                store.set_stat('curious_date', now.date().isoformat())
+                store.set_stat('curious_count', str(count+1))
             store.set_stat('curious_last_ts', str(now.timestamp()))
             store.set_stat('curious_recent', json.dumps((recent+[item.id])[-6:]))
             self.bubble.hide_now()
@@ -1361,6 +1396,21 @@ class Buddy(QObject):
                 or _is_fullscreen_foreground()
                 or (not self._interaction_manual and is_night(self.cfg))):
             self._dismiss_interaction()
+
+    def pause_pet_questions(self) -> None:
+        deadline = time.time() + 3600
+        self.cfg.set('daily.interaction_pause_until', deadline)
+        self.cfg.save()
+        self._dismiss_interaction()
+        stamp = datetime.datetime.fromtimestamp(deadline).strftime('%H:%M')
+        self._say(f'Okay, bis {stamp} stelle ich keine automatischen Fragen. Du kannst jederzeit selbst eine Runde starten. 🐾', 7000)
+        self._update_tray_menu()
+
+    def resume_pet_questions(self) -> None:
+        self.cfg.set('daily.interaction_pause_until', 0)
+        self.cfg.save()
+        self._say('Die Fragenpause ist beendet. Ich warte wie gewohnt auf einen ruhigen Moment. 🐾', 5000)
+        self._update_tray_menu()
 
     def _dismiss_interaction(self) -> None:
         if getattr(self, '_active_interaction', None) is None:
@@ -1711,25 +1761,50 @@ class Buddy(QObject):
     # -- Phase 6: Freundschaft, Fokus, Lernkarten, Fotobox & Notizen ------------------
     def _award_friendship(self, kind: str) -> tuple[int, bool, int]:
         try:
-            from fun import LEVEL_NAMES, LEVEL_REWARDS, add_friendship_points
+            from fun import add_friendship_points
             from memory_store import get_memory_store
             store = get_memory_store()
             pts_added, did_lvl_up, new_lvl = add_friendship_points(store, kind)
-            dialog = getattr(self, '_character_dialog', None)
-            if pts_added and dialog is not None and dialog.isVisible():
-                dialog.refresh_all()
-            if did_lvl_up:
-                self.pet.celebrate_confetti(5.0)
-                lvl_title = LEVEL_NAMES.get(new_lvl, "Freunde")
-                reward_title, _ = LEVEL_REWARDS.get(new_lvl, ("", None))
-                rew_text = f" Belohnung freigeschaltet: {reward_title}! 🎁" if reward_title else ""
-                msg = f"Level {new_lvl}! Wir sind jetzt {lvl_title}, {self.user_name()} 💖{rew_text}"
-                self._say(msg, 6000)
-                self.brain.record_assistant_message(msg)
+            QTimer.singleShot(0, self._refresh_friendship_progress)
             return pts_added, did_lvl_up, new_lvl
         except Exception as exc:
             print(f"[friendship] Fehler beim Vergeben von Punkten: {exc}")
             return 0, False, 1
+
+    def _refresh_friendship_progress(self) -> None:
+        from fun import get_level_name, get_level_reward, level_for
+        from memory_store import get_memory_store
+        try:
+            points = get_memory_store().get_friendship_points()
+            old_points = self._last_friendship_points
+            if points != old_points:
+                self._last_friendship_points = points
+                new_lvl, _ = level_for(points)
+                old_lvl, _ = level_for(old_points)
+                dialog = getattr(self, '_character_dialog', None)
+                if dialog is not None and dialog.isVisible():
+                    dialog.refresh_all()
+                if points < old_points:
+                    self._pending_friendship_level = None
+                elif new_lvl > old_lvl:
+                    self._pending_friendship_level = new_lvl
+            new_lvl = getattr(self, '_pending_friendship_level', None)
+            if new_lvl is not None:
+                if (self.brain.busy or self.brain.pending_action or self.input.isVisible()
+                        or self.update_prompt.isVisible() or getattr(self, '_active_interaction', None)
+                        or getattr(self, '_focus_mode', False) or not self.pet.isVisible()
+                        or QApplication.activeModalWidget() is not None):
+                    return
+                self._pending_friendship_level = None
+                self.pet.celebrate_confetti(5.0)
+                lvl_title = get_level_name(new_lvl)
+                reward_title, _ = get_level_reward(new_lvl)
+                rew_text = f" Belohnung freigeschaltet: {reward_title}! 🎁" if reward_title else ""
+                msg = f"Level {new_lvl}! Wir sind jetzt {lvl_title}, {self.user_name()} 💖{rew_text}"
+                self._say(msg, 6000)
+                self.brain.record_assistant_message(msg)
+        except Exception as exc:
+            print(f"[friendship] Fortschritt konnte nicht aktualisiert werden: {exc}")
 
     def open_character_tree(self) -> None:
         self._dismiss_interaction()
@@ -1834,7 +1909,7 @@ class Buddy(QObject):
         from fun import add_friendship_points
         try:
             store = get_memory_store()
-            add_friendship_points(store, "treat")
+            add_friendship_points(store, "yarn")
             record_achievement_event(store, "yarn_catches", 1)
         except Exception:
             pass
@@ -1853,8 +1928,9 @@ class Buddy(QObject):
             self._say('Der Hintergrund wird bereits umgestellt. Einen Moment bitte.', 4000)
             return
         from wallpaper_worker import WallpaperWorker
+        from memory_store import get_memory_store
         self._say('Ich richte das Zimmer ein…' if activate else 'Ich stelle deinen Hintergrund wieder her…', 5000)
-        worker = WallpaperWorker(self.cfg, activate, parent=self)
+        worker = WallpaperWorker(self.cfg, activate, store=get_memory_store(), parent=self)
         self._wallpaper_worker = worker
         dialog = getattr(self, '_character_dialog', None)
         if dialog is not None and dialog.isVisible():
@@ -2627,6 +2703,9 @@ class Buddy(QObject):
             self._chatter.start(random.randint(90, 180) * 1000)
 
     def _on_chatter(self) -> None:
+        if self.update_prompt.isVisible() or self.interaction_card.isVisible():
+            self._schedule_chatter()
+            return
         if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg):
             self._schedule_chatter()
             return
