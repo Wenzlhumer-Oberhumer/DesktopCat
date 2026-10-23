@@ -116,6 +116,7 @@ class TTSManager(QObject):
 
         self._player.playbackStateChanged.connect(self._on_playback_state_changed)
 
+        self._lock = threading.Lock()
         self._is_speaking = False
         self._current_file: Optional[str] = None
         self._workers: list = []          # laufende Edge-Worker festhalten (sonst "Destroyed while running")
@@ -124,7 +125,8 @@ class TTSManager(QObject):
         self._stop_event = threading.Event()
 
     def is_speaking(self) -> bool:
-        return self._is_speaking
+        with self._lock:
+            return self._is_speaking
 
     def set_volume(self, volume: float) -> None:
         """Lautstärke 0.0 bis 1.0."""
@@ -133,12 +135,20 @@ class TTSManager(QObject):
     @pyqtSlot(QMediaPlayer.PlaybackState)
     def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
         if state == QMediaPlayer.PlaybackState.PlayingState:
-            if not self._is_speaking:
-                self._is_speaking = True
+            should_emit = False
+            with self._lock:
+                if not self._is_speaking:
+                    self._is_speaking = True
+                    should_emit = True
+            if should_emit:
                 self.speaking_started.emit()
         elif state == QMediaPlayer.PlaybackState.StoppedState:
-            if self._is_speaking:
-                self._is_speaking = False
+            should_emit = False
+            with self._lock:
+                if self._is_speaking:
+                    self._is_speaking = False
+                    should_emit = True
+            if should_emit:
                 self.speaking_finished.emit()
             self._cleanup_file()
 
@@ -155,10 +165,21 @@ class TTSManager(QObject):
         self._stop_event.set()
         if self._player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
             self._player.stop()
-        if self._is_speaking:
-            self._is_speaking = False
+        should_emit = False
+        with self._lock:
+            if self._is_speaking:
+                self._is_speaking = False
+                should_emit = True
+        if should_emit:
             self.speaking_finished.emit()
         self._cleanup_file()
+        active_workers = []
+        for w in self._workers:
+            if w.isFinished():
+                w.deleteLater()
+            else:
+                active_workers.append(w)
+        self._workers = active_workers
 
     def speak(self, text: str, cfg: Optional[dict] = None) -> None:
         """Liest den übergebenen Text vor. Prüft voice.enabled, nutzt Edge-TTS oder SAPI 5."""
@@ -196,7 +217,13 @@ class TTSManager(QObject):
         worker.text = clean
         worker.finished_file.connect(self._on_edge_success)
         worker.failed.connect(self._on_edge_failed)
-        self._workers = [w for w in self._workers if not w.isFinished()] + [worker]
+        active_workers = []
+        for w in self._workers:
+            if w.isFinished():
+                w.deleteLater()
+            else:
+                active_workers.append(w)
+        self._workers = active_workers + [worker]
         worker.start()
 
     @pyqtSlot(str)
@@ -230,7 +257,8 @@ class TTSManager(QObject):
                 pythoncom.CoInitialize()
                 try:
                     speaker = win32com.client.Dispatch("SAPI.SpVoice")
-                    self._is_speaking = True
+                    with self._lock:
+                        self._is_speaking = True
                     self.speaking_started.emit()
                     # Synchron sprechen
                     speaker.Speak(text)
@@ -239,8 +267,13 @@ class TTSManager(QObject):
             except Exception as e:
                 self.speaking_error.emit(f"SAPI 5 Error: {e}")
             finally:
-                self._is_speaking = False
-                self.speaking_finished.emit()
+                should_emit = False
+                with self._lock:
+                    if self._is_speaking:
+                        self._is_speaking = False
+                        should_emit = True
+                if should_emit:
+                    self.speaking_finished.emit()
 
         self._sapi_thread = threading.Thread(target=_run_sapi, daemon=True)
         self._sapi_thread.start()

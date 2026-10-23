@@ -38,6 +38,7 @@ class FloatingCard(QWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._anchor = QPoint(0, 0)
         self._arrow_x = 40.0
+        self._arrow_top: bool = False
         self._fading_out = False
         self._fade = QPropertyAnimation(self, b"windowOpacity", self)
         self._fade.finished.connect(self._on_fade_finished)
@@ -45,6 +46,8 @@ class FloatingCard(QWidget):
 
     # -- Geometrie -------------------------------------------------------------------
     def body_rect(self) -> QRectF:
+        if self._arrow_top:
+            return QRectF(self.M, self.M + self.ARROW_H, self.width() - 2 * self.M, self.height() - 2 * self.M - self.ARROW_H)
         return QRectF(self.M, self.M, self.width() - 2 * self.M, self.height() - 2 * self.M - self.ARROW_H)
 
     def set_content_size(self, cw: int, ch: int) -> None:
@@ -68,7 +71,13 @@ class FloatingCard(QWidget):
         left = self._anchor.x() - w // 2
         left = max(geo.left() + 2, min(left, geo.right() - w - 2))
         top = self._anchor.y() - (h - self.M)
-        top = max(geo.top() + 2, top)
+        if top < geo.top() + 4:
+            # Cat is near the top of the screen: flip bubble below the cat's head/body so it doesn't cover the cat's face!
+            self._arrow_top = True
+            top = min(geo.bottom() - h - 4, self._anchor.y() + 36)
+        else:
+            self._arrow_top = False
+            top = max(geo.top() + 2, top)
         self._arrow_x = float(max(self.M + self.RADIUS + 8, min(self._anchor.x() - left, w - self.M - self.RADIUS - 8)))
         if self.pos() != QPoint(left, top):
             self.move(left, top)
@@ -130,11 +139,19 @@ class FloatingCard(QWidget):
 
         path = QPainterPath()
         path.addRoundedRect(body, r, r)
-        ax, b = self._arrow_x, body.bottom()
-        arrow = QPainterPath(QPointF(ax - 11, b - 1))
-        arrow.quadTo(QPointF(ax - 2.5, b + 1.5), QPointF(ax, b + self.ARROW_H))
-        arrow.quadTo(QPointF(ax + 2.5, b + 1.5), QPointF(ax + 11, b - 1))
-        arrow.closeSubpath()
+        ax = self._arrow_x
+        if self._arrow_top:
+            t = body.top()
+            arrow = QPainterPath(QPointF(ax - 11, t + 1))
+            arrow.quadTo(QPointF(ax - 2.5, t - 1.5), QPointF(ax, t - self.ARROW_H))
+            arrow.quadTo(QPointF(ax + 2.5, t - 1.5), QPointF(ax + 11, t + 1))
+            arrow.closeSubpath()
+        else:
+            b = body.bottom()
+            arrow = QPainterPath(QPointF(ax - 11, b - 1))
+            arrow.quadTo(QPointF(ax - 2.5, b + 1.5), QPointF(ax, b + self.ARROW_H))
+            arrow.quadTo(QPointF(ax + 2.5, b + 1.5), QPointF(ax + 11, b - 1))
+            arrow.closeSubpath()
         path = path.united(arrow)
 
         grad = QLinearGradient(0, body.top(), 0, body.bottom())
@@ -196,8 +213,9 @@ class SpeechBubble(FloatingCard):
         rect = fm.boundingRect(QRect(0, 0, self.MAX_TEXT_W, 4000), int(Qt.TextFlag.TextWordWrap), text)
         tw, th = max(rect.width() + 6, 60), rect.height() + 4
         self.label.setText(text)
-        self.label.setGeometry(self.M + self.PAD_X, self.M + self.PAD_Y, tw, th)
         self.set_content_size(tw + 2 * self.PAD_X, th + 2 * self.PAD_Y)
+        y_off = self.M + self.PAD_Y + (self.ARROW_H if self._arrow_top else 0)
+        self.label.setGeometry(self.M + self.PAD_X, y_off, tw, th)
 
         self._hide_timer.stop()
         if not self.isVisible():
@@ -259,16 +277,16 @@ class SpeechBubble(FloatingCard):
         btn_h = 28
         content_h = th + 12 + btn_h
 
-        self.label.setGeometry(self.M + self.PAD_X, self.M + self.PAD_Y, content_w, th)
+        self.set_content_size(content_w + 2 * self.PAD_X, content_h + 2 * self.PAD_Y)
+        y_off = self.M + self.PAD_Y + (self.ARROW_H if self._arrow_top else 0)
+        self.label.setGeometry(self.M + self.PAD_X, y_off, content_w, th)
 
         # Buttons unten anordnen
         bx = self.M + self.PAD_X
-        by = self.M + self.PAD_Y + th + 10
+        by = y_off + th + 10
         for btn, bw in zip(self._buttons, btn_widths):
             btn.setGeometry(bx, by, bw, btn_h)
             bx += bw + 8
-
-        self.set_content_size(content_w + 2 * self.PAD_X, content_h + 2 * self.PAD_Y)
 
         self._hide_timer.stop()
         if not self.isVisible():
@@ -300,6 +318,14 @@ class SpeechBubble(FloatingCard):
         super().keyPressEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        if self._actions_active:
+            return
+        self._hide_timer.stop()
+        self.fade_out(150)
+        if getattr(self, "click_opens_reply", False):
+            self.clicked.emit()
+
+    def mouseDoubleClickEvent(self, event) -> None:
         if self._actions_active:
             return
         self._hide_timer.stop()

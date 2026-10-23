@@ -13,9 +13,9 @@ import random
 import time
 from typing import Optional
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
-    QBrush, QColor, QLinearGradient, QPainter, QPainterPath, QPen, QRadialGradient,
+    QBrush, QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QRadialGradient,
 )
 from PyQt6.QtWidgets import QApplication, QWidget
 
@@ -56,13 +56,22 @@ class BubbleWidget(QWidget):
         self.timer.timeout.connect(self._step)
         self.timer.start(20)
 
+    def _pop(self) -> None:
+        self.timer.stop()
+        self.close()
+        self.deleteLater()
+
+    def _check_bounds(self) -> None:
+        if self.py < getattr(self, 'top_edge', 0) - 80:
+            self.timer.stop()
+            self.close()
+            self.deleteLater()
+
     def _step(self) -> None:
         now = time.monotonic()
         if self._popping:
             if now - self._pop_t > 0.18:
-                self.timer.stop()
-                self.close()
-                self.deleteLater()
+                self._pop()
             else:
                 self.update()
             return
@@ -73,10 +82,7 @@ class BubbleWidget(QWidget):
         self.move(int(self.px), int(self.py))
 
         # Oben aus dem Bildschirm geflogen
-        if self.py < getattr(self, 'top_edge', 0) - 80:
-            self.timer.stop()
-            self.close()
-            self.deleteLater()
+        self._check_bounds()
 
     def mousePressEvent(self, e) -> None:
         if not self._popping:
@@ -143,7 +149,7 @@ class BubblePopGameManager:
         self.active_bubbles: list[BubbleWidget] = []
         self.cancel_callback = self.clear
 
-    def spawn_wave(self, count: int = 12, screen=None) -> None:
+    def spawn_wave(self, count: int = 8, screen=None) -> None:
         self.clear()
         screen = screen or QApplication.primaryScreen()
         if not screen:
@@ -368,3 +374,158 @@ class YarnBallWidget(QWidget):
         path.quadTo(w + 6, h - 4, w + 12, h - 16)
         p.setPen(QPen(QColor(230, 50, 70), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         p.drawPath(path)
+
+
+# ======================================================================================
+#  3. Laserpointer-Spiel (LaserPointerWidget & LaserPointerManager)
+# ======================================================================================
+class LaserPointerWidget(QWidget):
+    """32x32 rahmenloser, durchklickbarer Leuchtpunkt fuer den Laserpointer."""
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(
+            parent,
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowTransparentForInput,
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setFixedSize(32, 32)
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform)
+        cx, cy = 16.0, 16.0
+
+        # Weicher, strahlender Laser-Halo (Rosa / Rot)
+        halo = QRadialGradient(cx, cy, 14.0)
+        halo.setColorAt(0.0, QColor(255, 50, 90, 230))
+        halo.setColorAt(0.25, QColor(255, 30, 80, 160))
+        halo.setColorAt(0.60, QColor(255, 20, 60, 60))
+        halo.setColorAt(1.0, QColor(255, 10, 40, 0))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(halo))
+        p.drawEllipse(QPointF(cx, cy), 14.0, 14.0)
+
+        # Intensiver, heisser Laser-Kern (Weiss mit pinkem Schein)
+        core = QRadialGradient(cx, cy, 4.0)
+        core.setColorAt(0.0, QColor(255, 255, 255, 255))
+        core.setColorAt(0.55, QColor(255, 180, 200, 240))
+        core.setColorAt(1.0, QColor(255, 40, 80, 0))
+        p.setBrush(QBrush(core))
+        p.drawEllipse(QPointF(cx, cy), 4.5, 4.5)
+
+
+class LaserPointerManager(QObject):
+    """Verwaltet das Laserpointer-Minispiel, fuehrt den roten Laserpunkt und animiert die Katze."""
+
+    def __init__(self, pet_window, cfg=None):
+        super().__init__()
+        self.pet_window = pet_window
+        self.cfg = cfg
+        self._active: bool = False
+        self._laser_widget: Optional[LaserPointerWidget] = None
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)
+        self._timer.timeout.connect(self._step)
+        self._last_sound_t = 0.0
+        self._end_time = 0.0
+
+    @property
+    def active(self) -> bool:
+        return self._active
+
+    @active.setter
+    def active(self, val: bool) -> None:
+        self._active = bool(val)
+
+    def start(self, duration_s: float = 25.0) -> None:
+        """Startet den Laserpointer fuer die angegebene Dauer."""
+        self._active = True
+        self._end_time = time.monotonic() + duration_s
+        self._last_sound_t = 0.0
+
+        if self._laser_widget is None:
+            self._laser_widget = LaserPointerWidget()
+
+        pos = QCursor.pos()
+        self._laser_widget.move(pos.x() - 16, pos.y() - 16)
+        self._laser_widget.show()
+
+        sound_effects.play_sound("chirp", self.cfg)
+
+        if self.pet_window is not None:
+            self.pet_window._ball_target_x = pos.x()
+            if hasattr(self.pet_window, "chase_mouse"):
+                self.pet_window.chase_mouse(duration_s)
+
+        self._timer.start(16)
+
+    def stop(self) -> None:
+        """Stoppt den Laserpointer, raeumt das Widget auf und beendet die Verfolgung."""
+        self._active = False
+        self._timer.stop()
+
+        if self._laser_widget is not None:
+            self._laser_widget.hide()
+            self._laser_widget.close()
+            self._laser_widget.deleteLater()
+            self._laser_widget = None
+
+        if self.pet_window is not None:
+            self.pet_window._ball_target_x = None
+            if hasattr(self.pet_window, "stop_ball_chase"):
+                self.pet_window.stop_ball_chase()
+            elif hasattr(self.pet_window, "calm"):
+                self.pet_window.calm()
+
+    def toggle(self) -> None:
+        """Schaltet den Laserpointer an oder aus."""
+        if self._active:
+            self.stop()
+        else:
+            self.start()
+
+    def _step(self) -> None:
+        if not self._active:
+            return
+
+        now = time.monotonic()
+        if now >= self._end_time:
+            self.stop()
+            return
+
+        pos = QCursor.pos()
+        cur_x, cur_y = pos.x(), pos.y()
+
+        if self._laser_widget is not None:
+            self._laser_widget.move(cur_x - 16, cur_y - 16)
+
+        if self.pet_window is not None:
+            self.pet_window._ball_target_x = cur_x
+
+            # Pruefe Distanz Katze zu Laserpointer X
+            pet_w = float(self.pet_window.width()) if hasattr(self.pet_window, "width") else 128.0
+            pet_px = float(getattr(self.pet_window, "_px", 0.0))
+            cat_center_x = pet_px + pet_w / 2.0
+            dist_x = abs(cat_center_x - cur_x)
+
+            if dist_x <= 35.0:
+                # Niedliche Hopser/Sprung-Reaktion (Pounce)
+                if hasattr(self.pet_window, "_hop_t"):
+                    self.pet_window._hop_t = now
+                    if hasattr(self.pet_window, "_anim_timer") and not self.pet_window._anim_timer.isActive():
+                        self.pet_window._anim_timer.start(16)
+
+                # Sound mit 2.5s Cooldown
+                if now - self._last_sound_t > 2.5:
+                    self._last_sound_t = now
+                    snd = random.choice(["squeak", "meow_purr"])
+                    sound_effects.play_sound(snd, self.cfg)
+                    if hasattr(self.pet_window, "store") and self.pet_window.store is not None:
+                        try:
+                            add_friendship_points(self.pet_window.store, "laser_pounce")
+                        except Exception:
+                            pass

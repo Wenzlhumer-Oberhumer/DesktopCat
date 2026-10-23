@@ -40,6 +40,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "de": "🌳  Charakter-Baum & Tamagotchi",
         "en": "🌳  Character Tree & Tamagotchi",
     },
+    "menu.laser": {
+        "de": "🔴 Laserpointer jagen",
+        "en": "🔴 Chase laser pointer",
+    },
+    "menu.ghost_mode": {
+        "de": "👻 Durchklick-Modus (Geist)",
+        "en": "👻 Click-through mode (Ghost)",
+    },
     "care.hunger": {
         "de": "Hunger & Appetit",
         "en": "Hunger & Appetite",

@@ -1191,8 +1191,8 @@ _WINDOW_ALIASES = {
 }
 
 
-def close_window(name: Optional[str] = None) -> ToolResult:
-    """Schiebt ein Fenster animiert aus dem Bildschirm und schliesst es (ohne Name: das oberste Fenster)."""
+def close_window(title_query: Optional[str] = None, name: Optional[str] = None) -> ToolResult:
+    """Schiebt ein Fenster animiert aus dem Bildschirm und minimiert es (ohne Name: das oberste Fenster)."""
     user = _user_name()
     user32 = ctypes.windll.user32
     windows = get_open_windows()
@@ -1200,7 +1200,8 @@ def close_window(name: Optional[str] = None) -> ToolResult:
         return ToolResult(False, f"Ich sehe gerade keine offenen Fenster zum Schliessen, {user}! \U0001F43E")
 
     target = None
-    q = (name or "").strip().lower()
+    query = title_query if title_query is not None else name
+    q = (query or "").strip().lower()
     if q:
         candidates = [q] + _WINDOW_ALIASES.get(q, [])
         target = next((w for w in windows if any(c in w["title"].lower() or c in w["process"].lower() for c in candidates)), None)
@@ -1210,25 +1211,28 @@ def close_window(name: Optional[str] = None) -> ToolResult:
         target = windows[0]
     if target is None:
         sample = ", ".join(f"„{w['title'][:25]}“" for w in windows[:4])
-        return ToolResult(False, f"Konnte kein Fenster fuer „{name}“ finden \U0001F914 Offen sind z. B.: {sample}")
+        return ToolResult(False, f"Konnte kein Fenster fuer „{query}“ finden \U0001F914 Offen sind z. B.: {sample}")
 
-    hwnd, title = target["hwnd"], target["title"]
-    if user32.IsZoomed(hwnd):
-        user32.ShowWindow(hwnd, 9)               # SW_RESTORE, sonst greift SetWindowPos nicht
+    target_hwnd, title = target["hwnd"], target["title"]
+    if user32.IsZoomed(target_hwnd):
+        user32.ShowWindow(target_hwnd, 9)               # SW_RESTORE, sonst greift SetWindowPos nicht
         time.sleep(0.04)
     r = _RECT()
-    user32.GetWindowRect(hwnd, ctypes.byref(r))
+    user32.GetWindowRect(target_hwnd, ctypes.byref(r))
     x, y, w, h = r.left, r.top, r.right - r.left, r.bottom - r.top
     screen_w = user32.GetSystemMetrics(0)
     dist = max(screen_w + 60, x + screen_w) - x
     frames = 28
     for i in range(1, frames + 1):               # beschleunigt nach rechts aus dem Bildschirm
-        user32.SetWindowPos(hwnd, 0, int(x + dist * (i / frames) ** 2.2), int(y), w, h, 0x0004 | 0x0010)
+        user32.SetWindowPos(target_hwnd, 0, int(x + dist * (i / frames) ** 2.2), int(y), w, h, 0x0004 | 0x0010)
         time.sleep(0.015)
-    user32.PostMessageW(hwnd, 0x0010, 0, 0)      # WM_CLOSE (Programme duerfen noch "Speichern?" fragen)
-    time.sleep(0.15)
-    short = title if len(title) <= 35 else f"{title[:32]}..."
-    return ToolResult(True, f"Wuuusch! „{short}“ schwungvoll aus dem Bildschirm geschoben und geschlossen! \U0001F4A8✨")
+    # Statt Schliessen: Position wiederherstellen und sauber minimieren
+    user32.SetWindowPos(target_hwnd, 0, int(x), int(y), w, h, 0x0004 | 0x0010)
+    time.sleep(0.04)
+    user32.ShowWindow(target_hwnd, 6)            # SW_MINIMIZE = 6
+    time.sleep(0.05)
+    matched_title = title if len(title) <= 35 else f"{title[:32]}..."
+    return ToolResult(True, f"Ich habe das Fenster '{matched_title}' für dich zur Seite geschoben und minimiert! 🐾")
 
 
 # ======================================================================================

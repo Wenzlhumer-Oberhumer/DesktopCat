@@ -25,8 +25,8 @@ DEFAULTS: dict[str, Any] = {
         "speed": 90,            # Pixel pro Sekunde
         "scale": 1.0,
         "wander": True,
-        "wander_min_s": 5,
-        "wander_max_s": 10,
+        "wander_min_s": 15,
+        "wander_max_s": 32,
         "chatter": True,        # gelegentliche Zwischenrufe
         "bubble_seconds": 4.0,
         "opacity": 1.0,         # Deckkraft (0.3 - 1.0)

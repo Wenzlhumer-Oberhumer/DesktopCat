@@ -184,6 +184,18 @@ class Pose:
     typing: float = 0.0
     bell: float = 0.0
     shadow: float = 1.0
+    blink_amount: float = 0.0       # 0.0 (open) .. 1.0 (closed)
+    paw_lx: float = 0.0             # horizontal step offset left front paw
+    paw_rx: float = 0.0             # horizontal step offset right front paw
+    hind_l: float = 0.0             # vertical lift left hind paw
+    hind_r: float = 0.0             # vertical lift right hind paw
+    loaf: float = 0.0               # 0.0..1.0 cat loaf sleeping posture
+    groom_phase: float = 0.0        # >0 when grooming/washing face with paw
+    stretch_phase: float = 0.0      # >0 when stretching
+    pounce_wiggle: float = 0.0      # butt-wiggle before pouncing
+    wave_angle: Optional[float] = None # angle for integrated wave / highfive paw
+    mouth_open: float = 0.0         # smooth jaw openness 0.0..1.0
+    petting_glow: float = 0.0       # 0.0..1.0 hover-petting bliss intensity
     # Effekte (None = aus, sonst Zeitwert)
     zzz: Optional[float] = None
     dots: Optional[float] = None
@@ -214,6 +226,8 @@ class PoseContext:
     hearts_age: Optional[float] = None
     happy: bool = False          # Klick-Freude
     speaking: bool = False       # Mundbewegung beim Sprechen (v3.0.0 Lip-Sync)
+    wave_angle: Optional[float] = None
+    petting_glow: float = 0.0
 
 
 def _clamp(v, lo, hi):
@@ -225,16 +239,27 @@ def compute_pose(c: PoseContext) -> Pose:
     p = Pose(look=c.look)
     breath = math.sin(t * math.tau / 2.8)
 
+    def blink_curve() -> float:
+        ph1 = t % 4.3
+        if ph1 < 0.16:
+            return math.sin((ph1 / 0.16) * math.pi)
+        ph2 = (t + 1.9) % 9.1
+        if ph2 < 0.15:
+            return math.sin((ph2 / 0.15) * math.pi)
+        return 0.0
+
+    p.blink_amount = blink_curve()
+
     def blink_state() -> bool:
-        return (t % 4.3) < 0.13 or ((t + 1.9) % 9.1) < 0.12
+        return p.blink_amount > 0.65
 
     def ear_flick():
         ph = (t + 2.0) % 6.7
         return math.sin(ph / 0.28 * math.tau) * 11 if ph < 0.28 else 0.0
 
     if k == "idle":
-        p.sy = 1 + 0.018 * breath
-        p.sx = 1 - 0.008 * breath
+        p.sy = 1 + 0.020 * breath
+        p.sx = 1 - 0.009 * breath
         p.head_dy = -0.9 * breath
         p.head_dx = c.look[0] * 2.2
         p.tail = math.sin(t * 1.6) * 0.55
@@ -242,14 +267,26 @@ def compute_pose(c: PoseContext) -> Pose:
         p.bell = 0.6 * breath
         p.eyes = "blink" if blink_state() else "open"
         p.mouth = "w"
+        if c.age > 4.0 and not getattr(c, "speaking", False) and not c.happy and getattr(c, "petting_glow", 0.0) <= 0 and (t % 22.0) < 2.6:
+            gp = (t % 22.0) / 2.6
+            p.groom_phase = math.sin(gp * math.pi * 4)
+            p.head_rot = 10.0 + 4.0 * math.sin(gp * math.pi * 4)
+            p.head_dy = 2.5
+            p.eyes = "happy"
+            p.blush = 0.65
 
     elif k in ("walk_right", "walk_left"):
         ph = t * math.tau * 2.7
         s = math.sin(ph)
+        c_ph = math.cos(ph)
         p.dy = -abs(s) * 3.6
         p.rot = s * 2.8
-        p.paw_l = max(0.0, s) * 5.5
-        p.paw_r = max(0.0, -s) * 5.5
+        p.paw_lx = c_ph * 5.8
+        p.paw_rx = -c_ph * 5.8
+        p.paw_l = max(0.0, s) * 6.0
+        p.paw_r = max(0.0, -s) * 6.0
+        p.hind_l = max(0.0, -s) * 4.5
+        p.hind_r = max(0.0, s) * 4.5
         p.head_dx = 5.0
         p.head_rot = -s * 2.0
         p.look = (0.8, c.look[1] * 0.5)
@@ -264,18 +301,40 @@ def compute_pose(c: PoseContext) -> Pose:
 
     elif k == "sleep":
         slow = math.sin(t * math.tau / 4.2)
-        p.sy = 0.93 + 0.025 * slow
-        p.sx = 1.03
-        p.head_dy = 8 + 1.2 * slow
-        p.head_dx = -3
-        p.head_rot = -8
+        p.loaf = 1.0
+        p.sy = 0.84 + 0.024 * slow
+        p.sx = 1.10 - 0.014 * slow
+        p.dy = 5.5
+        p.head_dy = 13.5 + 1.2 * slow
+        p.head_dx = -3.0
+        p.head_rot = -11.0
         p.eyes = "sleep"
         p.mouth = "w"
         p.tail_curl = True
-        p.ear_l, p.ear_r = -12, 12
-        p.blush = 0.65
+        p.ear_l, p.ear_r = -14, 14
+        p.blush = 0.68
         p.zzz = t
         p.look = (0, 0)
+
+    elif k == "groom":
+        p.groom_phase = math.sin(t * 8.0)
+        p.head_rot = 10.0 + 4.0 * math.sin(t * 8.0)
+        p.head_dy = 2.5
+        p.eyes = "happy"
+        p.blush = 0.65
+        p.mouth = "w"
+        p.tail = math.sin(t * 1.5) * 0.4
+        p.look = (0, 0)
+
+    elif k == "stretch":
+        p.stretch_phase = math.sin(min(1.0, c.age / 1.4) * math.pi)
+        p.sy = 1.0 - 0.14 * p.stretch_phase
+        p.sx = 1.0 + 0.14 * p.stretch_phase
+        p.head_dy = 6.0 * p.stretch_phase
+        p.eyes = "happy"
+        p.mouth = "o" if p.stretch_phase > 0.5 else "w"
+        p.tail = 0.5 + 0.3 * p.stretch_phase
+        p.blush = 0.6
 
     elif k in ("dragged", "falling"):
         if k == "dragged":
@@ -416,6 +475,19 @@ def compute_pose(c: PoseContext) -> Pose:
 
     p.t = t
 
+    p.wave_angle = getattr(c, "wave_angle", None)
+    p.petting_glow = getattr(c, "petting_glow", 0.0)
+    if p.petting_glow > 0.05:
+        g = _clamp(p.petting_glow, 0.0, 1.0)
+        p.eyes = "happy"
+        p.mouth = "smile" if g > 0.6 else "w"
+        p.blush = max(p.blush, 0.55 + 0.35 * g)
+        p.head_rot += math.sin(t * 7.0) * 5.5 * g
+        p.head_dy += 2.0 * g
+        p.sy *= (1.0 - 0.04 * g)
+        p.sx *= (1.0 + 0.03 * g)
+        p.tail = math.sin(t * 5.0) * 0.85
+
     # Klick-Reaktion: huepft, Herzchen-Augen, laechelt, schnurrt (Vibration)
     if c.happy:
         p.eyes = "heart"
@@ -426,7 +498,7 @@ def compute_pose(c: PoseContext) -> Pose:
 
     # v3.0.0 Lip-Sync beim Sprechen
     if getattr(c, "speaking", False):
-        # Rhythmisches Öffnen/Schließen (~3.5 Hz)
+        p.mouth_open = (math.sin(t * 22.0) + 1.0) * 0.5
         cycle = (math.sin(t * 22.0) + 1.0) * 0.5
         if cycle < 0.33:
             p.mouth = "w"
@@ -491,8 +563,20 @@ def _paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
         p.drawEllipse(QRectF(dx - 1.1, -4.2 if dx == 0 else -3.6, 2.2, 2.2))
     p.restore()
 
+def _hind_paw(p: QPainter, cx: float, cy: float, rot: float = 0.0):
+    p.save()
+    p.translate(cx, cy)
+    p.rotate(rot)
+    p.setPen(_pen(OUTLINE, 2.0))
+    p.setBrush(WHITE_SHADE)
+    p.drawEllipse(QRectF(-7.5, -5.5, 15, 11))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor("#E8A6AF"))
+    p.drawEllipse(QRectF(-2.5, -0.5, 5, 3.8))
+    p.restore()
 
-def _draw_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: int):
+
+def _draw_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: int, blink_amount: float = 0.0):
     lx, ly = look
     if mode in ("open", "wide", "sad", "work"):
         rx, ry = 8.4, 10.4
@@ -500,7 +584,9 @@ def _draw_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: i
             rx, ry = 9.6, 11.8
         elif mode == "work":
             ry = 8.6
-        ex, ey = cx + lx * 2.6, cy + ly * 2.4
+        if blink_amount > 0.02:
+            ry = max(1.8, ry * (1.0 - 0.85 * blink_amount))
+        ex, ey = cx + lx * 1.8, cy + ly * 1.6
         # Iris (gelbgruen mit leichtem Verlauf)
         grad = QLinearGradient(ex, ey - ry, ex, ey + ry)
         grad.setColorAt(0, EYE_IRIS)
@@ -513,13 +599,13 @@ def _draw_eye(p: QPainter, cx: float, cy: float, mode: str, look: tuple, side: i
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(EYE_PUPIL)
         prx, pry = rx * 0.68, ry * 0.72
-        p.drawEllipse(QRectF(ex - prx + lx * 0.6, ey - pry + ly * 0.6, prx * 2, pry * 2))
+        p.drawEllipse(QRectF(ex - prx + lx * 1.4, ey - pry + ly * 1.2, prx * 2, pry * 2))
 
         # Glanzpunkte
         p.setBrush(QColor("white"))
         big = 3.6 if mode != "wide" else 4.2
-        p.drawEllipse(QPointF(ex - 2.7 + lx * 0.8, ey - ry * 0.38), big, big)
-        p.drawEllipse(QPointF(ex + 3.2 + lx * 0.4, ey + ry * 0.36), 1.8, 1.8)
+        p.drawEllipse(QPointF(ex - 2.7 + lx * 1.4, ey - ry * 0.38 + ly * 1.2), big, big)
+        p.drawEllipse(QPointF(ex + 3.2 + lx * 0.7, ey + ry * 0.36 + ly * 0.6), 1.8, 1.8)
         if mode == "sad":
             p.setPen(_pen(OUTLINE, 2.4))
             inner = -side
@@ -585,15 +671,28 @@ def _draw_ear(p: QPainter, sign: int, rot: float):
     p.translate(bx, by)
     p.rotate(rot)
     p.translate(-bx, -by)
-    outer = QPolygonF([QPointF(sign * 43, -11), QPointF(sign * 38, -51), QPointF(sign * 9, -31)])
-    inner = QPolygonF([QPointF(sign * 37, -17), QPointF(sign * 34.5, -42), QPointF(sign * 17, -29)])
+
+    # Sanft gerundete Ohrenkontur mit QPainterPath und quadTo
+    outer_path = QPainterPath(QPointF(sign * 43, -11))
+    outer_path.quadTo(QPointF(sign * 42, -34), QPointF(sign * 38.5, -49))
+    outer_path.quadTo(QPointF(sign * 37, -52), QPointF(sign * 34.5, -48))
+    outer_path.quadTo(QPointF(sign * 20, -41), QPointF(sign * 9, -31))
+    outer_path.closeSubpath()
+
+    inner_path = QPainterPath(QPointF(sign * 37, -17))
+    inner_path.quadTo(QPointF(sign * 36.5, -31), QPointF(sign * 35, -40.5))
+    inner_path.quadTo(QPointF(sign * 33.5, -42.5), QPointF(sign * 32, -39.5))
+    inner_path.quadTo(QPointF(sign * 23, -35), QPointF(sign * 17, -29))
+    inner_path.closeSubpath()
+
     p.setPen(_pen(OUTLINE, 2.6))
     ear_color = ORANGE if sign < 0 else TABBY
     p.setBrush(ear_color)
-    p.drawPolygon(outer)
+    p.drawPath(outer_path)
+
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(PINK)
-    p.drawPolygon(inner)
+    p.drawPath(inner_path)
     # Helles Haarbueschel am Innenohr
     p.setBrush(WHITE_FUR)
     p.drawPolygon(QPolygonF([QPointF(sign * 26, -24), QPointF(sign * 33, -33), QPointF(sign * 28, -20)]))
@@ -667,16 +766,19 @@ def _draw_head(p: QPainter, pose: Pose):
         for s in (-1, 1):
             p.drawEllipse(QRectF(s * 31 - 8.5, 10.5, 17, 10))
 
-    # Schnurrhaare (weiss)
+    # Schnurrhaare (weiss, sanft geschwungen mit quadTo)
     p.setPen(_pen(WHISKER, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
     for s in (-1, 1):
-        for (y0, x1, y1) in ((13, 54, 8), (18, 56, 18), (23, 53, 28)):
-            p.drawLine(QPointF(s * 41, y0), QPointF(s * x1, y1))
+        for (y0, x1, y1, cdy) in ((13, 54, 8, 1.2), (18, 56, 18, 2.0), (23, 53, 28, 2.8)):
+            wpath = QPainterPath(QPointF(s * 41, y0))
+            wpath.quadTo(QPointF(s * (41 + x1) * 0.5, (y0 + y1) * 0.5 + cdy), QPointF(s * x1, y1))
+            p.drawPath(wpath)
 
     # Augen
     look = pose.look
     for s in (-1, 1):
-        _draw_eye(p, s * 19, 4, pose.eyes, look, s)
+        _draw_eye(p, s * 19, 4, pose.eyes, look, s, getattr(pose, "blink_amount", 0.0))
 
     if pose.glasses:
         p.setBrush(QColor(190, 225, 255, 70))
@@ -1056,18 +1158,42 @@ def draw_cat(p: QPainter, pose: Pose):
     if pose.tail_curl:
         _draw_tail(p, pose)
 
+    # Hinterpfötchen (wenn nicht Loaf/Laptop/Paws up)
+    if pose.loaf < 0.5 and not pose.laptop and not pose.paws_up:
+        _hind_paw(p, 51, 141 - pose.hind_l, -6)
+        _hind_paw(p, 109, 141 - pose.hind_r, 6)
+
     # Pfoetchen (vorn)
     if not pose.laptop:
-        if pose.paws_up:
+        if pose.wave_angle is not None or pose.groom_phase != 0.0:
+            _paw(p, 65, 143, 0)
+        elif pose.paws_up:
             _paw(p, 44, 100, -35)
             _paw(p, 116, 100, 35)
+        elif pose.loaf >= 0.5:
+            p.save()
+            p.translate(68, 144)
+            p.scale(0.9, 0.65)
+            _paw(p, 0, 0, 0)
+            p.restore()
+            p.save()
+            p.translate(92, 144)
+            p.scale(0.9, 0.65)
+            _paw(p, 0, 0, 0)
+            p.restore()
         else:
-            _paw(p, 65, 143 - pose.paw_l, 0)
-            _paw(p, 95, 143 - pose.paw_r, 0)
+            _paw(p, 65 + pose.paw_lx, 143 - pose.paw_l, -pose.paw_lx * 1.5)
+            _paw(p, 95 + pose.paw_rx, 143 - pose.paw_r, -pose.paw_rx * 1.5)
 
     # Halsband + Glocke entfernt (echte Katze traegt keins)
 
     _draw_head(p, pose)
+
+    if not pose.laptop:
+        if pose.wave_angle is not None:
+            _paw(p, 122, 86, pose.wave_angle)
+        elif pose.groom_phase != 0.0:
+            _paw(p, 110, 92 - abs(pose.groom_phase) * 10, -25 + pose.groom_phase * 18)
 
     if pose.laptop:
         lid = QRectF(47, 113, 66, 29)
@@ -4469,11 +4595,22 @@ def get_character_info(char_id: str) -> dict:
     return base
 
 
-def draw_character(p: QPainter, pose: Pose, char_id: str = "cat_mochi"):
+def draw_character(p: QPainter, pose: Pose, char_id: str = "cat_mochi", character_id: Optional[str] = None):
     """Malt die gewaehlte Figur samt Accessoires."""
-    draw_accessories(p, pose, char_id, layer="under")
-    get_character_info(char_id)["drawer"](p, pose)
-    draw_accessories(p, pose, char_id, layer="over")
+    cid = character_id if character_id is not None else char_id
+    draw_accessories(p, pose, cid, layer="under")
+    get_character_info(cid)["drawer"](p, pose)
+    if pose.wave_angle is not None and cid != "cat_mochi":
+        p.save()
+        p.translate(pose.dx, pose.dy)
+        px, py = pose.pivot
+        p.translate(px, py)
+        p.rotate(pose.rot)
+        p.scale(pose.sx, pose.sy)
+        p.translate(-px, -py)
+        _paw(p, 114, 90, pose.wave_angle)
+        p.restore()
+    draw_accessories(p, pose, cid, layer="over")
 
 
 def render_icon(size: int = 64, char_id: str = "cat_mochi") -> QPixmap:

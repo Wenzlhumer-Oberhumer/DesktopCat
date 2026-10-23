@@ -375,6 +375,8 @@ class MemoryStore:
             for name in badges:
                 if db.execute('INSERT OR IGNORE INTO play_badges VALUES(?)', (name,)).rowcount:
                     result['badges'].append(name)
+        if result.get('awarded'):
+            self._notify_friendship_changed()
         return result
 
     def get_play_records(self) -> list[dict]:
@@ -415,6 +417,22 @@ class MemoryStore:
                 "ON CONFLICT(id) DO UPDATE SET points = excluded.points, last_update = excluded.last_update",
                 (points, today_str),
             )
+        self._notify_friendship_changed()
+
+    def add_friendship_points(self, points: int) -> int:
+        today_str = datetime.date.today().isoformat()
+        with self._db() as db:
+            cur = db.execute("SELECT points FROM friendship WHERE id = 1")
+            row = cur.fetchone()
+            current = int(row["points"]) if row else 0
+            new_pts = current + points
+            db.execute(
+                "INSERT INTO friendship(id, points, last_update) VALUES(1, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET points = excluded.points, last_update = excluded.last_update",
+                (new_pts, today_str),
+            )
+        self._notify_friendship_changed()
+        return new_pts
 
     def award_friendship(self, kind: str, date_str: str, limit: int, points: int) -> tuple[int, int]:
         """Keep the daily allowance and point total in one serialized transaction."""
@@ -433,7 +451,10 @@ class MemoryStore:
             db.execute('INSERT INTO friendship(id, points, last_update) VALUES(1, ?, ?) '
                        'ON CONFLICT(id) DO UPDATE SET points = excluded.points, last_update = excluded.last_update',
                        (new, date_str))
-            return old, new
+        self._notify_friendship_changed()
+        return old, new
+
+    award_friendship_points = award_friendship
 
     def claim_achievement(self, ach_id: str, stat: str, target: int, reward: int) -> bool:
         """Unlock and pay a trophy once, even when two events arrive together."""
@@ -452,7 +473,8 @@ class MemoryStore:
             db.execute('INSERT INTO friendship(id, points, last_update) VALUES(1, ?, ?) '
                        'ON CONFLICT(id) DO UPDATE SET points = points + excluded.points, last_update = excluded.last_update',
                        (reward, datetime.date.today().isoformat()))
-            return True
+        self._notify_friendship_changed()
+        return True
 
     def get_daily_friendship_count(self, kind: str, date_str: str) -> int:
         with self._db() as db:
@@ -578,6 +600,15 @@ class MemoryStore:
 
     # Wird nach "Alles vergessen" aufgerufen (z. B. Verlauf im Speicher leeren). Kann aus Worker-Threads kommen.
     on_wipe: list = []
+    on_friendship_changed: list = []
+
+    @classmethod
+    def _notify_friendship_changed(cls) -> None:
+        for cb in list(cls.on_friendship_changed):
+            try:
+                cb()
+            except Exception:
+                pass
 
     def wipe_everything(self) -> None:
         """Loescht alle Tabellen restlos und fuehrt ein VACUUM aus."""
@@ -606,6 +637,7 @@ class MemoryStore:
                 cb()
             except Exception:
                 pass
+        self._notify_friendship_changed()
 
 
 _STORE: Optional[MemoryStore] = None

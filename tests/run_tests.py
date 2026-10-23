@@ -68,6 +68,7 @@ def main():
         "test_play_store",
         "test_play_stories",
         "test_game_room",
+        "test_v400_overhaul",
     ]
 
     total = 0

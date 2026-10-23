@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter
+from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QRegion
 from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from i18n import tr
@@ -59,8 +59,8 @@ WALKING = (PetState.WALK_LEFT, PetState.WALK_RIGHT)
 
 # Timer-Intervall pro Zustand (ms). Ruhige Zustaende laufen mit wenig FPS -> kaum CPU-Last.
 INTERVALS = {
-    PetState.IDLE: 80,
-    PetState.SLEEP: 125,
+    PetState.IDLE: 25,
+    PetState.SLEEP: 40,
     PetState.WORKING: 33,
     PetState.SAD: 40,
     PetState.SUCCESS: 16,
@@ -170,6 +170,8 @@ class PetWindow(QWidget):
     scripts_requested = pyqtSignal()
     home_mode_toggled = pyqtSignal(bool)
     restore_wallpaper_requested = pyqtSignal()
+    laser_requested = pyqtSignal()
+    ghost_mode_toggled = pyqtSignal(bool)
 
 
     GRAVITY = 2300.0
@@ -184,6 +186,7 @@ class PetWindow(QWidget):
         super().__init__(None, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMouseTracking(True)
         self.setWindowTitle("Desktop Cat")
         self.setWindowOpacity(max(0.3, min(1.0, float(cfg.get("pet.opacity", 1.0)))))
 
@@ -202,6 +205,12 @@ class PetWindow(QWidget):
         self._t0 = time.monotonic()
         self._last = self._t0
         self.facing = 1                      # 1 = rechts, -1 = links
+        self._display_facing: float = 1.0
+        self._petting_glow: float = 0.0
+        self._last_hover_pos: Optional[QPoint] = None
+        self._hover_stroke_dist: float = 0.0
+        self._last_hover_purr: float = -1e9
+        self._ghost_mode: bool = False
         self.frozen = False                  # z. B. waehrend die Eingabeleiste offen ist
         self._px = 0.0
         self._py = 0.0
@@ -259,6 +268,7 @@ class PetWindow(QWidget):
         self._wander_timer.timeout.connect(self._on_wander)
 
         self.apply_config()
+        self._update_hit_mask()
 
     # ==================================================================================
     #  Konfiguration / Geometrie
@@ -270,6 +280,7 @@ class PetWindow(QWidget):
             old_bottom = self._py + self.height()
             self.scale = scale
             self.setFixedSize(int(BASE * scale), int(BASE * scale))
+            self._update_hit_mask()
             if hasattr(self, "_placed"):
                 self._py = old_bottom - self.height()
                 self._apply_pos()
@@ -556,12 +567,34 @@ class PetWindow(QWidget):
         self._vx = (target_x - self._px) / max(.1, travel)
         self.set_state(PetState.FALLING)
 
-    def _x_bounds(self) -> tuple[float, float]:
+    def _x_bounds(self, multi_monitor: bool = True) -> tuple[float, float]:
+        if multi_monitor and len(QGuiApplication.screens()) > 1:
+            vr = self._virtual_rect()
+            return float(vr.left()), float(vr.right() + 1 - self.width())
         g = self._avail()
         return float(g.left()), float(g.right() + 1 - self.width())
 
     def _virtual_rect(self):
-        return QGuiApplication.primaryScreen().virtualGeometry()
+        primary = QGuiApplication.primaryScreen()
+        if primary is not None:
+            return primary.virtualGeometry()
+        return QRect(0, 0, 1920, 1080)
+
+    def _update_hit_mask(self) -> None:
+        """Setzt eine passgenaue Eingabemaske, damit Klicks auf transparente Ecken durchgehen."""
+        rect = QRect(int(18 * self.scale), int(16 * self.scale), int(124 * self.scale), int(138 * self.scale))
+        self.setMask(QRegion(rect, QRegion.RegionType.Ellipse))
+
+    def set_ghost_mode(self, enabled: bool) -> None:
+        """Aktiviert oder deaktiviert den Durchklick-Modus (Klicks gehen durch die Katze hindurch)."""
+        self._ghost_mode = bool(enabled)
+        was_visible = self.isVisible()
+        self.setWindowFlag(Qt.WindowType.WindowTransparentForInput, self._ghost_mode)
+        opacity = 0.55 if self._ghost_mode else float(self.cfg.get("pet.opacity", 1.0))
+        self.setWindowOpacity(opacity)
+        if was_visible:
+            self.show()
+        self.ghost_mode_toggled.emit(self._ghost_mode)
 
     def _apply_pos(self) -> None:
         self.move(round(self._px), round(self._py))
@@ -681,7 +714,7 @@ class PetWindow(QWidget):
         self._going_to_bed = False
         self.set_state(PetState.SLEEP)
         self._sleeping_in_bed = bed_visible
-        self._schedule_wander(random.uniform(14, 28))
+        self._schedule_wander(random.uniform(120, 240))
 
     # -- oeffentliche API fuer den Controller ---------------------------------------------
     def set_working(self) -> None:
@@ -732,10 +765,13 @@ class PetWindow(QWidget):
         else:
             self._schedule_wander()
 
-    def react_happy(self) -> None:
+    def react_happy(self, sound: str = "purr") -> None:
         """Klick-Reaktion: Huepfer + Herzchen."""
         self.wake()
-        sound_effects.play_sound("purr", self.cfg)
+        if not getattr(sound_effects, "SOUNDS", None):
+            sound_effects.init_sounds()
+        snd = sound if sound in sound_effects.SOUNDS else "purr"
+        sound_effects.play_sound(snd, self.cfg)
         now = time.monotonic()
         self._hop_t = now
         self._hearts_t = now
@@ -750,8 +786,8 @@ class PetWindow(QWidget):
     def _schedule_wander(self, delay_s: Optional[float] = None) -> None:
         if not self.isVisible():
             return
-        lo = float(self.cfg.get("pet.wander_min_s", 5))
-        hi = max(lo, float(self.cfg.get("pet.wander_max_s", 10)))
+        lo = float(self.cfg.get("pet.wander_min_s", 15))
+        hi = max(lo, float(self.cfg.get("pet.wander_max_s", 32)))
         self._wander_timer.start(int((delay_s if delay_s is not None else random.uniform(lo, hi)) * 1000))
 
     def _on_wander(self) -> None:
@@ -811,11 +847,12 @@ class PetWindow(QWidget):
             if self.state in (PetState.SUCCESS, PetState.SAD, PetState.PUSH):
                 self.set_state(PetState.IDLE)
 
-        if now < self._chase_until and not self.frozen and not self._dragging                 and self.state in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
+        if now < self._chase_until and not self.frozen and not self._dragging \
+                and self.state in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
             lo, hi = self._x_bounds()
             target_x = self._ball_target_x if self._ball_target_x is not None else QCursor.pos().x()
             self._walk_target = max(lo, min(hi, target_x - self.width() / 2))
-            if abs(self._walk_target - self._px) > 12:
+            if abs(self._walk_target - self._px) > 28:
                 self.set_state(PetState.WALK_RIGHT if self._walk_target > self._px else PetState.WALK_LEFT)
 
         s = self.state
@@ -843,20 +880,29 @@ class PetWindow(QWidget):
         if s == PetState.FLY and self._fly_target is not None:
             dx = self._fly_target.x() - self._px
             dy = self._fly_target.y() - self._py
-            self._look = (max(-1.0, min(1.0, dx / 200.0)), max(-1.0, min(1.0, dy / 200.0)))
+            tx, ty = max(-1.0, min(1.0, dx / 200.0)), max(-1.0, min(1.0, dy / 200.0))
         elif s in (PetState.IDLE, PetState.WALK_LEFT, PetState.WALK_RIGHT):
             c = QCursor.pos()
             hx = self._px + self.width() / 2
             hy = self._py + 76 * self.scale
-            self._look = (max(-1.0, min(1.0, (c.x() - hx) / 260.0)), max(-1.0, min(1.0, (c.y() - hy) / 260.0)))
+            tx, ty = max(-1.0, min(1.0, (c.x() - hx) / 260.0)), max(-1.0, min(1.0, (c.y() - hy) / 260.0))
         else:
-            self._look = (0.0, 0.0)
+            tx, ty = 0.0, 0.0
 
-        # Ruhige Zustaende: nach dem Huepfer wieder auf niedrige FPS zurueck
+        alpha = min(1.0, dt * 10.0)
+        self._look = (self._look[0] + (tx - self._look[0]) * alpha, self._look[1] + (ty - self._look[1]) * alpha)
+
+        turn_target = float(self.facing)
+        turn_alpha = min(1.0, dt * 12.0)
+        self._display_facing += (turn_target - self._display_facing) * turn_alpha
+
+        self._petting_glow = max(0.0, self._petting_glow - dt * 0.7)
+
+        # Ruhige Zustaende: nach dem Huepfer wieder auf Ziel-FPS zurueck
         if s == PetState.IDLE and self._hop_t is None and self._hearts_t is None and self._land_squash == 0:
             if self._anim_timer.interval() != INTERVALS[PetState.IDLE]:
                 self._anim_timer.setInterval(INTERVALS[PetState.IDLE])
-                self._anim_timer.setTimerType(Qt.TimerType.CoarseTimer)
+                self._anim_timer.setTimerType(Qt.TimerType.PreciseTimer)
 
         if self.sprites.usable:
             self.update()
@@ -871,17 +917,7 @@ class PetWindow(QWidget):
     @staticmethod
     def _signature(p) -> tuple:
         """Grob quantisierte Pose: gleiche Signatur = fuers Auge identisches Bild."""
-        def q(v, step):
-            return round(v / step)
-        if p.zzz is not None or p.dots is not None or p.sparkles is not None or p.hearts is not None \
-                or p.tear is not None:
-            return (object(),)               # laufende Effekte -> immer zeichnen
-        return (
-            q(p.dx, .35), q(p.dy, .35), q(p.rot, .4), q(p.sx, .006), q(p.sy, .006), q(p.head_dx, .35),
-            q(p.head_dy, .35), q(p.head_rot, .4), p.eyes, p.mouth, q(p.look[0], .2), q(p.look[1], .2),
-            q(p.tail, .1), q(p.paw_l, .4), q(p.paw_r, .4), q(p.ear_l, 1.0), q(p.ear_r, 1.0), q(p.bell, .4),
-            q(p.typing, .3), q(p.blush, .05), q(p.shadow, .05), p.laptop, p.tail_curl,
-        )
+        return (object(),)
 
     def _walk(self, dt: float) -> None:
         if self._going_to_bed:
@@ -925,7 +961,7 @@ class PetWindow(QWidget):
                 self.raise_()
                 self.set_state(PetState.SLEEP)
                 self._sleeping_in_bed = True
-                self._schedule_wander(random.uniform(14, 28))
+                self._schedule_wander(random.uniform(120, 240))
                 return
 
             self._apply_pos()
@@ -1017,13 +1053,33 @@ class PetWindow(QWidget):
         hearts_age = None
         if self._hearts_t is not None:
             hearts_age = (now - self._hearts_t) / 1.5
+        wave_angle = None
+        if now < self._trick_until:
+            wave_angle = 0.0 if self._trick_name == "highfive" else math.sin(now * 12.0) * 25.0
         look = self._look
         if self.facing < 0:
             look = (-look[0], look[1])
-        ctx = PoseContext(key=self.state.value, t=now - self._t0, age=now - self._state_since, look=look, hop=hop,
-                          squash=self._land_squash, hearts_age=hearts_age, happy=now < self._happy_until,
-                          speaking=self._is_speaking)
+        ctx_kwargs = dict(
+            key=self.state.value,
+            t=now - self._t0,
+            age=now - self._state_since,
+            look=look,
+            hop=hop,
+            squash=self._land_squash,
+            hearts_age=hearts_age,
+            happy=now < self._happy_until,
+            speaking=self._is_speaking,
+        )
+        if hasattr(PoseContext, "__dataclass_fields__"):
+            if "wave_angle" in PoseContext.__dataclass_fields__:
+                ctx_kwargs["wave_angle"] = wave_angle
+            if "petting_glow" in PoseContext.__dataclass_fields__:
+                ctx_kwargs["petting_glow"] = self._petting_glow
+        ctx = PoseContext(**ctx_kwargs)
         pose = compute_pose(ctx)
+        if wave_angle is not None:
+            setattr(pose, "wave_angle", wave_angle)
+        setattr(pose, "petting_glow", self._petting_glow)
         if now < self._trick_until:
             pose.paw_r = 25 if self._trick_name == 'highfive' else 18+8*math.sin(now*12)
             pose.eyes = 'happy'
@@ -1071,7 +1127,8 @@ class PetWindow(QWidget):
         p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
                          | QPainter.RenderHint.TextAntialiasing)
         p.scale(self.scale, self.scale)
-        flip = self.facing < 0
+        sx_turn = max(0.15, abs(self._display_facing))
+        flip = self._display_facing < 0
 
         if self.sprites.usable:
             hop = 0.0
@@ -1082,9 +1139,9 @@ class PetWindow(QWidget):
         else:
             pose = replace(self._pose) if self._pose is not None else self._build_pose(now)
             p.save()
-            if flip:
-                p.translate(BASE, 0)
-                p.scale(-1, 1)
+            p.translate(BASE / 2.0, 0)
+            p.scale((-1.0 if flip else 1.0) * sx_turn, 1.0)
+            p.translate(-BASE / 2.0, 0)
             # Effekte (Text, Herzen ...) duerfen nicht gespiegelt werden -> separat zeichnen
             effects = (pose.zzz, pose.dots, pose.sparkles, pose.hearts, getattr(pose, "confetti", None))
             if flip:
@@ -1095,20 +1152,6 @@ class PetWindow(QWidget):
             if flip:
                 pose.zzz, pose.dots, pose.sparkles, pose.hearts, pose.confetti = effects
                 _draw_effects(p, pose)
-
-        if now < self._trick_until:
-            # The raised paw remains visible even on characters with tiny/hidden feet.
-            p.save()
-            p.translate(120 if self.facing > 0 else 40, 62)
-            p.rotate(0 if self._trick_name == 'highfive' else math.sin(now*12)*25)
-            p.setPen(QColor('#76566c'))
-            p.setBrush(QColor('#ffdae5'))
-            p.drawEllipse(QRectF(-12, -5, 24, 23))
-            for x, y in ((-10, -11), (-3, -16), (5, -15), (11, -9)):
-                p.drawEllipse(QRectF(x-4, y-4, 8, 10))
-            p.setBrush(QColor('#c67b9a'))
-            p.drawEllipse(QRectF(-6, 2, 12, 10))
-            p.restore()
 
         # v3.0.0 Visueller Mikrofon-Indikator beim Push-to-Talk Zuhören
         if self._is_listening:
@@ -1178,8 +1221,29 @@ class PetWindow(QWidget):
             self._samples.clear()
             e.accept()
 
+    def leaveEvent(self, e) -> None:
+        self._last_hover_pos = None
+        self._hover_stroke_dist = 0.0
+        super().leaveEvent(e)
+
     def mouseMoveEvent(self, e) -> None:
         if not self._pressed:
+            gp = e.globalPosition().toPoint()
+            if self._last_hover_pos is not None:
+                d = (gp - self._last_hover_pos).manhattanLength()
+                if 2 <= d <= 60:
+                    self._hover_stroke_dist += d
+                    if self._hover_stroke_dist > 85.0:
+                        self._hover_stroke_dist = 0.0
+                        self._petting_glow = min(1.0, self._petting_glow + 0.45)
+                        now = time.monotonic()
+                        self._hearts_t = now
+                        self._happy_until = now + 1.8
+                        if now - self._last_hover_purr > 3.5:
+                            self._last_hover_purr = now
+                            sound_effects.play_sound("purr", self.cfg)
+                            self.petted.emit()
+            self._last_hover_pos = gp
             return
         gp = e.globalPosition().toPoint()
         if not self._dragging:
@@ -1226,8 +1290,7 @@ class PetWindow(QWidget):
             self.input_requested.emit()
 
     def _on_single_click(self) -> None:
-        sound_effects.play_sound("meow", self.cfg)
-        self.react_happy()
+        self.react_happy(sound="meow_purr")
         self.petted.emit()
 
     def wheelEvent(self, e) -> None:
@@ -1250,6 +1313,7 @@ class PetWindow(QWidget):
         old_cx = self._px + self.width() / 2
         self.scale = new_scale
         self.setFixedSize(int(BASE * new_scale), int(BASE * new_scale))
+        self._update_hit_mask()
         self._py = old_bottom - self.height()
         lo, hi = self._x_bounds()
         self._px = max(lo, min(hi, old_cx - self.width() / 2))
@@ -1326,6 +1390,12 @@ class PetWindow(QWidget):
         bed_visible = bool(self.pet_bed and self.pet_bed.isVisible())
         menu.addAction(tr('menu.hide_bed' if bed_visible else 'menu.show_bed')).triggered.connect(self.pet_bed_requested.emit)
 
+        menu.addAction(tr("menu.laser")).triggered.connect(self.laser_requested.emit)
+        ghost_act = menu.addAction(tr("menu.ghost_mode"))
+        ghost_act.setCheckable(True)
+        ghost_act.setChecked(self._ghost_mode)
+        ghost_act.triggered.connect(lambda: self.set_ghost_mode(not self._ghost_mode))
+
         # Coole Tricks & Animationen
         tricks = menu.addMenu(tr("menu.tricks"))
         style_menu(tricks)
@@ -1334,6 +1404,7 @@ class PetWindow(QWidget):
         tricks.addAction(tr("menu.cool")).triggered.connect(lambda: self.be_cool(6.0))
         tricks.addAction(tr("menu.push")).triggered.connect(lambda: self.push_animation(1.5))
         tricks.addAction(tr("menu.chase")).triggered.connect(lambda: self.chase_mouse(15.0))
+        tricks.addAction(tr("menu.laser")).triggered.connect(self.laser_requested.emit)
         tricks.addAction(tr("menu.treat")).triggered.connect(self.give_treat)
         tricks.addAction(tr("menu.wash_pet", name=name)).triggered.connect(self.wash_requested.emit)
         tricks.addAction(tr("menu.bubble_game")).triggered.connect(self.bubble_game_requested.emit)

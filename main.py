@@ -546,6 +546,14 @@ class Buddy(QObject):
         from play_coordinator import PlayCoordinator
         self.play = PlayCoordinator(self, get_memory_store())
 
+        import minigames
+        laser_cls = getattr(minigames, "LaserPointerManager", None)
+        self.laser_mgr = laser_cls(self.pet, self.cfg) if laser_cls is not None else None
+        if hasattr(self.pet, "laser_requested"):
+            self.pet.laser_requested.connect(self.toggle_laser_game)
+        if hasattr(self.pet, "ghost_mode_toggled"):
+            self.pet.ghost_mode_toggled.connect(lambda *_: self._update_tray_menu())
+
         self._wallpaper_worker = None
         if bool(cfg.get("lively.auto_sync", False)):
             QTimer.singleShot(1000, self.activate_lively_wallpaper)
@@ -565,7 +573,9 @@ class Buddy(QObject):
         self._pending_friendship_level = None
         self._friendship_timer = QTimer(self)
         self._friendship_timer.timeout.connect(self._refresh_friendship_progress)
-        self._friendship_timer.start(500)
+        self._friendship_timer.start(5000)
+        from memory_store import MemoryStore
+        MemoryStore.on_friendship_changed.append(lambda: QTimer.singleShot(0, self._refresh_friendship_progress))
         self._vision_threads: set[QThread] = set()
         self._pending_update: dict | None = None
         from update_ui import UpdatePrompt
@@ -690,6 +700,16 @@ class Buddy(QObject):
         self._act(self.tray_menu, home_text, lambda: self.set_home_mode(not is_home))
         bed_visible = bool(getattr(self, 'pet_bed', None) and self.pet_bed.isVisible())
         self._act(self.tray_menu, tr('menu.hide_bed' if bed_visible else 'menu.show_bed'), self.toggle_pet_bed)
+        if hasattr(self.pet, "set_ghost_mode"):
+            ghost_on = bool(getattr(self.pet, "ghost_mode", False) or getattr(self.pet, "_ghost_mode", False))
+            def _toggle_ghost():
+                cur = bool(getattr(self.pet, "ghost_mode", False) or getattr(self.pet, "_ghost_mode", False))
+                self.pet.set_ghost_mode(not cur)
+                self._update_tray_menu()
+            act = self._act(self.tray_menu, "👻 Durchklick-Modus (Geist)", _toggle_ghost)
+            if hasattr(act, "setCheckable"):
+                act.setCheckable(True)
+                act.setChecked(ghost_on)
         self.tray_menu.addSeparator()
 
         self._act(self.tray_menu, tr("menu.scripts"), self.open_scripts_dialog)
@@ -913,6 +933,8 @@ class Buddy(QObject):
         self.update_prompt.anchor_to(self.pet.head_anchor())
         self.update_prompt.offer(self._pending_update['version'])
         self._awaiting_update_reply = True
+        if hasattr(self, "bubble"):
+            self.bubble.click_opens_reply = True
 
     def _install_update_offer(self, version: str) -> None:
         if not self._pending_update or self._pending_update.get('version') != version:
@@ -1020,6 +1042,11 @@ class Buddy(QObject):
         if hasattr(self, 'update_prompt') and self.update_prompt.isVisible():
             self.update_prompt.hide_now()
         self._awaiting_update_reply = False
+        if hasattr(self, "bubble"):
+            if getattr(self, "_awaiting_update_reply", False) or getattr(self, "_mochi_asked_question", False):
+                self.bubble.click_opens_reply = True
+            else:
+                self.bubble.click_opens_reply = False
         self.bubble.say(text, duration_ms, persistent)
 
     def open_input(self, reply_mode: bool = False) -> None:
@@ -1027,6 +1054,8 @@ class Buddy(QObject):
         self._dismiss_interaction()
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
+        if hasattr(self, "bubble"):
+            self.bubble.click_opens_reply = False
         if self.input.isVisible():
             self.input.dismiss()
             return
@@ -1178,6 +1207,8 @@ class Buddy(QObject):
             self.tray.showMessage(notify, message, self.icon, 6000)
         if "?" in message:
             self._mochi_asked_question = True
+            if hasattr(self, "bubble"):
+                self.bubble.click_opens_reply = True
         if "ich öffne deine chats" in low or "meine chats für dich" in low:
             QTimer.singleShot(600, self.open_chat_history)
         if "ich öffne deine skripte" in low or "skripte-manager" in low or "skript-manager" in low:
@@ -1540,7 +1571,13 @@ class Buddy(QObject):
 
     # -- Phase 4: Zubehoer, Wetter & PC-Fieber -----------------------------------------
     def _reap_worker(self) -> None:
-        self._active_workers = [w for w in self._active_workers if not w.isFinished()]
+        alive = []
+        for w in getattr(self, "_active_workers", []):
+            if w.isFinished():
+                w.deleteLater()
+            else:
+                alive.append(w)
+        self._active_workers = alive
 
     def _check_seasonal_accessory(self) -> None:
         try:
@@ -1643,20 +1680,19 @@ class Buddy(QObject):
             return
         import pet_care
         pet_care.pet_pet(self.cfg)
-        if bool(self.cfg.get("pet.sound_enabled", True)):
-            try:
-                import winsound
-                winsound.MessageBeep(winsound.MB_ICONASTERISK)
-            except Exception:
-                pass
-        u = self.user_name()
-        lines = self.char_info().get("pet_sounds") or CLICK_LINES + [f"Du bist der Beste, {u}! 💖"]
-        self._say(random.choice(lines), 2500)
+        now = time.monotonic()
+        if now - getattr(self, "_last_pet_bubble_ts", -1e9) > 6.0:
+            self._last_pet_bubble_ts = now
+            u = self.user_name()
+            lines = self.char_info().get("pet_sounds") or CLICK_LINES + [f"Du bist der Beste, {u}! 💖"]
+            self._say(random.choice(lines), 2500)
 
     def hide_pet(self) -> None:
         self.play.pause()
         self._dismiss_interaction()
         self.pet.hide()
+        if getattr(self, "pet_bed", None) is not None:
+            self.pet_bed.hide()
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
         self.bubble.hide_now()
@@ -1675,6 +1711,9 @@ class Buddy(QObject):
         if getattr(self, "_focus_mode", False):
             self.end_focus_mode()
             return
+        if getattr(self, "pet_bed", None) is not None and bool(self.cfg.get("furniture.bed_visible", True)):
+            self.pet_bed.show()
+            self.pet.raise_()
         self.pet.show()
         self.pet.wake()
         self.pet.react_happy()
@@ -1687,6 +1726,8 @@ class Buddy(QObject):
         self.update_prompt.hide_now()
         self._awaiting_update_reply = False
         self.pet.hide()
+        if getattr(self, "pet_bed", None) is not None:
+            self.pet_bed.hide()
         self.bubble.hide_now()
         self.input.hide_now()
         cname = self.char_info().get("name", "Kylie")
@@ -1702,6 +1743,9 @@ class Buddy(QObject):
     def end_focus_mode(self) -> None:
         self._focus_mode = False
         self.tray.setToolTip(tr("tray.tooltip"))
+        if getattr(self, "pet_bed", None) is not None and bool(self.cfg.get("furniture.bed_visible", True)):
+            self.pet_bed.show()
+            self.pet.raise_()
         self.pet.show()
         self.pet.wake()
         self.pet.react_happy()
@@ -1821,19 +1865,20 @@ class Buddy(QObject):
         from fun import get_level_name, get_level_reward, level_for
         from memory_store import get_memory_store
         try:
-            points = get_memory_store().get_friendship_points()
-            old_points = self._last_friendship_points
-            if points != old_points:
-                self._last_friendship_points = points
-                new_lvl, _ = level_for(points)
-                old_lvl, _ = level_for(old_points)
-                dialog = getattr(self, '_character_dialog', None)
-                if dialog is not None and dialog.isVisible():
-                    dialog.refresh_all()
-                if points < old_points:
-                    self._pending_friendship_level = None
-                elif new_lvl > old_lvl:
-                    self._pending_friendship_level = new_lvl
+            if getattr(self, '_pending_friendship_level', None) is None:
+                points = get_memory_store().get_friendship_points()
+                old_points = self._last_friendship_points
+                if points != old_points:
+                    self._last_friendship_points = points
+                    new_lvl, _ = level_for(points)
+                    old_lvl, _ = level_for(old_points)
+                    dialog = getattr(self, '_character_dialog', None)
+                    if dialog is not None and dialog.isVisible():
+                        dialog.refresh_all()
+                    if points < old_points:
+                        self._pending_friendship_level = None
+                    elif new_lvl > old_lvl:
+                        self._pending_friendship_level = new_lvl
             new_lvl = getattr(self, '_pending_friendship_level', None)
             if new_lvl is not None:
                 if (self.brain.busy or self.brain.pending_action or self.input.isVisible()
@@ -1978,6 +2023,31 @@ class Buddy(QObject):
             dialog.set_wallpaper_busy(False, message)
             dialog.refresh_all()
         self._say(message, 6000)
+
+    def toggle_laser_game(self) -> None:
+        if getattr(self, "laser_mgr", None) is None:
+            import minigames
+            laser_cls = getattr(minigames, "LaserPointerManager", None)
+            if laser_cls is not None:
+                self.laser_mgr = laser_cls(self.pet, self.cfg)
+        mgr = getattr(self, "laser_mgr", None)
+        if mgr is not None:
+            if hasattr(mgr, "toggle"):
+                if mgr.toggle():
+                    self._say("🔴 Oh, der rote Punkt! Den krieg ich! 🐾✨", 4000)
+            elif hasattr(mgr, "active"):
+                if mgr.active:
+                    if hasattr(mgr, "stop"):
+                        mgr.stop()
+                else:
+                    if hasattr(mgr, "start"):
+                        mgr.start()
+                    self._say("🔴 Oh, der rote Punkt! Den krieg ich! 🐾✨", 4000)
+            elif hasattr(mgr, "start"):
+                mgr.start()
+                self._say("🔴 Oh, der rote Punkt! Den krieg ich! 🐾✨", 4000)
+        else:
+            self._say("🔴 Oh, der rote Punkt! Den krieg ich! 🐾✨", 4000)
 
     def toggle_pet_bed(self, visible: Optional[bool] = None) -> None:
         if not hasattr(self, "pet_bed") or not self.pet_bed:
@@ -2335,7 +2405,9 @@ class Buddy(QObject):
             worker = VoiceWorker(audio_path, self.cfg.snapshot())
             worker.finished_with_result.connect(self._on_voice_result)
             worker.failed.connect(self._on_voice_failed)
-            self._voice_workers = [w for w in getattr(self, "_voice_workers", []) if not w.isFinished()] + [worker]
+            self._on_voice_worker_done()
+            self._voice_workers.append(worker)
+            worker.finished.connect(self._on_voice_worker_done)
             worker.start()
         except Exception as exc:              # sonst bliebe die Sprache bis zum Neustart blockiert
             self._is_processing_voice = False
@@ -2344,6 +2416,15 @@ class Buddy(QObject):
             except OSError:
                 pass
             self._on_voice_failed(str(exc))
+
+    def _on_voice_worker_done(self) -> None:
+        alive = []
+        for w in getattr(self, "_voice_workers", []):
+            if w.isFinished():
+                w.deleteLater()
+            else:
+                alive.append(w)
+        self._voice_workers = alive
 
     def _on_voice_result(self, text: str) -> None:
         self._is_processing_voice = False
@@ -2721,8 +2802,8 @@ class Buddy(QObject):
     def _schedule_chatter(self) -> None:
         self._chatter.stop()
         if self.cfg.get("pet.chatter", True):
-            # Alle 90 bis 180 Sekunden für ein aufmerksames, aber unaufdringliches Erlebnis
-            self._chatter.start(random.randint(90, 180) * 1000)
+            # Alle 240 bis 420 Sekunden (4 bis 7 Minuten)
+            self._chatter.start(random.randint(240, 420) * 1000)
 
     def _on_chatter(self) -> None:
         if getattr(getattr(self, 'play', None), 'active', False):
@@ -2734,10 +2815,11 @@ class Buddy(QObject):
         if getattr(self, "_focus_mode", False) or not self.pet.isVisible() or is_night(self.cfg):
             self._schedule_chatter()
             return
-        idle = self.pet.state in (PetState.IDLE, PetState.SLEEP)
+        if self.pet.state == PetState.SLEEP:
+            self._schedule_chatter()
+            return
+        idle = self.pet.state == PetState.IDLE
         if idle and not self.brain.busy and not self.input.isVisible() and not self.bubble.isVisible():
-            if self.pet.state == PetState.SLEEP:
-                self.pet.wake()
             import pet_care
             care_stats = pet_care.get_care_stats(self.cfg)
             # hoechstens alle 30 Min. betteln - vorher kam das alle 3-4 Minuten, bis man fuetterte
@@ -2826,7 +2908,7 @@ class Buddy(QObject):
         self._last_ambient_comment = comment
 
         if self.pet.state == PetState.SLEEP:
-            self.pet.wake()
+            return
         self._say(comment, duration_ms=11000)
 
         # Im Chatverlauf merken, damit Rueckfragen und Antworten verstanden werden!
@@ -2834,6 +2916,8 @@ class Buddy(QObject):
 
         # Wenn Mochi eine Frage stellt (endet mit ?), Platzhalter auf Antwort anpassen
         self._mochi_asked_question = "?" in comment
+        if self._mochi_asked_question and hasattr(self, "bubble"):
+            self.bubble.click_opens_reply = True
 
 
 def _single_instance():
