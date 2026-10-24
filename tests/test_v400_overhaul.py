@@ -35,23 +35,24 @@ def _ensure_app():
 
 
 def test_v400_smooth_blink_and_4paw_stride_and_loaf_poses():
-    """Prüft stufenlose Blinzel-Kurve, 4-Pfoten-Kinematik, Cat-Loaf-Schlaf und Groom/Stretch."""
+    """Prüft stufenlose Blinzel-Kurve, 2-Pfoten-Kinematik, natürliche Schlafpose und Groom/Stretch."""
     # 1. Smooth blink curve produces intermediate values (0 < blink_amount < 1)
     ctx_mid_blink = pet_sprites.PoseContext(key="idle", t=0.04, age=1.0)
     pose_blink = pet_sprites.compute_pose(ctx_mid_blink)
     assert 0.0 < pose_blink.blink_amount < 1.0
 
-    # 2. 4-paw walk kinematics
+    # 2. 2-paw walk stride
     ctx_walk = pet_sprites.PoseContext(key="walk_right", t=0.1, age=0.5)
     pose_walk = pet_sprites.compute_pose(ctx_walk)
-    assert pose_walk.paw_lx != 0.0 or pose_walk.paw_rx != 0.0
-    assert pose_walk.hind_l > 0.0 or pose_walk.hind_r > 0.0
+    assert pose_walk.paw_lx != 0.0
+    assert pose_walk.hind_l == 0.0 and pose_walk.hind_r == 0.0
 
-    # 3. Cozy Cat-Loaf sleep pose
+    # 3. Natural, un-distorted sleep pose
     ctx_sleep = pet_sprites.PoseContext(key="sleep", t=1.0, age=5.0)
     pose_sleep = pet_sprites.compute_pose(ctx_sleep)
-    assert pose_sleep.loaf >= 0.5
-    assert pose_sleep.sy < 0.90 and pose_sleep.sx > 1.05
+    assert 0.93 <= pose_sleep.sy <= 1.0
+    assert 1.0 <= pose_sleep.sx <= 1.04
+    assert pose_sleep.dy == 0.0
 
     # 4. Grooming & Stretch states render cleanly
     for key in ("groom", "stretch", "sleep", "walk_right"):

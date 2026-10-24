@@ -281,12 +281,12 @@ def compute_pose(c: PoseContext) -> Pose:
         c_ph = math.cos(ph)
         p.dy = -abs(s) * 3.6
         p.rot = s * 2.8
-        p.paw_lx = c_ph * 5.8
-        p.paw_rx = -c_ph * 5.8
+        p.paw_lx = c_ph * 3.2
+        p.paw_rx = -c_ph * 3.2
         p.paw_l = max(0.0, s) * 6.0
         p.paw_r = max(0.0, -s) * 6.0
-        p.hind_l = max(0.0, -s) * 4.5
-        p.hind_r = max(0.0, s) * 4.5
+        p.hind_l = 0.0
+        p.hind_r = 0.0
         p.head_dx = 5.0
         p.head_rot = -s * 2.0
         p.look = (0.8, c.look[1] * 0.5)
@@ -301,18 +301,18 @@ def compute_pose(c: PoseContext) -> Pose:
 
     elif k == "sleep":
         slow = math.sin(t * math.tau / 4.2)
-        p.loaf = 1.0
-        p.sy = 0.84 + 0.024 * slow
-        p.sx = 1.10 - 0.014 * slow
-        p.dy = 5.5
-        p.head_dy = 13.5 + 1.2 * slow
+        p.loaf = 0.0
+        p.sy = 0.96 + 0.02 * slow
+        p.sx = 1.02 - 0.01 * slow
+        p.dy = 0.0
+        p.head_dy = 7.5 + 1.2 * slow
         p.head_dx = -3.0
-        p.head_rot = -11.0
+        p.head_rot = -8.0
         p.eyes = "sleep"
         p.mouth = "w"
         p.tail_curl = True
-        p.ear_l, p.ear_r = -14, 14
-        p.blush = 0.68
+        p.ear_l, p.ear_r = -12, 12
+        p.blush = 0.65
         p.zzz = t
         p.look = (0, 0)
 
@@ -328,8 +328,8 @@ def compute_pose(c: PoseContext) -> Pose:
 
     elif k == "stretch":
         p.stretch_phase = math.sin(min(1.0, c.age / 1.4) * math.pi)
-        p.sy = 1.0 - 0.14 * p.stretch_phase
-        p.sx = 1.0 + 0.14 * p.stretch_phase
+        p.sy = 1.0 - 0.04 * p.stretch_phase
+        p.sx = 1.0 + 0.04 * p.stretch_phase
         p.head_dy = 6.0 * p.stretch_phase
         p.eyes = "happy"
         p.mouth = "o" if p.stretch_phase > 0.5 else "w"
@@ -484,8 +484,6 @@ def compute_pose(c: PoseContext) -> Pose:
         p.blush = max(p.blush, 0.55 + 0.35 * g)
         p.head_rot += math.sin(t * 7.0) * 5.5 * g
         p.head_dy += 2.0 * g
-        p.sy *= (1.0 - 0.04 * g)
-        p.sx *= (1.0 + 0.03 * g)
         p.tail = math.sin(t * 5.0) * 0.85
 
     # Klick-Reaktion: huepft, Herzchen-Augen, laechelt, schnurrt (Vibration)
@@ -1158,11 +1156,6 @@ def draw_cat(p: QPainter, pose: Pose):
     if pose.tail_curl:
         _draw_tail(p, pose)
 
-    # Hinterpfötchen (wenn nicht Loaf/Laptop/Paws up)
-    if pose.loaf < 0.5 and not pose.laptop and not pose.paws_up:
-        _hind_paw(p, 51, 141 - pose.hind_l, -6)
-        _hind_paw(p, 109, 141 - pose.hind_r, 6)
-
     # Pfoetchen (vorn)
     if not pose.laptop:
         if pose.wave_angle is not None or pose.groom_phase != 0.0:
@@ -1170,20 +1163,9 @@ def draw_cat(p: QPainter, pose: Pose):
         elif pose.paws_up:
             _paw(p, 44, 100, -35)
             _paw(p, 116, 100, 35)
-        elif pose.loaf >= 0.5:
-            p.save()
-            p.translate(68, 144)
-            p.scale(0.9, 0.65)
-            _paw(p, 0, 0, 0)
-            p.restore()
-            p.save()
-            p.translate(92, 144)
-            p.scale(0.9, 0.65)
-            _paw(p, 0, 0, 0)
-            p.restore()
         else:
-            _paw(p, 65 + pose.paw_lx, 143 - pose.paw_l, -pose.paw_lx * 1.5)
-            _paw(p, 95 + pose.paw_rx, 143 - pose.paw_r, -pose.paw_rx * 1.5)
+            _paw(p, 65 + pose.paw_lx, 143 - pose.paw_l, -pose.paw_lx * 0.8)
+            _paw(p, 95 + pose.paw_rx, 143 - pose.paw_r, -pose.paw_rx * 0.8)
 
     # Halsband + Glocke entfernt (echte Katze traegt keins)
 

@@ -1127,8 +1127,7 @@ class PetWindow(QWidget):
         p.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
                          | QPainter.RenderHint.TextAntialiasing)
         p.scale(self.scale, self.scale)
-        sx_turn = max(0.15, abs(self._display_facing))
-        flip = self._display_facing < 0
+        flip = self.facing < 0
 
         if self.sprites.usable:
             hop = 0.0
@@ -1139,9 +1138,9 @@ class PetWindow(QWidget):
         else:
             pose = replace(self._pose) if self._pose is not None else self._build_pose(now)
             p.save()
-            p.translate(BASE / 2.0, 0)
-            p.scale((-1.0 if flip else 1.0) * sx_turn, 1.0)
-            p.translate(-BASE / 2.0, 0)
+            if flip:
+                p.translate(BASE, 0)
+                p.scale(-1, 1)
             # Effekte (Text, Herzen ...) duerfen nicht gespiegelt werden -> separat zeichnen
             effects = (pose.zzz, pose.dots, pose.sparkles, pose.hearts, getattr(pose, "confetti", None))
             if flip:
